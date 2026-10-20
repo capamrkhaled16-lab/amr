@@ -111,9 +111,13 @@ export default function ParentPortal() {
 
       const hwStatuses: HomeworkStatus[] = [];
       for (const hw of homework) {
-        const statuses = await fetchHomeworkStatuses(hw.id);
-        const studentStatus = statuses.find((s) => s.student_id === student.id);
-        if (studentStatus) hwStatuses.push(studentStatus);
+        try {
+          const statuses = await fetchHomeworkStatuses(hw.id);
+          const studentStatus = (statuses ?? []).find((s) => s.student_id === student.id);
+          if (studentStatus) hwStatuses.push(studentStatus);
+        } catch {
+          // Skip this homework's statuses if the query fails
+        }
       }
 
       let groupData: { name?: string; grade_level?: { name?: string; stage?: { name?: string } } } | null = null;
@@ -340,7 +344,7 @@ function PortalContent({
                   if (exam) grades.push({ examTitle: exam.title ?? 'امتحان', category: exam.category ?? 'exam', score: cg.score, maxScore: exam.max_score, passed: cg.score >= (exam.pass_score ?? 0) });
                 }
                 for (const og of data.onlineGrades) {
-                  const exam = data.onlineExams.find((e) => e.id === og.online_exam_id);
+                  const exam = data.onlineExams.find((e) => e.id === og.exam_id);
                   if (exam) grades.push({ examTitle: exam.title ?? 'امتحان أونلاين', category: 'online', score: og.score, maxScore: og.max_score, passed: og.score >= (exam.pass_score ?? 0) });
                 }
                 return exportParentPortalPDF(
