@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   fetchStudentByParentToken,
+  fetchStudentById,
+  fetchStudentByParentPhone,
   fetchAttendanceForStudent,
   fetchCenterGradesByStudent,
   fetchCenterExamsByStudent,
@@ -14,6 +16,7 @@ import {
   fetchBehaviorEvals,
   currentMonthKey,
 } from '@/lib/data';
+import { supabase } from '@/lib/supabase';
 import { getMonthLabel, formatArabicDate, formatCurrency, getGradeRating } from '@/lib/format';
 import { getMonthKey } from '@/lib/dates';
 import type {
@@ -51,7 +54,11 @@ interface ParentData {
 
 export default function ParentPortal() {
   const [searchParams] = useSearchParams();
-  const token = searchParams.get('token');
+  // Support both current link format (?token=...) and legacy formats
+  // (?student_id=... or ?phone=...) for 100% backward compatibility.
+  const token = searchParams.get('token') ?? searchParams.get('parent_token');
+  const studentIdParam = searchParams.get('student_id');
+  const phoneParam = searchParams.get('phone') ?? searchParams.get('parent_phone');
   const initialMonth = searchParams.get('month');
 
   const [state, setState] = useState<LoadState>('loading');
@@ -61,11 +68,18 @@ export default function ParentPortal() {
   const [loadingMonth, setLoadingMonth] = useState(false);
   const reqIdRef = useRef(0);
 
-  const loadData = useCallback(async (token: string, monthKey: string) => {
+  const loadData = useCallback(async (rawValue: string, monthKey: string, mode: 'token' | 'student_id' | 'phone' = 'token') => {
     const reqId = ++reqIdRef.current;
     setLoadingMonth(true);
     try {
-      const student = await fetchStudentByParentToken(token);
+      let student: Student | null = null;
+      if (mode === 'student_id') {
+        student = await fetchStudentById(rawValue);
+      } else if (mode === 'phone') {
+        student = await fetchStudentByParentPhone(rawValue);
+      } else {
+        student = await fetchStudentByParentToken(rawValue);
+      }
       if (!student) {
         if (reqId === reqIdRef.current) {
           setState('notfound');
@@ -84,15 +98,15 @@ export default function ParentPortal() {
       }
 
       const [attendance, centerGrades, centerExams, onlineGrades, onlineExams, payments, subscriptions, homework, behavior] = await Promise.all([
-        fetchAttendanceForStudent(student.id),
-        fetchCenterGradesByStudent(student.id),
-        fetchCenterExamsByStudent(student.id),
-        fetchOnlineGradesByStudent(student.id),
-        fetchOnlineExamsByStudent(student.id),
-        fetchPayments(student.id, monthKey),
-        fetchStudentMonthlySubscriptions(student.id),
-        groupId ? fetchHomework(groupId, true, monthKey) : Promise.resolve([] as Homework[]),
-        fetchBehaviorEvals(student.id),
+        fetchAttendanceForStudent(student.id).catch(() => [] as AttendanceRecord[]),
+        fetchCenterGradesByStudent(student.id).catch(() => [] as CenterGrade[]),
+        fetchCenterExamsByStudent(student.id).catch(() => [] as CenterExam[]),
+        fetchOnlineGradesByStudent(student.id).catch(() => [] as OnlineGrade[]),
+        fetchOnlineExamsByStudent(student.id).catch(() => [] as OnlineExam[]),
+        fetchPayments(student.id, monthKey).catch(() => [] as Payment[]),
+        fetchStudentMonthlySubscriptions(student.id).catch(() => [] as MonthlySubscription[]),
+        groupId ? fetchHomework(groupId, true, monthKey).catch(() => [] as Homework[]) : Promise.resolve([] as Homework[]),
+        fetchBehaviorEvals(student.id).catch(() => [] as BehaviorEval[]),
       ]);
 
       const hwStatuses: HomeworkStatus[] = [];
@@ -102,17 +116,21 @@ export default function ParentPortal() {
         if (studentStatus) hwStatuses.push(studentStatus);
       }
 
-      const { data: groupData } = await import('@/lib/supabase').then((m) => m.supabase
-        .from('groups')
-        .select('name, grade_level:grade_levels(name, stage:academic_stages(name))')
-        .eq('id', groupId)
-        .maybeSingle());
+      let groupData: { name?: string; grade_level?: { name?: string; stage?: { name?: string } } } | null = null;
+      if (supabase && typeof supabase.from === 'function') {
+        const { data: gData } = await supabase
+          .from('groups')
+          .select('name, grade_level:grade_levels(name, stage:academic_stages(name))')
+          .eq('id', groupId)
+          .maybeSingle();
+        groupData = (gData as { name?: string; grade_level?: { name?: string; stage?: { name?: string } } } | null) ?? null;
+      }
 
       const enrichedStudent = {
         ...student,
-        group_name: (groupData as { name?: string } | null)?.name,
-        grade_name: (groupData as { grade_level?: { name?: string } } | null)?.grade_level?.name,
-        stage_name: (groupData as { grade_level?: { stage?: { name?: string } } } | null)?.grade_level?.stage?.name,
+        group_name: groupData?.name,
+        grade_name: groupData?.grade_level?.name,
+        stage_name: groupData?.grade_level?.stage?.name,
       };
 
       if (reqId === reqIdRef.current) {
@@ -142,13 +160,21 @@ export default function ParentPortal() {
   }, []);
 
   useEffect(() => {
-    if (!token) {
+    // Resolve the student using whichever param is present. The `token` param
+    // is the current format; `student_id` and `phone` are legacy formats that
+    // were sent in earlier links and must continue to work.
+    if (token) {
+      loadData(token, selectedMonth, 'token');
+    } else if (studentIdParam) {
+      loadData(studentIdParam, selectedMonth, 'student_id');
+    } else if (phoneParam) {
+      loadData(phoneParam, selectedMonth, 'phone');
+    } else {
       setState('notfound');
-      setErrorMsg('لم يتم العثور على رمز ولي الأمر في الرابط. تأكد من فتح الرابط الصحيح.');
-      return;
+      setErrorMsg('لم يتم العثور على رمز ولي الأمر في الرابط. تأكد من فتح الرابط الصحيح أو تواصل مع المعلم للحصول على رابط جديد.');
     }
-    loadData(token, selectedMonth);
-  }, [token, selectedMonth, loadData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, studentIdParam, phoneParam, selectedMonth, loadData]);
 
   if (state === 'loading') {
     return <FullScreenLoader label="جاري تحميل بيانات الطالب..." />;

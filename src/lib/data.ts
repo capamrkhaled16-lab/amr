@@ -1254,6 +1254,48 @@ export async function fetchStudentByParentToken(
   return data as Student | null;
 }
 
+export async function fetchStudentById(
+  id: string
+): Promise<Student | null> {
+  const normalizedId = id.trim();
+  if (!normalizedId) return null;
+
+  const { data, error } = await supabase
+    .from('students')
+    .select('*')
+    .eq('id', normalizedId)
+    .eq('is_deleted', false)
+    .maybeSingle();
+
+  if (error) {
+    if (error.code === '22P02' || /invalid input syntax/i.test(error.message)) {
+      throw new Error('الرابط غير صالح. تأكد من نسخ الرابط كاملاً كما تم إرساله أو تواصل مع المعلم.');
+    }
+    throw new Error('تعذر الاتصال ببيانات الطالب. تحقق من الاتصال ثم حاول مرة أخرى.');
+  }
+  return data as Student | null;
+}
+
+export async function fetchStudentByParentPhone(
+  phone: string
+): Promise<Student | null> {
+  const normalizedPhone = phone.trim();
+  if (!normalizedPhone) return null;
+
+  const { data, error } = await supabase
+    .from('students')
+    .select('*')
+    .eq('parent_phone', normalizedPhone)
+    .eq('is_deleted', false)
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error('تعذر الاتصال ببيانات الطالب. تحقق من الاتصال ثم حاول مرة أخرى.');
+  }
+  return data as Student | null;
+}
+
 export async function fetchOnlineGradesByStudent(
   studentId: string
 ): Promise<OnlineGrade[]> {
