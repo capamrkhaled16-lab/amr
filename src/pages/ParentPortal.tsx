@@ -122,12 +122,16 @@ export default function ParentPortal() {
 
       let groupData: { name?: string; grade_level?: { name?: string; stage?: { name?: string } } } | null = null;
       if (supabase && typeof supabase.from === 'function') {
-        const { data: gData } = await supabase
-          .from('groups')
-          .select('name, grade_level:grade_levels(name, stage:academic_stages(name))')
-          .eq('id', groupId)
-          .maybeSingle();
-        groupData = (gData as { name?: string; grade_level?: { name?: string; stage?: { name?: string } } } | null) ?? null;
+        try {
+          const { data: gData } = await supabase
+            .from('groups')
+            .select('name, grade_level:grade_levels(name, stage:academic_stages(name))')
+            .eq('id', groupId)
+            .maybeSingle();
+          groupData = (gData as { name?: string; grade_level?: { name?: string; stage?: { name?: string } } } | null) ?? null;
+        } catch {
+          // Group enrichment is non-critical — proceed without it
+        }
       }
 
       const enrichedStudent = {
@@ -272,7 +276,7 @@ function PortalContent({
     return h.due_date.slice(0, 7) === selectedMonth;
   });
 
-  const monthFilteredHwStatuses = data.homeworkStatuses.filter((hs) => {
+  const monthFilteredHwStatuses = (data.homeworkStatuses ?? []).filter((hs) => {
     const hw = data.homework.find((h) => h.id === hs.homework_id);
     if (!hw || !hw.due_date) return false;
     return hw.due_date.slice(0, 7) === selectedMonth;
