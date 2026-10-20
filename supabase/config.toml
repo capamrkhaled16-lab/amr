@@ -1,0 +1,7 @@
+[functions.auto-archive]
+verify_jwt = false
+entrypoint = "./functions/auto-archive/index.ts"
+
+[functions.exam-ai-generate]
+verify_jwt = false
+entrypoint = "./functions/exam-ai-generate/index.ts"
