@@ -1,42 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import {
-  Archive,
-  Lock,
-  Unlock,
-  AlertTriangle,
-  CheckCircle2,
-  Clock,
-  CalendarDays,
-  Users,
-  Wallet,
-  BarChart3,
-  FileText,
-  ChevronDown,
-  RefreshCw,
-  Inbox,
-  Search,
-  Plus,
-  Zap,
-  TrendingUp,
-  Undo2,
-  Mic,
-  Heart,
-  BookOpen,
-  GraduationCap,
-  Phone,
-  MessageCircle,
-  Link2,
-  Edit2,
-  Check,
-  Trash2,
-  X,
-  Send,
-  Bell,
-  Printer,
-  Award,
-  CalendarRange,
-} from 'lucide-react';
+import { Archive, Lock, Clock as Unlock, TriangleAlert as AlertTriangle, CircleCheck as CheckCircle2, Clock, CalendarDays, Users, Wallet, ChartBar as BarChart3, FileText, ChevronDown, RefreshCw, Inbox, Search, Plus, Zap, TrendingUp, Undo2, Mic, Heart, BookOpen, GraduationCap, Phone, MessageCircle, Link2, CreditCard as Edit2, Check, Trash as Trash2, X, Send, Bell, Printer, Award, CalendarRange } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { useSettings } from '@/context/SettingsContext';
@@ -199,7 +163,7 @@ function buildParentPortalLink(s: ArchivedStudent, row: ArchiveRow, paidTotal?: 
   if (!phone) return '';
   const monthLabel = formatMonthLabel(row.archive_month);
   const baseUrl = window.location.origin;
-  const portalLink = s.parent_token ? `${baseUrl}/parent-portal?token=${s.parent_token}&month=${row.archive_month}` : '';
+  const portalLink = s.parent_token ? `${baseUrl}/parent-portal?token=${encodeURIComponent(s.parent_token)}&month=${row.archive_month}` : '';
   const totalFees = s.total_fees ?? 0;
   const hasBalance = !s.is_exempt && remaining != null && remaining > 0;
   const reminderLine = hasBalance
@@ -325,7 +289,9 @@ export default function ArchiveOverview({
   const ARCHIVE_CACHE_TTL = 120_000;
 
   useEffect(() => {
-    invalidateByPrefix('archive_overview_full_');
+    // Do NOT invalidate cache on mount — this destroys the SWR cache that
+    // loadArchives relies on for instant display. loadArchives already
+    // validates freshness via isCacheFresh().
   }, []);
 
   const [expanded, setExpanded] = useState<string | null>(null);
