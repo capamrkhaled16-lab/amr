@@ -1235,11 +1235,17 @@ export async function deleteCertificate(id: string): Promise<void> {
 export async function fetchStudentByParentToken(
   token: string
 ): Promise<Student | null> {
-  const { data } = await supabase
+  const normalizedToken = token.trim();
+  if (!normalizedToken) return null;
+
+  const { data, error } = await supabase
     .from('students')
     .select('*')
-    .eq('parent_token', token)
+    .eq('parent_token', normalizedToken)
+    .eq('is_deleted', false)
     .maybeSingle();
+
+  if (error) throw new Error('تعذر الاتصال ببيانات الطالب. تحقق من الاتصال ثم حاول مرة أخرى.');
   return data;
 }
 
