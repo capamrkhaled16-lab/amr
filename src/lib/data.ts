@@ -1232,16 +1232,10 @@ export async function deleteCertificate(id: string): Promise<void> {
   if (error) throw new Error(error.message);
 }
 
-function sanitizeToken(raw: string): string {
-  return raw
-    .replace(/[\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF\u00A0]/g, '')
-    .trim();
-}
-
 export async function fetchStudentByParentToken(
   token: string
 ): Promise<Student | null> {
-  const normalizedToken = sanitizeToken(token);
+  const normalizedToken = token.trim();
   if (!normalizedToken) return null;
 
   const { data, error } = await supabase
@@ -1263,7 +1257,7 @@ export async function fetchStudentByParentToken(
 export async function fetchStudentById(
   id: string
 ): Promise<Student | null> {
-  const normalizedId = sanitizeToken(id);
+  const normalizedId = id.trim();
   if (!normalizedId) return null;
 
   const { data, error } = await supabase
