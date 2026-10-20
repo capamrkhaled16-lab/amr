@@ -385,7 +385,7 @@ export type SubscriptionStatus = 'paid' | 'partial' | 'unpaid' | 'exempt';
 
 // ============ STUDENT STATUS ============
 
-export type StudentStatus = 'active' | 'paused' | 'graduated' | 'withdrawn' | 'left' | 'deleted';
+export type StudentStatus = 'active' | 'paused' | 'graduated' | 'withdrawn';
 
 // ============ EXPENSES ============
 
@@ -396,8 +396,6 @@ export type ExpenseCategory =
   | 'salaries'
   | 'marketing'
   | 'maintenance'
-  | 'electricity'
-  | 'assistants'
   | 'other';
 
 // ============ TRANSFERS ============

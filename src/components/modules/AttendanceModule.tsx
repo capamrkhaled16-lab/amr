@@ -134,7 +134,7 @@ export default function AttendanceModule({ groupId, students, groupName, stageNa
   const groupStatsReqIdRef = useRef(0);
   const absencesReqIdRef = useRef(0);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [monthlyAbsenceMap, setMonthlyAbsenceMap] = useState<Record<string, number>>({});
+  const [consecutiveAbsenceMap, setConsecutiveAbsenceMap] = useState<Record<string, number>>({});
   const [filterMode, setFilterMode] = useState<'all' | 'present' | 'absent' | 'unrecorded' | 'unpaid'>('all');
   const [viewTarget, setViewTarget] = useState<Student | null>(null);
   const [groupSchedule, setGroupSchedule] = useState<string | null>(null);
@@ -393,36 +393,38 @@ export default function AttendanceModule({ groupId, students, groupName, stageNa
 
   useEffect(() => {
     const reqId = ++absencesReqIdRef.current;
-    const fetchMonthlyAbsences = async () => {
+    const fetchConsecutiveAbsences = async () => {
       try {
       const { data } = await supabase
         .from('attendance')
-        .select('student_id, status, attendance_date, session_id')
+        .select('student_id, status, attendance_date')
         .eq('group_id', groupId)
         .gte('attendance_date', monthStart(monthKey))
-        .lt('attendance_date', nextMonthStart(monthKey));
+        .lt('attendance_date', nextMonthStart(monthKey))
+        .order('attendance_date', { ascending: false });
       if (!isMounted.current || reqId !== absencesReqIdRef.current) return;
       if (!data) return;
-      // Deduplicate by (student_id, attendance_date, session_id) so multiple
-      // records for the same session are only counted once.
-      const seen = new Set<string>();
+      const byStudent: Record<string, { status: string; date: string }[]> = {};
+      for (const r of data as { student_id: string; status: string; attendance_date: string }[]) {
+        if (!byStudent[r.student_id]) byStudent[r.student_id] = [];
+        byStudent[r.student_id].push({ status: r.status, date: r.attendance_date });
+      }
       const map: Record<string, number> = {};
-      for (const r of data as { student_id: string; status: string; attendance_date: string; session_id: string | null }[]) {
-        if (r.status !== 'absent') continue;
-        const key = `${r.student_id}|${r.attendance_date}|${r.session_id ?? ''}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        map[r.student_id] = (map[r.student_id] ?? 0) + 1;
+      for (const [studentId, recs] of Object.entries(byStudent)) {
+        recs.sort((a, b) => b.date.localeCompare(a.date));
+        let count = 0;
+        for (const r of recs) {
+          if (r.status === 'absent') count++;
+          else break;
+        }
+        if (count >= 3) map[studentId] = count;
       }
-      // Keep only students with 3+ absences for the warning display
-      for (const id of Object.keys(map)) {
-        if (map[id] < 3) delete map[id];
-      }
+      setConsecutiveAbsenceMap(map);
       } catch {
         // Silently skip — absence map is non-critical
       }
     };
-    fetchMonthlyAbsences();
+    fetchConsecutiveAbsences();
   }, [groupId, monthKey]);
 
   function triggerAutoSave() {
@@ -863,8 +865,8 @@ export default function AttendanceModule({ groupId, students, groupName, stageNa
       return;
     }
     whatsappBusyRef.current = true;
-    const count = monthlyAbsenceMap[student.id] ?? 3;
-    const message = `السلام عليكم،\nنود إخطاركم بأن الطالب ${student.name} قد تغيب عن ${count} حصص هذا الشهر. نرجو التواصل لمراجعة حالته.\nمع تحيات منصة الخالد التعليمية.`;
+    const count = consecutiveAbsenceMap[student.id] ?? 3;
+    const message = `السلام عليكم،\nنود إخطاركم بأن الطالب ${student.name} قد تغيب عن ${count} حصص متتالية. نرجو التواصل لمراجعة حالته.\nمع تحيات منصة الخالد التعليمية.`;
     openWhatsAppURL(`https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(message)}`, showToast);
     setTimeout(() => { whatsappBusyRef.current = false; }, 1500);
   }
@@ -1384,14 +1386,14 @@ export default function AttendanceModule({ groupId, students, groupName, stageNa
                               لم يكن مسجلاً بعد
                             </span>
                           )}
-                          {/* Smart alert: 3+ absences this month */}
-                          {enrolled && monthlyAbsenceMap[s.id] >= 3 && (
+                          {/* Smart alert: 3+ consecutive absences */}
+                          {enrolled && consecutiveAbsenceMap[s.id] >= 3 && (
                             <button
                               onClick={() => sendAbsenceAlertWhatsApp(s)}
-                              className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-red-500/15 border border-red-500/30 text-red-300 rounded-lg text-[10px] font-bold active:scale-95 transition flex-shrink-0 shadow-sm hover:bg-red-500/25"
+                              className="px-2 py-0.5 bg-red-500/20 border border-red-500/40 text-red-400 rounded-full text-[10px] font-bold flex items-center gap-1 active:scale-95 transition flex-shrink-0"
                             >
-                              <AlertTriangle size={11} className="flex-shrink-0" />
-                              غائب {monthlyAbsenceMap[s.id]} حصص هذا الشهر
+                              <AlertTriangle size={11} className="animate-pulse" />
+                              {consecutiveAbsenceMap[s.id]} غياب متتالي
                             </button>
                           )}
                           {/* Smart auto warnings */}

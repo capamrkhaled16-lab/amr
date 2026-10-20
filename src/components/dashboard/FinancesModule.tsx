@@ -8,7 +8,7 @@ import { fetchAllStudents, fetchPayments, createPayment, editPayment, deletePaym
 import { computeFinancialSummary, isNewThisMonth } from '@/lib/financeCalc';
 import { formatCurrency, formatArabicDate, formatTime, formatTransactionDateTime, getMonthLabel, getMonthKey, normalizePhoneForWhatsApp, openWhatsAppURL } from '@/lib/format';
 import { ARABIC_MONTHS } from '@/lib/constants';
-import { exportToCSV, printDocument, buildReceiptHTML } from '@/lib/export';
+import { exportToCSV, printDocument, buildUnpaidPrintHTML, buildReceiptHTML } from '@/lib/export';
 import { exportUnpaidStudentsPDF, exportPaidStudentsPDF, exportMonthlyPaymentSummaryPDF, exportStudentListPDF } from '@/lib/pdfExport';
 import { PDFButton } from '@/components/ui/PDFButton';
 import { invalidateByPrefix } from '@/lib/cache';
@@ -591,7 +591,7 @@ export default function FinancesModule({ focusStageId, focusGradeId, focusGroupI
       await createExpense(expForm.category, amount, expForm.description.trim() || null, expForm.date, actorName);
       loadExpenses();
       showToast(`تم تسجيل مصروف (${EXPENSE_CATEGORIES.find((c) => c.id === expForm.category)?.label ?? expForm.category}) بقيمة ${formatCurrency(amount)} ج.م — بواسطة ${actorName}`, 'success');
-    } catch (err) {
+    } catch {
       setExpenses((prev) => prev.filter((e) => e.id !== tempExpense.id));
       showToast(`فشل تسجيل المصروف: ${err instanceof Error ? err.message : 'خطأ في الاتصال بقاعدة البيانات'}. حاول مرة أخرى.`, 'error');
     }
@@ -606,7 +606,7 @@ export default function FinancesModule({ focusStageId, focusGradeId, focusGroupI
     try {
       await deleteExpense(target.id);
       showToast(`تم حذف مصروف (${EXPENSE_CATEGORIES.find((c) => c.id === target.category)?.label ?? target.category}) بقيمة ${formatCurrency(target.amount)} ج.م — بواسطة ${actorName}`, 'success');
-    } catch (err) {
+    } catch {
       setExpenses(prevExpenses);
       showToast(`فشل حذف المصروف: ${err instanceof Error ? err.message : 'تعذّر الاتصال بقاعدة البيانات'}. تمت استعادة المصروف.`, 'error');
     }
@@ -750,7 +750,7 @@ export default function FinancesModule({ focusStageId, focusGradeId, focusGroupI
       }
       const delStudent = students.find((s) => s.id === target.student_id);
       showToast(`تم حذف دفعة بقيمة ${formatCurrency(target.amount ?? 0)} ج.م للطالب ${delStudent?.name ?? ''} — بواسطة ${actorName}`, 'success');
-    } catch (err) {
+    } catch {
       setMonthlyPaidMap((prev) => { const m = new Map(prev); m.set(target.student_id, (m.get(target.student_id) ?? 0) + (target.amount ?? 0)); return m; });
       setPayments((prev) => [...prev, target].sort((a, b) => b.payment_date.localeCompare(a.payment_date)));
       showToast(`فشل حذف الدفعة: ${err instanceof Error ? err.message : 'تعذّر الاتصال بقاعدة البيانات'}. تمت استعادة الدفعة.`, 'error');
@@ -782,7 +782,7 @@ export default function FinancesModule({ focusStageId, focusGradeId, focusGroupI
       loadStudents();
       const feeStudent = students.find((s) => s.id === studentId);
       showToast(`تم تعديل المصاريف للطالب ${feeStudent?.name ?? ''} إلى ${formatCurrency(val)} ج.م — بواسطة ${actorName}`, 'success');
-    } catch (err) {
+    } catch {
       setStudents(prevStudents);
       showToast(`فشل حفظ المصاريف: ${err instanceof Error ? err.message : 'تعذّر الاتصال بقاعدة البيانات'}. تمت استعادة القيمة السابقة.`, 'error');
     }
@@ -800,7 +800,7 @@ export default function FinancesModule({ focusStageId, focusGradeId, focusGroupI
       loadStudents();
       const monthLabel = getMonthLabel(monthKey);
       showToast(`${wasExempt ? 'تم إلغاء إعفاء' : 'تم تفعيل إعفاء'} الطالب ${target.name} لشهر ${monthLabel} — بواسطة ${actorName}`, 'success');
-    } catch (err) {
+    } catch {
       setMonthExemptMap((prev) => { const m = new Map(prev); if (wasExempt) m.set(target.id, true); else m.delete(target.id); return m; });
       showToast(`فشل تحديث الإعفاء: ${err instanceof Error ? err.message : 'تعذّر الاتصال بقاعدة البيانات'}. تمت استعادة الحالة السابقة.`, 'error');
     }
@@ -857,7 +857,7 @@ export default function FinancesModule({ focusStageId, focusGradeId, focusGroupI
       loadStudents();
       const discLabel = mode === 'percent' ? `خصم ${pct}%` : mode === 'fixed' ? `خصم ${formatCurrency(fixedAmt)} ج.م` : 'إلغاء الخصم';
       showToast(`${discLabel} للطالب ${target.name} — بواسطة ${actorName}`, 'success');
-    } catch (err) {
+    } catch {
       setStudents(prevStudents);
       showToast(`فشل تطبيق الخصم: ${err instanceof Error ? err.message : 'تعذّر الاتصال بقاعدة البيانات'}. تمت استعادة القيمة السابقة.`, 'error');
     }
@@ -890,7 +890,7 @@ export default function FinancesModule({ focusStageId, focusGradeId, focusGroupI
       setAdjustTarget(null);
       setAdjustAmount('');
       setAdjustNote('');
-    } catch (err) {
+    } catch {
       showToast(`فشل خصم المستحقات: ${err instanceof Error ? err.message : 'تعذّر الاتصال بقاعدة البيانات'}. حاول مرة أخرى.`, 'error');
     } finally {
       setAdjustSaving(false);
@@ -1290,8 +1290,8 @@ export default function FinancesModule({ focusStageId, focusGradeId, focusGroupI
           {unpaidStudents.length > 0 && (
             <div className="flex gap-2 flex-wrap">
               <Button size="sm" variant="secondary" onClick={() => exportToCSV('الطلاب_غير_المسددين', ['#', 'اسم الطالب', 'المجموعة', 'الموعد', 'المرحلة', 'المتبقي (ج.م)'], unpaidStudents.map((s, i) => [i + 1, s.name, s.group_name ?? '-', s.group_schedule ?? '-', `${s.stage_name ?? ''} ${s.grade_name ?? ''}`.trim(), (s.total_fees ?? 0) - (monthlyPaidMap.get(s.id) ?? 0)]))}><Download size={14} /> تصدير Excel</Button>
+              <Button size="sm" variant="secondary" onClick={() => printDocument('كشف الطلاب غير المسددين', buildUnpaidPrintHTML(unpaidStudents))}><Printer size={14} /> طباعة / PDF</Button>
               <PDFButton label="PDF احترافي" size="sm" disabled={unpaidStudents.length === 0} onClick={async () => exportUnpaidStudentsPDF(students, monthlyPaidMap, monthExemptMap, { stageName: selectedStage?.name, gradeName: selectedGrade?.name, groupName: selectedGroup?.name, monthLabel: getMonthLabel(monthKey) })} />
-              <PDFButton label="كشف أسماء" size="sm" onClick={async () => exportStudentListPDF(students, { stageName: selectedStage?.name, gradeName: selectedGrade?.name, groupName: selectedGroup?.name, monthLabel: getMonthLabel(monthKey) })} />
             </div>
           )}
           <div className="space-y-2 max-h-80 overflow-y-auto">

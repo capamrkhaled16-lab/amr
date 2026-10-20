@@ -12,14 +12,14 @@ type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
 
 const variants: Record<Variant, string> = {
   primary:
-    'bg-gradient-to-br from-[#e7c75d] to-[#b88a1d] hover:from-[#f4d878] hover:to-[#d4af37] text-[#111] shadow-lg shadow-black/35 border border-[#f4d878]/35 focus-visible:ring-2 focus-visible:ring-[#d4af37]/40',
+    'bg-gradient-to-br from-[#e7c75d] to-[#b88a1d] hover:from-[#f4d878] hover:to-[#d4af37] text-[#111] shadow-lg shadow-black/35 border border-[#f4d878]/35',
   secondary:
-    'glass-light hover:bg-[#d4af37]/10 text-slate-200 border border-white/[0.08] hover:border-[#d4af37]/30 focus-visible:ring-2 focus-visible:ring-white/20',
+    'glass-light hover:bg-[#d4af37]/10 text-slate-200 border border-white/[0.08] hover:border-[#d4af37]/30',
   danger:
-    'bg-gradient-to-br from-red-500 to-red-600 hover:from-red-400 hover:to-red-500 text-white shadow-lg shadow-red-900/30 border border-red-400/15 focus-visible:ring-2 focus-visible:ring-red-400/40',
+    'bg-gradient-to-br from-red-500 to-red-600 hover:from-red-400 hover:to-red-500 text-white shadow-lg shadow-red-900/30 border border-red-400/15',
   warning:
-    'bg-gradient-to-br from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-900 shadow-lg shadow-amber-900/25 border border-amber-300/15 focus-visible:ring-2 focus-visible:ring-amber-400/40',
-  ghost: 'hover:bg-white/[0.04] text-slate-300 hover:text-white focus-visible:ring-2 focus-visible:ring-white/15',
+    'bg-gradient-to-br from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-900 shadow-lg shadow-amber-900/25 border border-amber-300/15',
+  ghost: 'hover:bg-white/[0.04] text-slate-300 hover:text-white',
 };
 
 const sizes = {
@@ -39,7 +39,7 @@ export default function Button({
 }: ButtonProps) {
   return (
     <button
-      className={`inline-flex items-center justify-center font-semibold transition-all duration-200 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 focus:outline-none ${variants[variant]} ${sizes[size]} ${className}`}
+      className={`inline-flex items-center justify-center font-semibold transition-all duration-200 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 ${variants[variant]} ${sizes[size]} ${className}`}
       disabled={disabled || loading}
       {...props}
     >

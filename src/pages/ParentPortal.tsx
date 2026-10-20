@@ -2,8 +2,6 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   fetchStudentByParentToken,
-  fetchStudentById,
-  fetchStudentByParentPhone,
   fetchAttendanceForStudent,
   fetchCenterGradesByStudent,
   fetchCenterExamsByStudent,
@@ -16,7 +14,6 @@ import {
   fetchBehaviorEvals,
   currentMonthKey,
 } from '@/lib/data';
-import { supabase } from '@/lib/supabase';
 import { getMonthLabel, formatArabicDate, formatCurrency, getGradeRating } from '@/lib/format';
 import { getMonthKey } from '@/lib/dates';
 import type {
@@ -32,7 +29,23 @@ import type {
   HomeworkStatus,
   BehaviorEval,
 } from '@/lib/types';
-import { GraduationCap, Calendar, BookOpen, Award, TrendingUp, Wallet, Receipt, Users, ChevronLeft, ChevronRight, CircleAlert as AlertCircle, Loader as Loader2, Phone, Sparkles, FileText } from 'lucide-react';
+import {
+  GraduationCap,
+  Calendar,
+  BookOpen,
+  Award,
+  TrendingUp,
+  Wallet,
+  Receipt,
+  Users,
+  ChevronLeft,
+  ChevronRight,
+  AlertCircle,
+  Loader2,
+  Phone,
+  Sparkles,
+  FileText,
+} from 'lucide-react';
 import { PDFButton } from '@/components/ui/PDFButton';
 import { exportParentPortalPDF } from '@/lib/pdfExport';
 
@@ -54,11 +67,7 @@ interface ParentData {
 
 export default function ParentPortal() {
   const [searchParams] = useSearchParams();
-  // Support both current link format (?token=...) and legacy formats
-  // (?student_id=... or ?phone=...) for 100% backward compatibility.
-  const token = searchParams.get('token') ?? searchParams.get('parent_token');
-  const studentIdParam = searchParams.get('student_id');
-  const phoneParam = searchParams.get('phone') ?? searchParams.get('parent_phone');
+  const token = searchParams.get('token');
   const initialMonth = searchParams.get('month');
 
   const [state, setState] = useState<LoadState>('loading');
@@ -68,18 +77,11 @@ export default function ParentPortal() {
   const [loadingMonth, setLoadingMonth] = useState(false);
   const reqIdRef = useRef(0);
 
-  const loadData = useCallback(async (rawValue: string, monthKey: string, mode: 'token' | 'student_id' | 'phone' = 'token') => {
+  const loadData = useCallback(async (token: string, monthKey: string) => {
     const reqId = ++reqIdRef.current;
     setLoadingMonth(true);
     try {
-      let student: Student | null = null;
-      if (mode === 'student_id') {
-        student = await fetchStudentById(rawValue);
-      } else if (mode === 'phone') {
-        student = await fetchStudentByParentPhone(rawValue);
-      } else {
-        student = await fetchStudentByParentToken(rawValue);
-      }
+      const student = await fetchStudentByParentToken(token);
       if (!student) {
         if (reqId === reqIdRef.current) {
           setState('notfound');
@@ -98,47 +100,35 @@ export default function ParentPortal() {
       }
 
       const [attendance, centerGrades, centerExams, onlineGrades, onlineExams, payments, subscriptions, homework, behavior] = await Promise.all([
-        fetchAttendanceForStudent(student.id).catch(() => [] as AttendanceRecord[]),
-        fetchCenterGradesByStudent(student.id).catch(() => [] as CenterGrade[]),
-        fetchCenterExamsByStudent(student.id).catch(() => [] as CenterExam[]),
-        fetchOnlineGradesByStudent(student.id).catch(() => [] as OnlineGrade[]),
-        fetchOnlineExamsByStudent(student.id).catch(() => [] as OnlineExam[]),
-        fetchPayments(student.id, monthKey).catch(() => [] as Payment[]),
-        fetchStudentMonthlySubscriptions(student.id).catch(() => [] as MonthlySubscription[]),
-        groupId ? fetchHomework(groupId, true, monthKey).catch(() => [] as Homework[]) : Promise.resolve([] as Homework[]),
-        fetchBehaviorEvals(student.id).catch(() => [] as BehaviorEval[]),
+        fetchAttendanceForStudent(student.id),
+        fetchCenterGradesByStudent(student.id),
+        fetchCenterExamsByStudent(student.id),
+        fetchOnlineGradesByStudent(student.id),
+        fetchOnlineExamsByStudent(student.id),
+        fetchPayments(student.id, monthKey),
+        fetchStudentMonthlySubscriptions(student.id),
+        groupId ? fetchHomework(groupId, true, monthKey) : Promise.resolve([] as Homework[]),
+        fetchBehaviorEvals(student.id),
       ]);
 
       const hwStatuses: HomeworkStatus[] = [];
       for (const hw of homework) {
-        try {
-          const statuses = await fetchHomeworkStatuses(hw.id);
-          const studentStatus = (statuses ?? []).find((s) => s.student_id === student.id);
-          if (studentStatus) hwStatuses.push(studentStatus);
-        } catch {
-          // Skip this homework's statuses if the query fails
-        }
+        const statuses = await fetchHomeworkStatuses(hw.id);
+        const studentStatus = statuses.find((s) => s.student_id === student.id);
+        if (studentStatus) hwStatuses.push(studentStatus);
       }
 
-      let groupData: { name?: string; grade_level?: { name?: string; stage?: { name?: string } } } | null = null;
-      if (supabase && typeof supabase.from === 'function') {
-        try {
-          const { data: gData } = await supabase
-            .from('groups')
-            .select('name, grade_level:grade_levels(name, stage:academic_stages(name))')
-            .eq('id', groupId)
-            .maybeSingle();
-          groupData = (gData as { name?: string; grade_level?: { name?: string; stage?: { name?: string } } } | null) ?? null;
-        } catch {
-          // Group enrichment is non-critical — proceed without it
-        }
-      }
+      const { data: groupData } = await import('@/lib/supabase').then((m) => m.supabase
+        .from('groups')
+        .select('name, grade_level:grade_levels(name, stage:academic_stages(name))')
+        .eq('id', groupId)
+        .maybeSingle());
 
       const enrichedStudent = {
         ...student,
-        group_name: groupData?.name,
-        grade_name: groupData?.grade_level?.name,
-        stage_name: groupData?.grade_level?.stage?.name,
+        group_name: (groupData as { name?: string } | null)?.name,
+        grade_name: (groupData as { grade_level?: { name?: string } } | null)?.grade_level?.name,
+        stage_name: (groupData as { grade_level?: { stage?: { name?: string } } } | null)?.grade_level?.stage?.name,
       };
 
       if (reqId === reqIdRef.current) {
@@ -168,21 +158,13 @@ export default function ParentPortal() {
   }, []);
 
   useEffect(() => {
-    // Resolve the student using whichever param is present. The `token` param
-    // is the current format; `student_id` and `phone` are legacy formats that
-    // were sent in earlier links and must continue to work.
-    if (token) {
-      loadData(token, selectedMonth, 'token');
-    } else if (studentIdParam) {
-      loadData(studentIdParam, selectedMonth, 'student_id');
-    } else if (phoneParam) {
-      loadData(phoneParam, selectedMonth, 'phone');
-    } else {
+    if (!token) {
       setState('notfound');
-      setErrorMsg('لم يتم العثور على رمز ولي الأمر في الرابط. تأكد من فتح الرابط الصحيح أو تواصل مع المعلم للحصول على رابط جديد.');
+      setErrorMsg('لم يتم العثور على رمز ولي الأمر في الرابط. تأكد من فتح الرابط الصحيح.');
+      return;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, studentIdParam, phoneParam, selectedMonth, loadData]);
+    loadData(token, selectedMonth);
+  }, [token, selectedMonth, loadData]);
 
   if (state === 'loading') {
     return <FullScreenLoader label="جاري تحميل بيانات الطالب..." />;
@@ -203,7 +185,7 @@ export default function ParentPortal() {
 
 function FullScreenLoader({ label }: { label: string }) {
   return (
-    <div className="min-h-screen bg-[#080808] flex flex-col items-center justify-center px-6" dir="rtl">
+    <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center px-6" dir="rtl">
       <div className="flex flex-col items-center gap-4">
         <div className="relative">
           <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/20">
@@ -221,7 +203,7 @@ function FullScreenLoader({ label }: { label: string }) {
 
 function FullScreenError({ icon, message }: { icon: React.ReactNode; message: string }) {
   return (
-    <div className="min-h-screen bg-[#080808] flex flex-col items-center justify-center px-6" dir="rtl">
+    <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center px-6" dir="rtl">
       <div className="flex flex-col items-center gap-4 max-w-sm text-center">
         <div className="w-20 h-20 rounded-full bg-slate-800/50 flex items-center justify-center">
           {icon}
@@ -262,8 +244,8 @@ function PortalContent({
   const monthSubscription = data.subscriptions.find((s) => s.month_key === selectedMonth);
 
   const monthFilteredAttendance = data.attendance.filter((a) => {
-    if (!a.attendance_date) return false;
-    return a.attendance_date.slice(0, 7) === selectedMonth;
+    const attMonth = a.attendance_date.slice(0, 7);
+    return attMonth === selectedMonth;
   });
 
   const monthFilteredBehavior = data.behavior.filter((b) => {
@@ -276,26 +258,24 @@ function PortalContent({
     return h.due_date.slice(0, 7) === selectedMonth;
   });
 
-  const monthFilteredHwStatuses = (data.homeworkStatuses ?? []).filter((hs) => {
+  const monthFilteredHwStatuses = data.homeworkStatuses.filter((hs) => {
     const hw = data.homework.find((h) => h.id === hs.homework_id);
     if (!hw || !hw.due_date) return false;
     return hw.due_date.slice(0, 7) === selectedMonth;
   });
 
-  const recordedAttendance = monthFilteredAttendance.filter((a) => a.status !== 'unrecorded');
-  const presentCount = recordedAttendance.filter((a) => a.status === 'present' || a.status === 'late').length;
-  const absentCount = recordedAttendance.filter((a) => a.status === 'absent').length;
-  const excusedCount = recordedAttendance.filter((a) => a.status === 'excused' || a.status === 'excused_absence').length;
-  const lateCount = recordedAttendance.filter((a) => a.status === 'late').length;
-  const totalAttendance = recordedAttendance.length;
-  const attendanceRate = totalAttendance > 0 ? Math.round((presentCount / totalAttendance) * 100) : null;
+  const presentCount = monthFilteredAttendance.filter((a) => a.status === 'present').length;
+  const absentCount = monthFilteredAttendance.filter((a) => a.status === 'absent').length;
+  const excusedCount = monthFilteredAttendance.filter((a) => a.status === 'excused' || a.status === 'excused_absence').length;
+  const lateCount = monthFilteredAttendance.filter((a) => a.status === 'late').length;
+  const totalAttendance = monthFilteredAttendance.length;
+  const attendanceRate = totalAttendance > 0 ? Math.round((presentCount / totalAttendance) * 100) : 0;
 
   const hwDone = monthFilteredHwStatuses.filter((hs) => ['done', 'complete', 'completed'].includes(hs.status)).length;
   const hwLate = monthFilteredHwStatuses.filter((hs) => hs.status === 'late').length;
   const hwNotDone = monthFilteredHwStatuses.filter((hs) => ['not_done', 'incomplete', 'absent'].includes(hs.status)).length;
-  const recordedHomeworkStatuses = monthFilteredHwStatuses.filter((hs) => hs.status !== 'unrecorded');
-  const hwTotal = recordedHomeworkStatuses.length;
-  const hwRate = hwTotal > 0 ? Math.round((hwDone / hwTotal) * 100) : null;
+  const hwTotal = monthFilteredHwStatuses.length;
+  const hwRate = hwTotal > 0 ? Math.round((hwDone / hwTotal) * 100) : 0;
 
   const examAvg = useMemo(() => {
     const allGrades: { score: number; max: number }[] = [];
@@ -322,9 +302,9 @@ function PortalContent({
   const collectionRate = feesDue > 0 ? Math.min(100, Math.round((feesPaid / feesDue) * 100)) : 0;
 
   return (
-    <div className="min-h-screen bg-[#080808] text-white" dir="rtl" lang="ar">
+    <div className="min-h-screen bg-slate-950 text-white" dir="rtl" lang="ar">
       {/* Header */}
-      <header className="sticky top-0 z-30 bg-[#080808]/90 backdrop-blur-xl border-b border-amber-400/15">
+      <header className="sticky top-0 z-30 bg-slate-950/80 backdrop-blur-xl border-b border-slate-800/50">
         <div className="max-w-2xl mx-auto px-4 py-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
@@ -336,7 +316,7 @@ function PortalContent({
                 <p className="text-[10px] text-slate-400">بوابة ولي الأمر</p>
               </div>
             </div>
-            {loadingMonth && <Loader2 className="w-4 h-4 animate-spin text-amber-300" />}
+            {loadingMonth && <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />}
             <PDFButton
               label="تصدير PDF"
               size="sm"
@@ -348,7 +328,7 @@ function PortalContent({
                   if (exam) grades.push({ examTitle: exam.title ?? 'امتحان', category: exam.category ?? 'exam', score: cg.score, maxScore: exam.max_score, passed: cg.score >= (exam.pass_score ?? 0) });
                 }
                 for (const og of data.onlineGrades) {
-                  const exam = data.onlineExams.find((e) => e.id === og.exam_id);
+                  const exam = data.onlineExams.find((e) => e.id === og.online_exam_id);
                   if (exam) grades.push({ examTitle: exam.title ?? 'امتحان أونلاين', category: 'online', score: og.score, maxScore: og.max_score, passed: og.score >= (exam.pass_score ?? 0) });
                 }
                 return exportParentPortalPDF(
@@ -407,8 +387,8 @@ function PortalContent({
               onClick={() => setActiveTab(tab.id)}
               className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
                 activeTab === tab.id
-                  ? 'bg-emerald-500/15 text-amber-300 border border-emerald-500/20'
-                  : 'bg-[#111111] text-slate-300 border border-white/10 hover:text-amber-200'
+                  ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20'
+                  : 'bg-slate-900 text-slate-400 border border-slate-800 hover:text-slate-300'
               }`}
             >
               <tab.icon className="w-3.5 h-3.5" />
@@ -481,7 +461,7 @@ function PortalContent({
 function ProfileHeader({ student }: { student: ParentData['student'] }) {
   const initials = student.name?.charAt(0) ?? '؟';
   return (
-    <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#1b1b1b] via-[#151515] to-[#0c0c0c] border border-amber-400/15 p-5">
+    <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900 via-slate-900 to-emerald-950/30 border border-slate-800/50 p-5">
       <div className="absolute -top-12 -left-12 w-40 h-40 bg-emerald-500/5 rounded-full blur-3xl" />
       <div className="relative flex items-center gap-4">
         <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-2xl font-black text-white shadow-lg shadow-emerald-500/20 shrink-0">
@@ -496,12 +476,12 @@ function ProfileHeader({ student }: { student: ParentData['student'] }) {
               </span>
             )}
             {student.grade_name && (
-              <span className="text-[10px] px-2 py-0.5 rounded-lg bg-emerald-500/10 text-amber-300 font-medium">
+              <span className="text-[10px] px-2 py-0.5 rounded-lg bg-emerald-500/10 text-emerald-400 font-medium">
                 {student.grade_name}
               </span>
             )}
             {student.group_name && (
-              <span className="text-[10px] px-2 py-0.5 rounded-lg bg-amber-400/10 text-amber-300 font-medium">
+              <span className="text-[10px] px-2 py-0.5 rounded-lg bg-sky-500/10 text-sky-400 font-medium">
                 {student.group_name}
               </span>
             )}
@@ -532,7 +512,7 @@ function MonthSelector({
   const canGoForward = currentIndex > 0;
 
   return (
-    <div className="flex items-center justify-between bg-[#151515] rounded-2xl border border-white/10 px-3 py-2.5">
+    <div className="flex items-center justify-between bg-slate-900/50 rounded-2xl border border-slate-800/50 px-3 py-2.5">
       <button
         disabled={!canGoBack}
         onClick={() => canGoBack && onMonthChange(availableMonths[currentIndex + 1])}
@@ -541,7 +521,7 @@ function MonthSelector({
         <ChevronRight className="w-5 h-5" />
       </button>
       <div className="flex items-center gap-2">
-        <Calendar className="w-4 h-4 text-amber-300" />
+        <Calendar className="w-4 h-4 text-emerald-400" />
         <span className="text-sm font-bold text-white">{getMonthLabel(selectedMonth)}</span>
       </div>
       <button
@@ -568,8 +548,7 @@ function CircleIndicator({
   sublabel?: string;
   color: string;
 }) {
-  const hasValue = max > 0;
-  const pct = hasValue ? Math.min(100, Math.round((value / max) * 100)) : 0;
+  const pct = max > 0 ? Math.min(100, Math.round((value / max) * 100)) : 0;
   const radius = 32;
   const circumference = 2 * Math.PI * radius;
   const dashOffset = circumference - (pct / 100) * circumference;
@@ -594,7 +573,7 @@ function CircleIndicator({
           />
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className="text-lg font-black text-white">{hasValue ? `${pct}%` : '—'}</span>
+          <span className="text-lg font-black text-white">{pct}%</span>
         </div>
       </div>
       <div className="text-center">
@@ -621,7 +600,7 @@ function OverviewTab({
   isExempt,
   collectionRate,
 }: {
-  attendanceRate: number | null;
+  attendanceRate: number;
   presentCount: number;
   absentCount: number;
   excusedCount: number;
@@ -639,21 +618,21 @@ function OverviewTab({
   return (
     <div className="space-y-4">
       {/* Circle indicators */}
-      <div className="bg-[#151515] rounded-3xl border border-white/10 p-5">
+      <div className="bg-slate-900/50 rounded-3xl border border-slate-800/50 p-5">
         <div className="flex justify-around items-start">
           <CircleIndicator
-            value={attendanceRate ?? 0}
-            max={attendanceRate === null ? 0 : 100}
+            value={attendanceRate}
+            max={100}
             label="الحضور"
-            sublabel={attendanceRate === null ? 'لا توجد سجلات مكتملة' : `${presentCount} من ${presentCount + absentCount + excusedCount}`}
-            color="text-amber-300"
+            sublabel={`${presentCount} من ${presentCount + absentCount + excusedCount + lateCount}`}
+            color="text-emerald-400"
           />
           <CircleIndicator
-            value={hwRate ?? 0}
-            max={hwRate === null ? 0 : 100}
+            value={hwRate}
+            max={100}
             label="الواجبات"
-            sublabel={hwRate === null ? 'لا توجد حالات مسجلة' : `${hwDone} من ${hwTotal}`}
-            color="text-amber-400"
+            sublabel={`${hwDone} من ${hwTotal}`}
+            color="text-sky-400"
           />
           <CircleIndicator
             value={examAvg ?? 0}
@@ -694,14 +673,14 @@ function OverviewTab({
       </div>
 
       {/* Financial summary */}
-      <div className="bg-[#151515] rounded-3xl border border-white/10 p-5 space-y-3">
+      <div className="bg-slate-900/50 rounded-3xl border border-slate-800/50 p-5 space-y-3">
         <div className="flex items-center gap-2 mb-2">
-          <Wallet className="w-4 h-4 text-amber-300" />
+          <Wallet className="w-4 h-4 text-emerald-400" />
           <h3 className="text-sm font-bold text-white">الملخص المالي</h3>
         </div>
         {isExempt ? (
           <div className="bg-emerald-500/10 rounded-xl p-3 text-center">
-            <p className="text-sm font-bold text-amber-300">معفى من الرسوم</p>
+            <p className="text-sm font-bold text-emerald-400">معفى من الرسوم</p>
           </div>
         ) : feesDue === 0 ? (
           <div className="bg-slate-800/50 rounded-xl p-3 text-center">
@@ -710,12 +689,12 @@ function OverviewTab({
         ) : (
           <>
             <FinanceRow label="الرسوم المستحقة" value={formatCurrency(feesDue)} color="text-white" />
-            <FinanceRow label="المبلغ المدفوع" value={formatCurrency(feesPaid)} color="text-amber-300" />
+            <FinanceRow label="المبلغ المدفوع" value={formatCurrency(feesPaid)} color="text-emerald-400" />
             <div className="h-px bg-slate-800" />
             <FinanceRow
               label="المبلغ المتبقي"
               value={formatCurrency(feesRemaining)}
-              color={feesRemaining > 0 ? 'text-red-400' : 'text-amber-300'}
+              color={feesRemaining > 0 ? 'text-red-400' : 'text-emerald-400'}
               bold
             />
             <div className="mt-2">
@@ -725,7 +704,7 @@ function OverviewTab({
               </div>
               <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
                 <div
-                  className="h-full bg-gradient-to-r from-amber-300 to-amber-600 rounded-full transition-all duration-500"
+                  className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full transition-all duration-500"
                   style={{ width: `${collectionRate}%` }}
                 />
               </div>
@@ -749,13 +728,13 @@ function StatCard({
   color: 'emerald' | 'red' | 'amber' | 'sky';
 }) {
   const colorMap = {
-    emerald: 'text-amber-300 bg-emerald-500/10',
+    emerald: 'text-emerald-400 bg-emerald-500/10',
     red: 'text-red-400 bg-red-500/10',
     amber: 'text-amber-400 bg-amber-500/10',
     sky: 'text-sky-400 bg-sky-500/10',
   };
   return (
-    <div className="bg-[#151515] rounded-2xl border border-white/10 p-3.5">
+    <div className="bg-slate-900/50 rounded-2xl border border-slate-800/50 p-3.5">
       <div className={`w-8 h-8 rounded-lg ${colorMap[color]} flex items-center justify-center mb-2`}>
         {icon}
       </div>
@@ -807,8 +786,8 @@ function GradesTab({
   return (
     <div className="space-y-3">
       {monthCenterGrades.length > 0 && (
-        <div className="bg-[#151515] rounded-2xl border border-white/10 overflow-hidden">
-          <div className="px-4 py-3 border-b border-white/10">
+        <div className="bg-slate-900/50 rounded-2xl border border-slate-800/50 overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-800/50">
             <h3 className="text-sm font-bold text-white">امتحانات المركز</h3>
           </div>
           <div className="divide-y divide-slate-800/50">
@@ -839,8 +818,8 @@ function GradesTab({
       )}
 
       {monthOnlineGrades.length > 0 && (
-        <div className="bg-[#151515] rounded-2xl border border-white/10 overflow-hidden">
-          <div className="px-4 py-3 border-b border-white/10">
+        <div className="bg-slate-900/50 rounded-2xl border border-slate-800/50 overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-800/50">
             <h3 className="text-sm font-bold text-white">الامتحانات الإلكترونية</h3>
           </div>
           <div className="divide-y divide-slate-800/50">
@@ -879,7 +858,7 @@ function AttendanceTab({ records }: { records: (AttendanceRecord & { sessions?: 
   }
 
   const statusConfig: Record<string, { label: string; color: string; bg: string }> = {
-    present: { label: 'حاضر', color: 'text-amber-300', bg: 'bg-emerald-500/10' },
+    present: { label: 'حاضر', color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
     absent: { label: 'غائب', color: 'text-red-400', bg: 'bg-red-500/10' },
     excused: { label: 'غائب بعذر', color: 'text-amber-400', bg: 'bg-amber-500/10' },
     excused_absence: { label: 'غائب بعذر', color: 'text-amber-400', bg: 'bg-amber-500/10' },
@@ -888,7 +867,7 @@ function AttendanceTab({ records }: { records: (AttendanceRecord & { sessions?: 
   };
 
   return (
-    <div className="bg-[#151515] rounded-2xl border border-white/10 overflow-hidden">
+    <div className="bg-slate-900/50 rounded-2xl border border-slate-800/50 overflow-hidden">
       <div className="divide-y divide-slate-800/50">
         {records.map((rec) => {
           const cfg = statusConfig[rec.status] ?? statusConfig.unrecorded;
@@ -926,9 +905,9 @@ function HomeworkTab({
   }
 
   const statusConfig: Record<string, { label: string; color: string; bg: string }> = {
-    done: { label: 'تم', color: 'text-amber-300', bg: 'bg-emerald-500/10' },
-    complete: { label: 'تم', color: 'text-amber-300', bg: 'bg-emerald-500/10' },
-    completed: { label: 'تم', color: 'text-amber-300', bg: 'bg-emerald-500/10' },
+    done: { label: 'تم', color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
+    complete: { label: 'تم', color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
+    completed: { label: 'تم', color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
     late: { label: 'متأخر', color: 'text-amber-400', bg: 'bg-amber-500/10' },
     incomplete: { label: 'غير مكتمل', color: 'text-red-400', bg: 'bg-red-500/10' },
     not_done: { label: 'لم يتم', color: 'text-red-400', bg: 'bg-red-500/10' },
@@ -943,7 +922,7 @@ function HomeworkTab({
         const status = statuses.find((s) => s.homework_id === hw.id && s.student_id === studentId);
         const cfg = status ? (statusConfig[status.status] ?? statusConfig.unrecorded) : null;
         return (
-          <div key={hw.id} className="bg-[#151515] rounded-2xl border border-white/10 p-4">
+          <div key={hw.id} className="bg-slate-900/50 rounded-2xl border border-slate-800/50 p-4">
             <div className="flex items-start justify-between gap-3">
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-bold text-white">{hw.title}</p>
@@ -992,14 +971,14 @@ function FinanceTab({
   return (
     <div className="space-y-3">
       {/* Summary card */}
-      <div className="bg-[#151515] rounded-3xl border border-white/10 p-5 space-y-3">
+      <div className="bg-slate-900/50 rounded-3xl border border-slate-800/50 p-5 space-y-3">
         <div className="flex items-center gap-2 mb-2">
-          <Wallet className="w-4 h-4 text-amber-300" />
+          <Wallet className="w-4 h-4 text-emerald-400" />
           <h3 className="text-sm font-bold text-white">الملخص المالي</h3>
         </div>
         {isExempt ? (
           <div className="bg-emerald-500/10 rounded-xl p-4 text-center">
-            <p className="text-sm font-bold text-amber-300">معفى من الرسوم</p>
+            <p className="text-sm font-bold text-emerald-400">معفى من الرسوم</p>
             {subscription?.exemption_note && (
               <p className="text-[10px] text-slate-400 mt-1">{subscription.exemption_note}</p>
             )}
@@ -1011,12 +990,12 @@ function FinanceTab({
         ) : (
           <>
             <FinanceRow label="الرسوم المستحقة" value={formatCurrency(feesDue)} color="text-white" />
-            <FinanceRow label="المبلغ المدفوع" value={formatCurrency(feesPaid)} color="text-amber-300" />
+            <FinanceRow label="المبلغ المدفوع" value={formatCurrency(feesPaid)} color="text-emerald-400" />
             <div className="h-px bg-slate-800" />
             <FinanceRow
               label="المبلغ المتبقي"
               value={formatCurrency(feesRemaining)}
-              color={feesRemaining > 0 ? 'text-red-400' : 'text-amber-300'}
+              color={feesRemaining > 0 ? 'text-red-400' : 'text-emerald-400'}
               bold
             />
           </>
@@ -1025,10 +1004,10 @@ function FinanceTab({
 
       {/* Payment receipts */}
       {payments.length > 0 && (
-        <div className="bg-[#151515] rounded-2xl border border-white/10 overflow-hidden">
-          <div className="px-4 py-3 border-b border-white/10">
+        <div className="bg-slate-900/50 rounded-2xl border border-slate-800/50 overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-800/50">
             <div className="flex items-center gap-2">
-              <Receipt className="w-4 h-4 text-amber-300" />
+              <Receipt className="w-4 h-4 text-emerald-400" />
               <h3 className="text-sm font-bold text-white">إيصالات الدفع</h3>
             </div>
           </div>
@@ -1046,7 +1025,7 @@ function FinanceTab({
                   </div>
                   <div className="shrink-0">
                     <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center">
-                      <Receipt className="w-4 h-4 text-amber-300" />
+                      <Receipt className="w-4 h-4 text-emerald-400" />
                     </div>
                   </div>
                 </div>
@@ -1069,8 +1048,8 @@ function BehaviorTab({ records }: { records: BehaviorEval[] }) {
   }
 
   const ratingConfig: Record<string, { label: string; color: string; bg: string }> = {
-    excellent: { label: 'ممتاز', color: 'text-amber-300', bg: 'bg-emerald-500/10' },
-    participatory: { label: 'مشارك', color: 'text-amber-300', bg: 'bg-emerald-500/10' },
+    excellent: { label: 'ممتاز', color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
+    participatory: { label: 'مشارك', color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
     quiet: { label: 'هادئ', color: 'text-sky-400', bg: 'bg-sky-500/10' },
     needs_attention: { label: 'يحتاج اهتمام', color: 'text-amber-400', bg: 'bg-amber-500/10' },
     disruptive: { label: 'مزعج', color: 'text-red-400', bg: 'bg-red-500/10' },
@@ -1081,7 +1060,7 @@ function BehaviorTab({ records }: { records: BehaviorEval[] }) {
       {records.map((rec) => {
         const cfg = rec.rating ? (ratingConfig[rec.rating] ?? { label: rec.rating, color: 'text-slate-400', bg: 'bg-slate-500/10' }) : null;
         return (
-          <div key={rec.id} className="bg-[#151515] rounded-2xl border border-white/10 p-4">
+          <div key={rec.id} className="bg-slate-900/50 rounded-2xl border border-slate-800/50 p-4">
             <div className="flex items-start justify-between gap-3">
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-bold text-white">{formatArabicDate(rec.eval_date)}</p>

@@ -13,7 +13,6 @@ import PageLoader from '@/components/ui/PageLoader';
 import { ToastProvider } from '@/components/ui/Toast';
 import { NotificationProvider } from '@/context/NotificationContext';
 import PWAInstallPrompt from '@/components/ui/PWAInstallPrompt';
-import OfflineBanner from '@/components/ui/OfflineBanner';
 
 const DashboardPage = lazyWithRetry(() => import('@/pages/DashboardPage'));
 const SettingsPage = lazyWithRetry(() => import('@/pages/SettingsPage'));
@@ -93,7 +92,6 @@ export default function App() {
       <ToastProvider>
         <AppRoutes />
         <PWAInstallPrompt />
-        <OfflineBanner />
       </ToastProvider>
     </NotificationProvider>
     </BrowserRouter>

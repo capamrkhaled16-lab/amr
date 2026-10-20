@@ -2,10 +2,11 @@ import { useMemo, useState } from 'react';
 import Modal from '@/components/ui/Modal';
 import StudentViewModal from '@/components/ui/StudentViewModal';
 import { formatCurrency } from '@/lib/format';
-import { exportStudentListPDF, exportUnpaidStudentsPDF, exportPaidStudentsPDF } from '@/lib/pdfExport';
+import { printDocument } from '@/lib/export';
+import { exportStudentListPDF } from '@/lib/pdfExport';
 import { classifyStudentPayment } from '@/lib/financeCalc';
 import { PDFButton } from '@/components/ui/PDFButton';
-import { Eye } from 'lucide-react';
+import { Printer, Eye } from 'lucide-react';
 import type { Student } from '@/lib/types';
 
 type DrillCategory = 'fullyPaid' | 'partial' | 'unpaid' | 'collected' | 'all';
@@ -47,14 +48,27 @@ export default function DrillDownModal({ open, category, students, monthlyPaidMa
   if (!category) return null;
   const meta = CATEGORY_META[category];
 
-  function handlePremiumPDF() {
-    if (category === 'unpaid') {
-      return exportUnpaidStudentsPDF(students, monthlyPaidMap, monthExemptMap, { title: meta.title });
-    }
-    if (category === 'fullyPaid') {
-      return exportPaidStudentsPDF(students, monthlyPaidMap, monthExemptMap, { title: meta.title });
-    }
-    return exportStudentListPDF(filtered, { title: meta.title });
+  function handlePrint() {
+    const headers = ['#', 'اسم الطالب', 'المرحلة', 'الصف', 'المجموعة', 'المدفوع', 'المتبقي'];
+    const rows = filtered.map((s, i) => {
+      const monthlyPaid = monthlyPaidMap.get(s.id) ?? 0;
+      return [
+        i + 1,
+        s.name,
+        s.stage_name ?? '-',
+        s.grade_name ?? '-',
+        s.group_name ?? '-',
+        formatCurrency(monthlyPaid),
+        formatCurrency(Math.max(0, (s.total_fees ?? 0) - monthlyPaid)),
+      ];
+    });
+    const bodyHTML = `
+      <h1>${meta.title}</h1>
+      <div class="subtitle">إجمالي الطلاب: ${filtered.length} — ${new Date().toLocaleDateString('ar-EG')}</div>
+      <table><thead><tr>${headers.map((h) => `<th>${h}</th>`).join('')}</tr></thead>
+      <tbody>${rows.map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table>
+    `;
+    printDocument(meta.title, bodyHTML);
   }
 
   return (
@@ -72,8 +86,17 @@ export default function DrillDownModal({ open, category, students, monthlyPaidMa
               size="sm"
               variant="secondary"
               disabled={filtered.length === 0}
-              onClick={async () => handlePremiumPDF()}
+              onClick={async () => exportStudentListPDF(filtered, {
+                title: meta.title,
+              })}
             />
+            <button
+              onClick={handlePrint}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl glass-light hover:bg-emerald-500/10 text-slate-300 hover:text-emerald-400 transition text-xs font-bold"
+            >
+              <Printer size={14} />
+              طباعة
+            </button>
           </div>
         </div>
 

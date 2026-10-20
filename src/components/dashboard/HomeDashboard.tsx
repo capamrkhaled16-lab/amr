@@ -25,7 +25,7 @@ import NeedsReview from '@/components/dashboard/NeedsReview';
 import AttentionWidget from '@/components/dashboard/AttentionWidget';
 import TodaySection from '@/components/dashboard/TodaySection';
 import { AlertCircle, Sun } from 'lucide-react';
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   fetchHomework,
   fetchHomeworkStatuses,
@@ -43,8 +43,7 @@ import type { Student, Homework, HomeworkStatus, HomeworkStatusType, BehaviorRat
 import { Skeleton } from '@/components/ui/Skeleton';
 import { useMonth } from '@/context/MonthContext';
 import { PDFButton } from '@/components/ui/PDFButton';
-import { exportDashboardSummaryPDF, exportStudentListPDF, exportSecretariatRegisterPDF } from '@/lib/pdfExport';
-import { ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, AreaChart, Area, defs } from 'recharts';
+import { exportDashboardSummaryPDF, exportStudentListPDF, exportMonthlyPaymentSummaryPDF } from '@/lib/pdfExport';
 
 function getCurrentMonthLabel(): string {
   const d = new Date();
@@ -169,23 +168,7 @@ export default function HomeDashboard({
                 label="ملخص المدفوعات PDF"
                 size="sm"
                 variant="secondary"
-                onClick={async () => {
-                  const { exportMonthlyPaymentSummaryPDF } = await import('@/lib/pdfExport');
-                  return exportMonthlyPaymentSummaryPDF(allStudents, monthlyPaidMap, monthExemptMap, {
-                    monthLabel: activeMonthLabel,
-                    groupName,
-                  });
-                }}
-                className="flex-shrink-0"
-              />
-            )}
-            {isMaster && (
-              <PDFButton
-                label="كشف المدفوعات اليدوي"
-                size="sm"
-                variant="secondary"
-                onClick={async () => exportSecretariatRegisterPDF(allStudents, {
-                  title: 'كشف المدفوعات',
+                onClick={async () => exportMonthlyPaymentSummaryPDF(allStudents, monthlyPaidMap, monthExemptMap, {
                   monthLabel: activeMonthLabel,
                   groupName,
                 })}
@@ -265,19 +248,6 @@ export default function HomeDashboard({
           </div>
         </div>
       </motion.div>
-
-      {isMaster && totalStudents > 0 && (
-        <DashboardCharts
-          fullyPaid={fullyPaid}
-          partialPaid={partialPaid}
-          unpaidCount={unpaidCount}
-          exemptCount={monthExemptMap.size}
-          totalCollected={totalCollected}
-          totalRemaining={totalRemaining}
-          allStudents={allStudents}
-          monthlyPaidMap={monthlyPaidMap}
-        />
-      )}
 
       {/* Inline quick-logging panel */}
       <AnimatePresence>
@@ -735,264 +705,5 @@ function QuickCard({ icon, title, subtitle, color, onClick }: { icon: React.Reac
       <h3 className="font-bold text-white text-sm mb-1">{title}</h3>
       <p className="text-xs text-slate-200 font-medium">{subtitle}</p>
     </div>
-  );
-}
-
-const CHART_TOOLTIP_STYLE = {
-  background: 'rgba(15,23,42,0.95)',
-  border: '1px solid rgba(212,175,55,0.35)',
-  borderRadius: '10px',
-  fontSize: '12px',
-  boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
-  padding: '8px 12px',
-} as const;
-
-const CHART_LABEL_STYLE = { color: '#d4af37', fontWeight: 700 } as const;
-
-const ARABIC_TICK = { fill: '#cbd5e1', fontSize: 11 } as const;
-const ARABIC_TICK_SM = { fill: '#94a3b8', fontSize: 10 } as const;
-
-function DashboardCharts({
-  fullyPaid,
-  partialPaid,
-  unpaidCount,
-  exemptCount,
-  totalCollected,
-  totalRemaining,
-  allStudents,
-  monthlyPaidMap,
-}: {
-  fullyPaid: number;
-  partialPaid: number;
-  unpaidCount: number;
-  exemptCount: number;
-  totalCollected: number;
-  totalRemaining: number;
-  allStudents: EnrichedStudent[];
-  monthlyPaidMap: Map<string, number>;
-}) {
-  const [showGroupChart, setShowGroupChart] = useState(true);
-  const [activePieIndex, setActivePieIndex] = useState<number | null>(null);
-
-  const pieData = [
-    { name: 'دفع كامل', value: fullyPaid, fill: '#d4af37', fillLight: 'rgba(212,175,55,0.4)' },
-    { name: 'دفع جزئي', value: partialPaid, fill: '#f59e0b', fillLight: 'rgba(245,158,11,0.4)' },
-    { name: 'لم يدفع', value: unpaidCount, fill: '#ef4444', fillLight: 'rgba(239,68,68,0.4)' },
-    { name: 'معفى', value: exemptCount, fill: '#64748b', fillLight: 'rgba(100,116,139,0.4)' },
-  ].filter((d) => d.value > 0);
-
-  const barData = [
-    { name: 'المحصّل', amount: Math.round(totalCollected), fill: '#d4af37' },
-    { name: 'المتبقي', amount: Math.round(totalRemaining), fill: '#ef4444' },
-  ];
-
-  const groupMap = useMemo(() => {
-    const m = new Map<string, { collected: number; remaining: number; count: number }>();
-    for (const s of allStudents) {
-      const gName = s.group_name ?? 'بدون مجموعة';
-      const paid = monthlyPaidMap.get(s.id) ?? 0;
-      const fees = s.total_fees ?? 0;
-      const entry = m.get(gName) ?? { collected: 0, remaining: 0, count: 0 };
-      entry.collected += paid;
-      entry.remaining += Math.max(0, fees - paid);
-      entry.count += 1;
-      m.set(gName, entry);
-    }
-    return Array.from(m.entries())
-      .map(([name, v]) => ({ name, collected: Math.round(v.collected), remaining: Math.round(v.remaining), count: v.count }))
-      .sort((a, b) => b.collected - a.collected)
-      .slice(0, 8);
-  }, [allStudents, monthlyPaidMap]);
-
-  const totalStudents = fullyPaid + partialPaid + unpaidCount + exemptCount;
-  const collectionRate = totalCollected + totalRemaining > 0
-    ? Math.round((totalCollected / (totalCollected + totalRemaining)) * 100)
-    : 0;
-
-  if (pieData.length === 0) return null;
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, ease: 'easeOut' }}
-      className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4"
-    >
-      {/* Payment Status Donut with center label */}
-      <div className="glass-card rounded-2xl p-4 sm:p-5 relative overflow-hidden">
-        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#d4af37]/30 to-transparent" />
-        <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-[#d4af37] shadow-[0_0_8px_rgba(212,175,55,0.5)]" />
-          حالة المدفوعات
-        </h3>
-        <div className="flex items-center gap-4 flex-wrap">
-          <div className="relative w-[180px] h-[180px] flex-shrink-0" dir="ltr">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <defs>
-                  {pieData.map((d, i) => (
-                    <linearGradient key={i} id={`pieGrad_${i}`} x1="0" y1="0" x2="1" y2="1">
-                      <stop offset="0%" stopColor={d.fill} stopOpacity={1} />
-                      <stop offset="100%" stopColor={d.fill} stopOpacity={0.6} />
-                    </linearGradient>
-                  ))}
-                </defs>
-                <Pie
-                  data={pieData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={52}
-                  outerRadius={78}
-                  paddingAngle={3}
-                  dataKey="value"
-                  stroke="none"
-                  animationBegin={100}
-                  animationDuration={700}
-                  onMouseEnter={(_, i) => setActivePieIndex(i)}
-                  onMouseLeave={() => setActivePieIndex(null)}
-                >
-                  {pieData.map((entry, i) => (
-                    <Cell
-                      key={i}
-                      fill={`url(#pieGrad_${i})`}
-                      opacity={activePieIndex === null || activePieIndex === i ? 1 : 0.5}
-                      style={{ transition: 'opacity 0.2s ease' }}
-                    />
-                  ))}
-                </Pie>
-                <Tooltip
-                  contentStyle={CHART_TOOLTIP_STYLE}
-                  labelStyle={CHART_LABEL_STYLE}
-                  formatter={(v: number, _name: string, props: { payload?: { name?: string } }) => [`${v} طالب`, props?.payload?.name ?? '']}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-              <motion.span
-                key={activePieIndex}
-                initial={{ scale: 0.9, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                transition={{ duration: 0.2 }}
-                className="text-2xl font-black text-white"
-              >
-                {activePieIndex !== null ? pieData[activePieIndex]?.value : totalStudents}
-              </motion.span>
-              <span className="text-[10px] text-slate-400 font-medium mt-0.5">
-                {activePieIndex !== null ? pieData[activePieIndex]?.name : 'إجمالي الطلاب'}
-              </span>
-            </div>
-          </div>
-          <div className="flex-1 space-y-2.5 min-w-[140px]">
-            {pieData.map((d) => (
-              <div
-                key={d.name}
-                className="flex items-center justify-between gap-3 group cursor-default"
-                onMouseEnter={() => setActivePieIndex(pieData.indexOf(d))}
-                onMouseLeave={() => setActivePieIndex(null)}
-              >
-                <div className="flex items-center gap-2">
-                  <span className="w-3 h-3 rounded-md shadow-sm" style={{ background: d.fill, boxShadow: `0 0 6px ${d.fillLight}` }} />
-                  <span className="text-xs text-slate-200 font-medium group-hover:text-white transition">{d.name}</span>
-                </div>
-                <span className="text-xs font-bold text-white tabular-nums">{d.value}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Collections vs Remaining — gradient bars with rate badge */}
-      <div className="glass-card rounded-2xl p-4 sm:p-5 relative overflow-hidden">
-        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#d4af37]/30 to-transparent" />
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-bold text-white flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-[#d4af37] shadow-[0_0_8px_rgba(212,175,55,0.5)]" />
-            التحصيل والمتبقي
-          </h3>
-          <span className="px-2.5 py-1 rounded-lg bg-[#d4af37]/10 border border-[#d4af37]/20 text-[#d4af37] text-[11px] font-bold tabular-nums">
-            {collectionRate}%
-          </span>
-        </div>
-        <div className="w-full h-[180px]" dir="ltr">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={barData} margin={{ top: 10, right: 10, left: 0, bottom: 5 }}>
-              <defs>
-                <linearGradient id="barGold" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#e5c65a" stopOpacity={1} />
-                  <stop offset="100%" stopColor="#d4af37" stopOpacity={0.5} />
-                </linearGradient>
-                <linearGradient id="barRed" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#f87171" stopOpacity={1} />
-                  <stop offset="100%" stopColor="#ef4444" stopOpacity={0.5} />
-                </linearGradient>
-              </defs>
-              <XAxis dataKey="name" tick={ARABIC_TICK} axisLine={{ stroke: 'rgba(255,255,255,0.08)' }} tickLine={false} />
-              <YAxis tick={ARABIC_TICK_SM} axisLine={false} tickLine={false} width={50} />
-              <Tooltip
-                contentStyle={CHART_TOOLTIP_STYLE}
-                labelStyle={CHART_LABEL_STYLE}
-                formatter={(v: number) => [`${v.toLocaleString('ar-EG')} ج.م`, '']}
-                cursor={{ fill: 'rgba(212,175,55,0.05)' }}
-              />
-              <Bar dataKey="amount" radius={[8, 8, 0, 0]} maxBarSize={90} animationDuration={600}>
-                {barData.map((entry, i) => (
-                  <Cell key={i} fill={entry.name === 'المحصّل' ? 'url(#barGold)' : 'url(#barRed)'} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
-      {/* Group-wise Collections — dual gradient bars */}
-      {groupMap.length > 1 && showGroupChart && (
-        <div className="glass-card rounded-2xl p-4 sm:p-5 lg:col-span-2 relative overflow-hidden">
-          <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#d4af37]/30 to-transparent" />
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-bold text-white flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-[#d4af37] shadow-[0_0_8px_rgba(212,175,55,0.5)]" />
-              التحصيل حسب المجموعة
-            </h3>
-            <div className="flex items-center gap-3">
-              <span className="flex items-center gap-1.5 text-[10px] text-slate-400">
-                <span className="w-2.5 h-2.5 rounded-sm bg-[#d4af37]" /> محصّل
-              </span>
-              <span className="flex items-center gap-1.5 text-[10px] text-slate-400">
-                <span className="w-2.5 h-2.5 rounded-sm bg-red-500" /> متبقي
-              </span>
-              <button onClick={() => setShowGroupChart(false)} className="text-xs text-slate-400 hover:text-white transition ml-1">
-                إخفاء
-              </button>
-            </div>
-          </div>
-          <div className="w-full h-[220px]" dir="ltr">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={groupMap} layout="vertical" margin={{ top: 5, right: 15, left: 90, bottom: 5 }} barGap={2}>
-                <defs>
-                  <linearGradient id="grpCollected" x1="0" y1="0" x2="1" y2="0">
-                    <stop offset="0%" stopColor="#d4af37" stopOpacity={0.6} />
-                    <stop offset="100%" stopColor="#e5c65a" stopOpacity={1} />
-                  </linearGradient>
-                  <linearGradient id="grpRemaining" x1="0" y1="0" x2="1" y2="0">
-                    <stop offset="0%" stopColor="#ef4444" stopOpacity={0.6} />
-                    <stop offset="100%" stopColor="#f87171" stopOpacity={1} />
-                  </linearGradient>
-                </defs>
-                <XAxis type="number" tick={ARABIC_TICK_SM} axisLine={false} tickLine={false} />
-                <YAxis type="category" dataKey="name" tick={ARABIC_TICK_SM} axisLine={false} tickLine={false} width={90} />
-                <Tooltip
-                  contentStyle={CHART_TOOLTIP_STYLE}
-                  labelStyle={CHART_LABEL_STYLE}
-                  formatter={(v: number) => [`${v.toLocaleString('ar-EG')} ج.م`, '']}
-                  cursor={{ fill: 'rgba(212,175,55,0.04)' }}
-                />
-                <Bar dataKey="collected" name="محصّل" fill="url(#grpCollected)" radius={[0, 6, 6, 0]} maxBarSize={24} animationDuration={600} />
-                <Bar dataKey="remaining" name="متبقي" fill="url(#grpRemaining)" radius={[0, 6, 6, 0]} maxBarSize={24} animationDuration={600} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      )}
-    </motion.div>
   );
 }

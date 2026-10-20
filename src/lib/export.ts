@@ -31,26 +31,20 @@ export function printDocument(title: string, bodyHTML: string): void {
   const win = window.open('', '_blank', 'width=900,height=700');
   if (!win) return;
   win.document.write(`<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><title>${title}</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
   <style>
-    * { font-family: 'Cairo', 'Tajawal', 'Segoe UI', Tahoma, Arial, sans-serif; box-sizing: border-box; margin: 0; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    @page { size: A4; margin: 12mm 10mm 16mm 10mm; }
-    body { padding: 20px; color: #0F172A; background: #fff; font-size: 13px; line-height: 1.5; }
-    h1 { font-size: 20px; text-align: center; margin-bottom: 4px; color: #0F172A; font-weight: 800; }
-    .subtitle { text-align: center; font-size: 13px; color: #64748B; margin-bottom: 20px; }
-    table { width: 100%; border-collapse: collapse; margin-top: 12px; table-layout: fixed; }
-    thead { display: table-header-group; }
-    th, td { border: 1px solid #E2E8F0; padding: 8px 10px; text-align: right; font-size: 12px; }
-    th { background: #F8FAFC; font-weight: 700; color: #0F172A; border-bottom: 2px solid #D4AF37; }
-    tbody tr { page-break-inside: avoid; break-inside: avoid; }
-    tbody tr:nth-child(even) { background: #F8FAFC; }
-    .badge-paid { color: #15803D; font-weight: 700; }
-    .badge-due { color: #B91C1C; font-weight: 700; }
-    .footer { margin-top: 24px; text-align: center; font-size: 11px; color: #94A3B8; border-top: 1px solid #E2E8F0; padding-top: 8px; }
+    * { font-family: 'Segoe UI', Tahoma, Arial, sans-serif; box-sizing: border-box; }
+    body { padding: 24px; color: #1a1a1a; }
+    h1 { font-size: 20px; text-align: center; margin-bottom: 4px; }
+    .subtitle { text-align: center; font-size: 13px; color: #666; margin-bottom: 20px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+    th, td { border: 1px solid #ccc; padding: 8px 10px; text-align: right; font-size: 13px; }
+    th { background: #f0f4f0; font-weight: 700; }
+    tr:nth-child(even) { background: #fafafa; }
+    .badge-paid { color: #16a34a; font-weight: 700; }
+    .badge-due { color: #dc2626; font-weight: 700; }
+    .footer { margin-top: 24px; text-align: center; font-size: 11px; color: #999; }
     .blank-cell { height: 32px; }
-    @media print { body { padding: 0; } .no-print { display: none; } }
+    @media print { body { padding: 12px; } .no-print { display: none; } }
   </style></head><body>${bodyHTML}
   <div class="footer">منصة الخالد التعليمية — ${new Date().toLocaleDateString('ar-EG')}</div>
   <script>window.onload = function() { window.print(); }</script>

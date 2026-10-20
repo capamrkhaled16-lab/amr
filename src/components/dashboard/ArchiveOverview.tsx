@@ -1,6 +1,41 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Archive, Lock, Clock as Unlock, TriangleAlert as AlertTriangle, CircleCheck as CheckCircle2, Clock, CalendarDays, Users, Wallet, ChartBar as BarChart3, FileText, ChevronDown, RefreshCw, Inbox, Search, Plus, Zap, TrendingUp, Undo2, Mic, Heart, BookOpen, GraduationCap, Phone, MessageCircle, Link2, CreditCard as Edit2, Check, Trash as Trash2, X, Send, Bell, Printer, Award, CalendarRange } from 'lucide-react';
+import {
+  Archive,
+  Lock,
+  Unlock,
+  AlertTriangle,
+  CheckCircle2,
+  Clock,
+  CalendarDays,
+  Users,
+  Wallet,
+  BarChart3,
+  FileText,
+  ChevronDown,
+  RefreshCw,
+  Inbox,
+  Search,
+  Plus,
+  Zap,
+  TrendingUp,
+  Undo2,
+  Mic,
+  Heart,
+  BookOpen,
+  GraduationCap,
+  Phone,
+  MessageCircle,
+  Link2,
+  Edit2,
+  Check,
+  Trash2,
+  X,
+  Send,
+  Printer,
+  Award,
+  CalendarRange,
+} from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { useSettings } from '@/context/SettingsContext';
@@ -11,7 +46,7 @@ import { formatCurrency, formatArabicDate, normalizePhoneForWhatsApp, openWhatsA
 import { printDocument } from '@/lib/export';
 import { PDFButton } from '@/components/ui/PDFButton';
 import { exportStudentListPDF, exportMonthlyPaymentSummaryPDF, exportPaidStudentsPDF, exportUnpaidStudentsPDF } from '@/lib/pdfExport';
-import { triggerAutoArchive, createHistoricalPayment, fetchArchiveRuns, rollbackArchive, preArchiveValidation, resolvePaymentStatusFromDB, deleteStudent, type PreArchiveIssue } from '@/lib/data';
+import { triggerAutoArchive, createHistoricalPayment, fetchArchiveRuns, rollbackArchive, preArchiveValidation, resolvePaymentStatusFromDB, type PreArchiveIssue } from '@/lib/data';
 import SmartGradeCompletion from '@/components/dashboard/SmartGradeCompletion';
 import DailyCollectionsWidget from '@/components/dashboard/DailyCollectionsWidget';
 import AccountingCheckpoint from '@/components/dashboard/AccountingCheckpoint';
@@ -43,10 +78,10 @@ type ArchiveCacheData = {
   runs: ArchiveRun[];
   carried: CarriedOverBalance[];
   exams: ArchivedExam[];
-  studentMap: Map<string, { name: string; phone: string | null; parent_phone: string | null; parent_token: string | null; is_deleted: boolean }>;
+  studentMap: Map<string, { name: string; phone: string | null; parent_phone: string | null; parent_token: string | null }>;
 };
 
-const ARCHIVE_CACHE_VERSION = 'v4';
+const ARCHIVE_CACHE_VERSION = 'v3';
 
 type ArchivedStudent = {
   id: string;
@@ -58,7 +93,6 @@ type ArchivedStudent = {
   paid_fees?: number | null;
   is_exempt?: boolean | null;
   parent_token?: string | null;
-  is_deleted?: boolean | null;
 };
 
 type ArchivedPayment = {
@@ -163,7 +197,7 @@ function buildParentPortalLink(s: ArchivedStudent, row: ArchiveRow, paidTotal?: 
   if (!phone) return '';
   const monthLabel = formatMonthLabel(row.archive_month);
   const baseUrl = window.location.origin;
-  const portalLink = s.parent_token ? `${baseUrl}/parent-portal?token=${encodeURIComponent(s.parent_token)}&month=${row.archive_month}` : '';
+  const portalLink = s.parent_token ? `${baseUrl}/parent-portal?token=${s.parent_token}&month=${row.archive_month}` : '';
   const totalFees = s.total_fees ?? 0;
   const hasBalance = !s.is_exempt && remaining != null && remaining > 0;
   const reminderLine = hasBalance
@@ -283,15 +317,13 @@ export default function ArchiveOverview({
   const archivesReqIdRef = useRef(0);
   const [archiveRuns, setArchiveRuns] = useState<ArchiveRun[]>([]);
   const [carriedBalances, setCarriedBalances] = useState<CarriedOverBalance[]>([]);
-  const [liveStudentMap, setLiveStudentMap] = useState<Map<string, { name: string; phone: string | null; parent_phone: string | null; parent_token: string | null; is_deleted: boolean }>>(new Map());
+  const [liveStudentMap, setLiveStudentMap] = useState<Map<string, { name: string; phone: string | null; parent_phone: string | null; parent_token: string | null }>>(new Map());
   const [loading, setLoading] = useState(true);
   const ARCHIVE_CACHE_KEY = `archive_overview_full_${ARCHIVE_CACHE_VERSION}`;
   const ARCHIVE_CACHE_TTL = 120_000;
 
   useEffect(() => {
-    // Do NOT invalidate cache on mount — this destroys the SWR cache that
-    // loadArchives relies on for instant display. loadArchives already
-    // validates freshness via isCacheFresh().
+    invalidateByPrefix('archive_overview_full_');
   }, []);
 
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -320,7 +352,6 @@ export default function ArchiveOverview({
 
   const [historicalOpen, setHistoricalOpen] = useState(false);
   const [paymentFilter, setPaymentFilter] = useState<'all' | 'paid' | 'unpaid'>('all');
-  const [archiveTrashTarget, setArchiveTrashTarget] = useState<ArchivedStudent | null>(null);
   const [detailStudent, setDetailStudent] = useState<{ student: ArchivedStudent; row: ArchiveRow } | null>(null);
   const [gradeLedgerRowId, setGradeLedgerRowId] = useState<string | null>(null);
   const [editingExamId, setEditingExamId] = useState<string | null>(null);
@@ -395,8 +426,6 @@ export default function ArchiveOverview({
   const [archiveEditSaving, setArchiveEditSaving] = useState(false);
   const [honorBoardOpen, setHonorBoardOpen] = useState(false);
   const [historicalSubmitting, setHistoricalSubmitting] = useState(false);
-  const [reminderTarget, setReminderTarget] = useState<{ student: ArchivedStudent; monthLabel: string; remaining: number } | null>(null);
-  const [reminderMessage, setReminderMessage] = useState('');
   const whatsappSentRef = useRef<Set<string>>(new Set());
 
   function startArchiveEdit(student: ArchivedStudent, row: ArchiveRow) {
@@ -631,7 +660,7 @@ export default function ArchiveOverview({
         supabase.from('archive_runs').select('*').order('archive_month', { ascending: false }).limit(10),
         supabase.from('carried_over_balances').select('*').order('created_at', { ascending: false }).limit(50),
         supabase.from('center_exams').select('id, title, max_score, pass_score, category, group_id'),
-        supabase.from('students').select('id, name, phone, parent_phone, parent_token, is_deleted'),
+        supabase.from('students').select('id, name, phone, parent_phone, parent_token'),
       ]);
       if (reqId !== archivesReqIdRef.current) return;
       if (archRes.data) {
@@ -646,18 +675,18 @@ export default function ArchiveOverview({
       if (carriedRes.data) setCarriedBalances(carriedRes.data as CarriedOverBalance[]);
       if (examsRes.data) setLiveExams(examsRes.data as ArchivedExam[]);
       if (studentsRes.data) {
-        const map = new Map<string, { name: string; phone: string | null; parent_phone: string | null; parent_token: string | null; is_deleted: boolean }>();
-        for (const s of studentsRes.data as { id: string; name: string; phone: string | null; parent_phone: string | null; parent_token: string | null; is_deleted: boolean }[]) {
-          map.set(s.id, { name: s.name, phone: s.phone, parent_phone: s.parent_phone, parent_token: s.parent_token, is_deleted: s.is_deleted ?? false });
+        const map = new Map<string, { name: string; phone: string | null; parent_phone: string | null; parent_token: string | null }>();
+        for (const s of studentsRes.data as { id: string; name: string; phone: string | null; parent_phone: string | null; parent_token: string | null }[]) {
+          map.set(s.id, { name: s.name, phone: s.phone, parent_phone: s.parent_phone, parent_token: s.parent_token });
         }
         setLiveStudentMap(map);
       }
       // Persist to cache — only if we got real data back
       if (archRes.data && archRes.data.length > 0) {
-        const studentMap = new Map<string, { name: string; phone: string | null; parent_phone: string | null; parent_token: string | null; is_deleted: boolean }>();
+        const studentMap = new Map<string, { name: string; phone: string | null; parent_phone: string | null; parent_token: string | null }>();
         if (studentsRes.data) {
-          for (const s of studentsRes.data as { id: string; name: string; phone: string | null; parent_phone: string | null; parent_token: string | null; is_deleted: boolean }[]) {
-            studentMap.set(s.id, { name: s.name, phone: s.phone, parent_phone: s.parent_phone, parent_token: s.parent_token, is_deleted: s.is_deleted ?? false });
+          for (const s of studentsRes.data as { id: string; name: string; phone: string | null; parent_phone: string | null; parent_token: string | null }[]) {
+            studentMap.set(s.id, { name: s.name, phone: s.phone, parent_phone: s.parent_phone, parent_token: s.parent_token });
           }
         }
         const archivesForCache = (archRes.data as ArchiveRow[]).map((r) => ({
@@ -721,7 +750,7 @@ export default function ArchiveOverview({
         const filtered = selectedGroup ? allStudents.filter((s) => s.group_id === selectedGroup.id) : allStudents;
         const freshStudents = studentListModal.kind === 'paid'
           ? filtered.filter((s) => isStudentPaid(freshRow, s))
-          : filtered.filter((s) => !s.is_deleted && !isStudentPaid(freshRow, s) && !s.is_exempt && (s.total_fees ?? 0) > 0);
+          : filtered.filter((s) => !isStudentPaid(freshRow, s) && !s.is_exempt && (s.total_fees ?? 0) > 0);
         setStudentListModal({ ...studentListModal, row: freshRow, students: freshStudents });
       }
     }
@@ -1290,14 +1319,13 @@ export default function ArchiveOverview({
     if (!row.archive_data?.students || !Array.isArray(row.archive_data.students)) return [];
     return (row.archive_data.students as ArchivedStudent[]).filter((s) => s && s.id).map((s) => {
       const live = liveStudentMap.get(s.id);
-      if (!live) return { ...s, is_deleted: s.is_deleted ?? false };
+      if (!live) return s;
       return {
         ...s,
         name: live.name || s.name,
         phone: live.phone ?? s.phone,
         parent_phone: live.parent_phone ?? s.parent_phone,
         parent_token: live.parent_token ?? s.parent_token,
-        is_deleted: live.is_deleted,
       };
     });
   }
@@ -1651,7 +1679,7 @@ export default function ArchiveOverview({
             const paymentFilteredStudents = paymentFilter === 'paid'
               ? filteredStudents.filter((s) => isStudentPaid(row, s))
               : paymentFilter === 'unpaid'
-              ? filteredStudents.filter((s) => !s.is_deleted && !isStudentPaid(row, s) && !s.is_exempt && (s.total_fees ?? 0) > 0)
+              ? filteredStudents.filter((s) => !isStudentPaid(row, s) && !s.is_exempt && (s.total_fees ?? 0) > 0)
               : filteredStudents;
             const searchedStudents = searchQuery
               ? paymentFilteredStudents.filter((s) => s.name.toLowerCase().includes(searchQuery))
@@ -1746,7 +1774,7 @@ export default function ArchiveOverview({
                         {/* Paid / Unpaid smart counters & filters */}
                         {isMaster && archivedStudents.length > 0 && (() => {
                           const paidStudents = filteredStudents.filter((s) => isStudentPaid(row, s));
-                          const unpaidStudents = filteredStudents.filter((s) => !s.is_deleted && !isStudentPaid(row, s) && !s.is_exempt && (s.total_fees ?? 0) > 0);
+                          const unpaidStudents = filteredStudents.filter((s) => !isStudentPaid(row, s) && !s.is_exempt && (s.total_fees ?? 0) > 0);
                           return (
                             <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
                               <button
@@ -3365,39 +3393,6 @@ export default function ArchiveOverview({
                                     <Edit2 size={12} /> تعديل
                                   </button>
                                 )}
-                                {isMaster && !s.is_deleted && (
-                                  <button
-                                    onClick={() => setArchiveTrashTarget(s)}
-                                    className="inline-flex items-center gap-1 text-[11px] font-bold text-red-400 hover:text-red-300 bg-red-500/10 hover:bg-red-500/20 px-2.5 py-1 rounded-lg transition"
-                                    title="حذف الطالب (نقل للسلة)"
-                                  >
-                                    <Trash2 size={12} /> حذف
-                                  </button>
-                                )}
-                                {!isPaid && !s.is_deleted && (s.phone || s.parent_phone) && (() => {
-                                  const phone = normalizePhoneForWhatsApp(s.parent_phone ?? s.phone ?? '');
-                                  if (!phone) return null;
-                                  return (
-                                    <button
-                                      onClick={() => {
-                                        if (reminderTarget?.student.id === s.id) return;
-                                        const monthLabel = formatMonthLabel(studentListModal.row.archive_month);
-                                        const msg =
-                                          `السلام عليكم ورحمة الله وبركاته 🌷\n\n` +
-                                          `ولي أمر الطالب/ة ${s.name} المحترم،\n\n` +
-                                          `نذكّركم بكل احترام بأن مصروف شهر ${monthLabel} لم يتم تسجيل سداده حتى الآن.\n\n` +
-                                          `نرجو من حضرتكم التكرم بمراجعة المبلغ المستحق وتسويته في الوقت المناسب، ولو تم السداد بالفعل نرجو تجاهل الرسالة، مع خالص الشكر والتقدير لتعاونكم.\n\n` +
-                                          `مع تحيات\n` +
-                                          `تيم مستر عمرو خالد – مدرس العلوم`;
-                                        setReminderTarget({ student: s, monthLabel, remaining });
-                                        setReminderMessage(msg);
-                                      }}
-                                      className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-400 hover:text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 px-2.5 py-1 rounded-lg transition"
-                                    >
-                                      <Bell size={12} /> تذكير بالشهر
-                                    </button>
-                                  );
-                                })()}
                               </div>
                             </td>
                           </tr>
@@ -3411,34 +3406,6 @@ export default function ArchiveOverview({
           );
         })()}
       </Modal>
-
-      {/* Soft-delete confirmation for archived student list */}
-      <ConfirmDialog
-        open={!!archiveTrashTarget}
-        onClose={() => setArchiveTrashTarget(null)}
-        onConfirm={async () => {
-          if (!archiveTrashTarget) return;
-          const actorName = isMaster ? 'المدرس' : (assistant?.display_name || assistant?.username || 'مساعد');
-          try {
-            await deleteStudent(archiveTrashTarget.id, actorName, isMaster ? 'master' : 'assistant');
-            showToast(`تم نقل الطالب «${archiveTrashTarget.name}» إلى سلة المحذوفات`, 'success');
-            setArchiveTrashTarget(null);
-            invalidateByPrefix('archives_');
-            if (studentListModal) {
-              setStudentListModal({
-                ...studentListModal,
-                students: studentListModal.students.filter((st) => st.id !== archiveTrashTarget.id),
-              });
-            }
-            void loadArchives();
-          } catch {
-            showToast('تعذّر حذف الطالب', 'error');
-          }
-        }}
-        title="🗑️ حذف الطالب (نقل للسلة)"
-        subtext={`هل أنت متأكد من حذف الطالب «${archiveTrashTarget?.name ?? ''}»؟ سيتم نقله إلى سلة المحذوفات واستبعاده من الإحصائيات مع الاحتفاظ بجميع سجلاته (مدفوعات، حضور، درجات). يمكن استعادته لاحقاً.`}
-        confirmLabel="نقل للسلة"
-      />
 
       {/* Archive Payment Edit Modal — direct payment editing */}
       <Modal
@@ -3689,61 +3656,6 @@ export default function ArchiveOverview({
                   );
                 })}
               </div>
-            </div>
-          );
-        })()}
-      </Modal>
-
-      {/* Monthly Reminder Confirmation Dialog */}
-      <Modal
-        open={!!reminderTarget}
-        onClose={() => { setReminderTarget(null); setReminderMessage(''); }}
-        title="تأكيد إرسال تذكير بالشهر"
-        size="md"
-      >
-        {reminderTarget && (() => {
-          const phone = normalizePhoneForWhatsApp(reminderTarget.student.parent_phone ?? reminderTarget.student.phone ?? '');
-          const displayPhone = reminderTarget.student.parent_phone ?? reminderTarget.student.phone ?? '';
-          return (
-            <div className="space-y-4">
-              <div className="glass-light rounded-xl p-3 space-y-1.5 text-xs">
-                <div className="flex justify-between"><span className="text-slate-400">الطالب:</span><span className="font-bold text-white">{reminderTarget.student.name}</span></div>
-                <div className="flex justify-between"><span className="text-slate-400">الشهر المتأخر:</span><span className="font-bold text-amber-400">{reminderTarget.monthLabel}</span></div>
-                <div className="flex justify-between"><span className="text-slate-400">المتبقي:</span><span className="font-bold text-amber-400">{formatCurrency(reminderTarget.remaining)} ج.م</span></div>
-                <div className="flex justify-between"><span className="text-slate-400">رقم ولي الأمر:</span><span className="font-bold text-white" dir="ltr">{displayPhone || 'غير متوفر'}</span></div>
-              </div>
-              {!phone ? (
-                <div className="glass-light rounded-xl p-4 text-center border border-red-500/20">
-                  <p className="text-sm text-red-400">لا يوجد رقم هاتف صالح لولي الأمر. لا يمكن إرسال التذكير.</p>
-                </div>
-              ) : (
-                <>
-                  <div>
-                    <label className="block text-xs text-slate-400 mb-1.5">الرسالة (قابلة للتعديل):</label>
-                    <textarea
-                      value={reminderMessage}
-                      onChange={(e) => setReminderMessage(e.target.value)}
-                      rows={9}
-                      className="w-full glass-light rounded-xl p-3 text-sm text-white border border-white/10 focus:border-emerald-500/50 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition resize-none leading-relaxed"
-                    />
-                  </div>
-                  <div className="flex gap-3 justify-end">
-                    <Button variant="secondary" onClick={() => { setReminderTarget(null); setReminderMessage(''); }}>
-                      إلغاء
-                    </Button>
-                    <Button
-                      onClick={() => {
-                        const url = `https://wa.me/${phone}?text=${encodeURIComponent(reminderMessage)}`;
-                        openWhatsAppURL(url, showToast);
-                        setReminderTarget(null);
-                        setReminderMessage('');
-                      }}
-                    >
-                      <Send size={14} /> تأكيد وإرسال واتساب
-                    </Button>
-                  </div>
-                </>
-              )}
             </div>
           );
         })()}

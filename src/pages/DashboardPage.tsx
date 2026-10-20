@@ -59,7 +59,6 @@ import type { AcademicStage, GradeLevel, Group, Student, Payment } from '@/lib/t
 import { usePersistedState, getPersistedId, setPersistedId } from '@/hooks/usePersistedState';
 import { useMissingDataDetector } from '@/hooks/useMissingDataDetector';
 import { NOTIFICATION_NAVIGATE_EVENT, type NotificationActionTarget } from '@/context/NotificationContext';
-import { eventBus } from '@/lib/eventBus';
 
 type EnrichedStudent = Student & { group_name?: string; grade_name?: string; stage_name?: string };
 import Navbar from '@/components/ui/Navbar';
@@ -458,26 +457,6 @@ export default function DashboardPage() {
       if (groupDebounced) clearTimeout(groupDebounced);
       supabase.removeChannel(channel);
     };
-  }, []);
-
-  // On reconnect (offline → online), the OfflineBanner emits cache:invalidated.
-  // Refresh KPIs in the background — never reload the page or log the user out.
-  useEffect(() => {
-    let fired = false;
-    const off = eventBus.on('cache:invalidated', () => {
-      if (fired) return;
-      fired = true;
-      // Debounce: let network stabilize before refetching
-      setTimeout(() => {
-        loadKPIsRef.current();
-        if (selectedGroupRef.current) {
-          loadStudentsRef.current();
-          loadGroupStatsRef.current();
-        }
-        fired = false;
-      }, 800);
-    });
-    return off;
   }, []);
 
   useEffect(() => {

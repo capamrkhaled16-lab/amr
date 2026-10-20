@@ -59,7 +59,7 @@ export default function ParentLinksModule({ groupId }: ParentLinksModuleProps) {
 
   function getPortalLink(student: Student): string {
     const baseUrl = window.location.origin;
-    return `${baseUrl}/parent-portal?token=${encodeURIComponent(student.parent_token)}`;
+    return `${baseUrl}/parent-portal?token=${student.parent_token}`;
   }
 
   async function copyLink(student: Student) {
@@ -81,9 +81,9 @@ export default function ParentLinksModule({ groupId }: ParentLinksModuleProps) {
   }
 
   async function sendWhatsApp(student: Student) {
-    const phone = student.parent_phone;
+    const phone = student.parent_phone ?? student.phone;
     if (!phone) {
-      alert('لا يوجد رقم ولي الأمر لهذا الطالب');
+      alert('لا يوجد رقم هاتف لهذا الطالب');
       return;
     }
     const cleanPhone = normalizePhoneForWhatsApp(phone);
@@ -112,13 +112,7 @@ export default function ParentLinksModule({ groupId }: ParentLinksModuleProps) {
       `✨ مع دائم التوفيق والتميز 🌟`;
 
     const text = encodeURIComponent(message);
-    const confirmed = window.confirm(`سيتم فتح واتساب لولي أمر ${student.name} وإرسال رابط البوابة لشهر ${monthLabel}. هل تريد المتابعة؟`);
-    if (!confirmed) return;
-
-    const result = openWhatsAppURL(`https://wa.me/${cleanPhone}?text=${text}`);
-    if (!result.opened) {
-      alert('تعذر فتح واتساب تلقائياً. تم نسخ الرسالة إن أمكن، ويمكنك لصقها يدوياً.');
-    }
+    openWhatsAppURL(`https://wa.me/${cleanPhone}?text=${text}`);
   }
 
   const notifGroups = useMemo(() => {

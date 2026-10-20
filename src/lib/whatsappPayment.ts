@@ -51,11 +51,11 @@ export async function resolvePaymentSnapshot(
 
   const { data: subData } = await supabase
     .from('monthly_subscriptions')
-    .select('amount_due, is_exempt')
+    .select('amount_due')
     .eq('student_id', studentId)
     .eq('month_key', monthKey)
     .maybeSingle();
-  const sub = subData as { amount_due: number; is_exempt: boolean | null } | null;
+  const sub = subData as { amount_due: number } | null;
 
   let totalFees = sub?.amount_due ?? s.total_fees ?? 0;
 
@@ -89,7 +89,7 @@ export async function resolvePaymentSnapshot(
     return matches ? sum + Number(p.amount ?? 0) : sum;
   }, 0);
 
-  const isExempt = sub?.is_exempt ?? s.is_exempt ?? false;
+  const isExempt = s.is_exempt ?? false;
   const remaining = isExempt ? 0 : Math.max(0, totalFees - totalPaid);
 
   const safePaymentAmount = typeof thisPaymentAmount === 'number' && isFinite(thisPaymentAmount) ? thisPaymentAmount : 0;
@@ -156,13 +156,12 @@ export function buildPaymentWhatsAppMessage(snapshot: PaymentSnapshot, platformN
 
 export function buildUnpaidReminderMessage(snapshot: PaymentSnapshot): string {
   const monthLabel = getMonthLabel(snapshot.monthKey);
-  const paidLabel = snapshot.totalPaid > 0 ? formatCurrency(snapshot.totalPaid) : '0';
   return (
     `🌷 السلام عليكم ورحمة الله وبركاته\n` +
     `ولي الأمر الكريم،\n` +
     `نود تذكيركم بالمصروفات الشهرية الخاصة بالطالب/ة ${snapshot.studentName} عن شهر ${monthLabel}.\n` +
     `💰 إجمالي المصروفات: ${formatCurrency(snapshot.totalFees)} ج.م\n` +
-    `🟩 المدفوع: ${paidLabel} ج.م\n` +
+    `🟩 المدفوع: 0 ج.م\n` +
     `🤍 شكرًا لثقتكم ودعمكم الدائم، وإذن الله دائمًا نشوف أولادنا في أعلى المراتب.`
   );
 }

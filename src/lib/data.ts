@@ -166,10 +166,6 @@ export async function transferStudent(
   });
   if (fromGroupId) invalidateCache(`students_${fromGroupId}`);
   invalidateCache(`students_${newGroupId}`);
-  invalidateByPrefix('all_students');
-  invalidateByPrefix('kpi_');
-  emitStudentsChanged(fromGroupId ?? undefined);
-  emitStudentsChanged(newGroupId);
 }
 
 // Fetch groups for transfer — bypasses SWR cache to always show current state
@@ -537,40 +533,6 @@ export async function deleteStudent(
   actorRole: 'master' | 'assistant' = 'master'
 ): Promise<void> {
   await setStudentStatus(id, 'deleted', actorName, actorRole);
-  invalidateByPrefix('all_students');
-  invalidateByPrefix('kpi_');
-}
-
-export async function restoreStudent(
-  id: string,
-  actorName: string = 'المدرس',
-  actorRole: 'master' | 'assistant' = 'master'
-): Promise<void> {
-  const { data: student } = await supabase
-    .from('students')
-    .select('name, group_id')
-    .eq('id', id)
-    .maybeSingle();
-  await supabase.from('students').update({ status: 'active', is_deleted: false }).eq('id', id);
-  const groupId = (student as { group_id?: string } | null)?.group_id;
-  if (groupId) invalidateCache(`students_${groupId}`);
-  invalidateByPrefix('all_students');
-  invalidateByPrefix('kpi_');
-  if (student) {
-    await createAuditLog(actorName, actorRole, 'student_restore', id, null, `استعادة طالب: ${(student as { name?: string }).name ?? ''}`);
-  }
-}
-
-export async function fetchTrashedStudents(groupId?: string): Promise<Student[]> {
-  let query = supabase
-    .from('students')
-    .select('id, name, phone, parent_phone, group_id, status, total_fees, paid_fees, is_exempt, discount_mode, discount_amount, discount_percent, fee_mode, pro_rata_sessions, join_month_key, enrollment_date, created_at')
-    .eq('status', 'deleted')
-    .order('name');
-  if (groupId) query = query.eq('group_id', groupId);
-  const { data, error } = await query;
-  if (error) throw new Error(error.message);
-  return data ?? [];
 }
 
 export async function hardDeleteStudent(
@@ -1232,74 +1194,15 @@ export async function deleteCertificate(id: string): Promise<void> {
   if (error) throw new Error(error.message);
 }
 
-function sanitizeToken(raw: string): string {
-  return raw
-    .replace(/[\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF\u00A0]/g, '')
-    .trim();
-}
-
 export async function fetchStudentByParentToken(
   token: string
 ): Promise<Student | null> {
-  const normalizedToken = sanitizeToken(token);
-  if (!normalizedToken) return null;
-
-  const { data, error } = await supabase
+  const { data } = await supabase
     .from('students')
     .select('*')
-    .eq('parent_token', normalizedToken)
-    .eq('is_deleted', false)
+    .eq('parent_token', token)
     .maybeSingle();
-
-  if (error) {
-    if (error.code === '22P02' || /invalid input syntax/i.test(error.message)) {
-      throw new Error('الرابط غير صالح. تأكد من نسخ الرابط كاملاً كما تم إرساله أو تواصل مع المعلم.');
-    }
-    throw new Error('تعذر الاتصال ببيانات الطالب. تحقق من الاتصال ثم حاول مرة أخرى.');
-  }
-  return data as Student | null;
-}
-
-export async function fetchStudentById(
-  id: string
-): Promise<Student | null> {
-  const normalizedId = sanitizeToken(id);
-  if (!normalizedId) return null;
-
-  const { data, error } = await supabase
-    .from('students')
-    .select('*')
-    .eq('id', normalizedId)
-    .eq('is_deleted', false)
-    .maybeSingle();
-
-  if (error) {
-    if (error.code === '22P02' || /invalid input syntax/i.test(error.message)) {
-      throw new Error('الرابط غير صالح. تأكد من نسخ الرابط كاملاً كما تم إرساله أو تواصل مع المعلم.');
-    }
-    throw new Error('تعذر الاتصال ببيانات الطالب. تحقق من الاتصال ثم حاول مرة أخرى.');
-  }
-  return data as Student | null;
-}
-
-export async function fetchStudentByParentPhone(
-  phone: string
-): Promise<Student | null> {
-  const normalizedPhone = phone.trim();
-  if (!normalizedPhone) return null;
-
-  const { data, error } = await supabase
-    .from('students')
-    .select('*')
-    .eq('parent_phone', normalizedPhone)
-    .eq('is_deleted', false)
-    .limit(1)
-    .maybeSingle();
-
-  if (error) {
-    throw new Error('تعذر الاتصال ببيانات الطالب. تحقق من الاتصال ثم حاول مرة أخرى.');
-  }
-  return data as Student | null;
+  return data;
 }
 
 export async function fetchOnlineGradesByStudent(
@@ -2082,7 +1985,6 @@ export async function upsertSessionAttendance(
 
   guard.complete(true);
   if (error) throw new Error(error.message);
-  invalidateByPrefix('attendance_');
   emitAttendanceChanged(groupId, studentId);
 }
 
@@ -2809,7 +2711,6 @@ export async function deleteHomeworkStatus(
     .eq('student_id', studentId);
   if (error) throw new Error(error.message);
   invalidateCache(`hw_status_${homeworkId}`);
-  invalidateByPrefix('hw_');
   emitHomeworkChanged(undefined, studentId);
 }
 
@@ -2882,7 +2783,6 @@ export async function upsertBehaviorEval(
 export async function deleteBehaviorEval(evalId: string): Promise<void> {
   const { error } = await supabase.from('behavior_eval').delete().eq('id', evalId);
   if (error) throw new Error(error.message);
-  invalidateByPrefix('behavior_');
   emitBehaviorChanged(undefined);
 }
 

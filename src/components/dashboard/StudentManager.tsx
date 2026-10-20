@@ -2,12 +2,12 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import Modal from '@/components/ui/Modal';
 import Button from '@/components/ui/Button';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
-import { Plus, Pencil, Trash2, Phone, UserCircle, MessageCircle, AlertTriangle, CheckCircle2, Percent, Clock, UserMinus, UserX, ArrowRightLeft, Sparkles, CalendarCheck, CalendarClock, RotateCcw, Wallet, CalendarRange, Eye, Search, X, Send, CheckSquare, Square, FileText, RotateCcw as RestoreIcon } from 'lucide-react';
+import { Plus, Pencil, Trash2, Phone, UserCircle, MessageCircle, AlertTriangle, CheckCircle2, Percent, Clock, UserMinus, UserX, ArrowRightLeft, Sparkles, CalendarCheck, CalendarClock, RotateCcw, Wallet, CalendarRange, Eye, Search, X, Send, CheckSquare, Square, FileText } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { PDFButton } from '@/components/ui/PDFButton';
 import { exportStudentListPDF } from '@/lib/pdfExport';
 import type { Student, Gender, Group, MonthlySubscription } from '@/lib/types';
-import { createStudent, updateStudent, hardDeleteStudent, deleteStudent, restoreStudent, fetchTrashedStudents, setStudentStatus, checkDuplicateStudentName, fetchGradeLevelBaseSubscription, fetchGroups, fetchGroupsForTransfer, transferStudent, fetchGroupMonthlyPaidMap, upsertStudentMonthlyOverride, fetchStudentMonthlySubscriptions, getMonthKey, getMonthLabel, backfillAttendanceForNewStudent } from '@/lib/data';
+import { createStudent, updateStudent, hardDeleteStudent, setStudentStatus, checkDuplicateStudentName, fetchGradeLevelBaseSubscription, fetchGroups, fetchGroupsForTransfer, transferStudent, fetchGroupMonthlyPaidMap, upsertStudentMonthlyOverride, fetchStudentMonthlySubscriptions, getMonthKey, getMonthLabel, backfillAttendanceForNewStudent } from '@/lib/data';
 import { useToast } from '@/components/ui/Toast';
 import { useAuth } from '@/context/AuthContext';
 import { useMonth } from '@/context/MonthContext';
@@ -39,10 +39,6 @@ export default function StudentManager({
   const [addOpen, setAddOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Student | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Student | null>(null);
-  const [trashOpen, setTrashOpen] = useState(false);
-  const [trashedStudents, setTrashedStudents] = useState<Student[]>([]);
-  const [trashLoading, setTrashLoading] = useState(false);
-  const [permanentDeleteTarget, setPermanentDeleteTarget] = useState<Student | null>(null);
   const [leftTarget, setLeftTarget] = useState<Student | null>(null);
   const [transferTarget, setTransferTarget] = useState<Student | null>(null);
   const [transferGroups, setTransferGroups] = useState<Group[]>([]);
@@ -63,7 +59,6 @@ export default function StudentManager({
   const { monthKey } = useMonth();
   const [overrideSaving, setOverrideSaving] = useState(false);
   const [nameError, setNameError] = useState('');
-  const [adding, setAdding] = useState(false);
   const [baseFee, setBaseFee] = useState(0);
   const [isHalfMonth, setIsHalfMonth] = useState(false);
   const [isCustomFee, setIsCustomFee] = useState(false);
@@ -189,46 +184,41 @@ export default function StudentManager({
 
   async function handleAdd() {
     if (!form.name.trim()) return;
-    if (adding) return;
     const dup = await checkDuplicateStudentName(form.name.trim(), groupId);
     if (dup) { setNameError('هذا الاسم مسجل بالفعل في هذه المجموعة والمرحلة. برجاء اختيار اسم آخر.'); return; }
     setNameError('');
-    setAdding(true);
     const joinDateStr = joinDate || new Date().toISOString().slice(0, 10);
     const enrollTimestamp = new Date(joinDateStr + 'T' + new Date().toTimeString().slice(0, 8)).toISOString();
     const joinMonthKey = enrollTimestamp.slice(0, 7);
     const joinDay = new Date(joinDateStr).getDate();
+    const isLateJoiner = joinDay >= 20 && feeMode === 'full';
     const effectiveFeeMode = feeMode === 'full' && joinDay >= 20 ? 'deferred' : feeMode;
     const totalFees = effectiveFeeMode === 'deferred' ? 0 : (parseFloat(form.total_fees) || 0);
     const paidFees = markAsPaid ? totalFees : 0;
-    try {
-      const student = await createStudent({
-        group_id: groupId,
-        name: form.name.trim(),
-        phone: form.phone.trim() || null,
-        parent_phone: form.parent_phone.trim() || null,
-        gender: form.gender,
-        total_fees: totalFees,
-        paid_fees: paidFees,
-        discount_type: form.discount_type || null,
-        discount_amount: parseFloat(form.discount_amount) || 0,
-        enrollment_date: enrollTimestamp,
-        fee_mode: effectiveFeeMode,
-        join_month_key: joinMonthKey,
-        pro_rata_sessions: 0,
-      });
-      if (!student) {
-        showToast('تعذّر إضافة الطالب — تأكد من الاتصال بالخادم', 'error');
-        return;
-      }
-      const modeNote = effectiveFeeMode === 'deferred'
-        ? ' — تم ترحيل مصاريف الشهر للشهر التالي (انضمام متأخر)'
-        : effectiveFeeMode === 'pro_rata'
-        ? ' — احتساب بنظام الحصص الفعلية'
-        : '';
-      showToast(`تمت إضافة الطالب بنجاح — تاريخ الانضمام: ${enrollTimestamp.slice(0, 10)}${modeNote}`, 'success');
-      resetForm();
-      setAddOpen(false);
+    const modeNote = effectiveFeeMode === 'deferred'
+      ? ' — تم ترحيل مصاريف الشهر للشهر التالي (انضمام متأخر)'
+      : effectiveFeeMode === 'pro_rata'
+      ? ' — احتساب بنظام الحصص الفعلية'
+      : '';
+    showToast(`تمت إضافة الطالب بنجاح — تاريخ الانضمام: ${enrollTimestamp.slice(0, 10)}${modeNote}`, 'success');
+    resetForm();
+    setAddOpen(false);
+    createStudent({
+      group_id: groupId,
+      name: form.name.trim(),
+      phone: form.phone.trim() || null,
+      parent_phone: form.parent_phone.trim() || null,
+      gender: form.gender,
+      total_fees: totalFees,
+      paid_fees: paidFees,
+      discount_type: form.discount_type || null,
+      discount_amount: parseFloat(form.discount_amount) || 0,
+      enrollment_date: enrollTimestamp,
+      fee_mode: effectiveFeeMode,
+      join_month_key: joinMonthKey,
+      pro_rata_sessions: 0,
+    }).then(async (student) => {
+      if (!student) { onRefresh(); return; }
       try {
         const backfilled = await backfillAttendanceForNewStudent(student.id, groupId, enrollTimestamp);
         if (backfilled > 0) {
@@ -236,11 +226,7 @@ export default function StudentManager({
         }
       } catch { /* best-effort */ }
       onRefresh();
-    } catch {
-      showToast('تعذّر إضافة الطالب', 'error');
-    } finally {
-      setAdding(false);
-    }
+    }).catch(() => showToast('تعذّر إضافة الطالب', 'error'));
   }
 
   async function handleEdit() {
@@ -258,83 +244,30 @@ export default function StudentManager({
       discount_type: form.discount_type || null,
       discount_amount: parseFloat(form.discount_amount) || 0,
     };
+    // If marking as fully paid, set paid_fees = total_fees to clear any debt
     if (markAsPaid) {
       updates.paid_fees = totalFees;
     }
-    try {
-      await updateStudent(editTarget.id, updates);
-      showToast('تم حفظ تعديلات الطالب', 'success');
-      setEditTarget(null);
-      resetForm();
-      onRefresh();
-    } catch {
-      showToast('تعذّر حفظ التعديلات', 'error');
-    }
+    showToast('تم حفظ تعديلات الطالب', 'success');
+    setEditTarget(null);
+    resetForm();
+    updateStudent(editTarget.id, updates).then(() => onRefresh()).catch(() => showToast('تعذّر حفظ التعديلات', 'error'));
   }
 
   async function handleDelete() {
     if (!deleteTarget) return;
     const actorName = isMaster ? 'المدرس' : assistant?.display_name ?? assistant?.username ?? 'مساعد';
-    try {
-      await deleteStudent(deleteTarget.id, actorName, isMaster ? 'master' : 'assistant');
-      showToast(`تم نقل الطالب «${deleteTarget.name}» إلى سلة المحذوفات — يمكن استعادته`, 'success');
-      setDeleteTarget(null);
-      onRefresh();
-    } catch {
-      showToast('تعذّر حذف الطالب', 'error');
-    }
-  }
-
-  async function openTrash() {
-    setTrashOpen(true);
-    setTrashLoading(true);
-    try {
-      const trashed = await fetchTrashedStudents(groupId);
-      setTrashedStudents(trashed);
-    } catch {
-      setTrashedStudents([]);
-    } finally {
-      setTrashLoading(false);
-    }
-  }
-
-  async function handleRestore(studentId: string, studentName: string) {
-    const actorName = isMaster ? 'المدرس' : assistant?.display_name ?? assistant?.username ?? 'مساعد';
-    try {
-      await restoreStudent(studentId, actorName, isMaster ? 'master' : 'assistant');
-      showToast(`تمت استعادة الطالب «${studentName}» بنجاح`, 'success');
-      setTrashedStudents((prev) => prev.filter((s) => s.id !== studentId));
-      onRefresh();
-    } catch {
-      showToast('تعذّر استعادة الطالب', 'error');
-    }
-  }
-
-  async function handlePermanentDelete() {
-    if (!permanentDeleteTarget) return;
-    const actorName = isMaster ? 'المدرس' : assistant?.display_name ?? assistant?.username ?? 'مساعد';
-    try {
-      await hardDeleteStudent(permanentDeleteTarget.id, actorName, isMaster ? 'master' : 'assistant');
-      showToast(`تم الحذف النهائي للطالب «${permanentDeleteTarget.name}» وجميع سجلاته`, 'success');
-      setTrashedStudents((prev) => prev.filter((s) => s.id !== permanentDeleteTarget.id));
-      setPermanentDeleteTarget(null);
-      onRefresh();
-    } catch {
-      showToast('تعذّر الحذف النهائي', 'error');
-    }
+    showToast('تم حذف الطالب', 'success');
+    setDeleteTarget(null);
+    hardDeleteStudent(deleteTarget.id, actorName, isMaster ? 'master' : 'assistant').then(() => onRefresh()).catch(() => showToast('تعذّر حذف الطالب', 'error'));
   }
 
   async function handleMarkLeft() {
     if (!leftTarget) return;
     const actorName = isMaster ? 'المدرس' : assistant?.display_name ?? assistant?.username ?? 'مساعد';
-    try {
-      await setStudentStatus(leftTarget.id, 'left', actorName, isMaster ? 'master' : 'assistant');
-      showToast('تم تحديد الطالب كمغادر', 'success');
-      setLeftTarget(null);
-      onRefresh();
-    } catch {
-      showToast('تعذّر تحديث الحالة', 'error');
-    }
+    showToast('تم تحديد الطالب كمغادر', 'success');
+    setLeftTarget(null);
+    setStudentStatus(leftTarget.id, 'left', actorName, isMaster ? 'master' : 'assistant').then(() => onRefresh()).catch(() => showToast('تعذّر تحديث الحالة', 'error'));
   }
 
   async function openTransfer(s: Student) {
@@ -475,13 +408,6 @@ export default function StudentManager({
               )}
             </div>
           )}
-          <button
-            onClick={openTrash}
-            className="p-2 rounded-xl glass-light hover:bg-amber-500/15 text-slate-400 hover:text-amber-400 transition relative"
-            title="سلة المحذوفات"
-          >
-            <Trash2 size={16} />
-          </button>
           <Button size="sm" onClick={openAdd}>
             <Plus size={16} />
             إضافة طالب
@@ -655,7 +581,7 @@ export default function StudentManager({
                     <button onClick={(e) => { e.stopPropagation(); setLeftTarget(s); }} className="relative z-10 p-1.5 rounded-lg hover:bg-amber-500/15 text-slate-400 hover:text-amber-400 transition" title="تحديد كمغادر">
                       <UserMinus size={14} />
                     </button>
-                    <button onClick={(e) => { e.stopPropagation(); setDeleteTarget(s); }} className="relative z-10 p-1.5 rounded-lg hover:bg-red-500/15 text-slate-400 hover:text-red-400 transition" title="حذف (نقل للسلة)">
+                    <button onClick={(e) => { e.stopPropagation(); setDeleteTarget(s); }} className="relative z-10 p-1.5 rounded-lg hover:bg-red-500/15 text-slate-400 hover:text-red-400 transition" title="حذف نهائي">
                       <UserX size={14} />
                     </button>
                   </div>
@@ -952,86 +878,9 @@ export default function StudentManager({
         open={!!deleteTarget}
         onClose={() => setDeleteTarget(null)}
         onConfirm={handleDelete}
-        title="🗑️ نقل الطالب إلى سلة المحذوفات"
-        subtext={`هل أنت متأكد من حذف الطالب «${deleteTarget?.name ?? ''}»؟ سيتم نقله إلى سلة المحذوفات واستبعاده من الإحصائيات مع الاحتفاظ بجميع سجلاته (مدفوعات، حضور، درجات). يمكن استعادته لاحقاً من السلة.`}
-        confirmLabel="نقل للسلة"
-      />
-
-      {/* Trash bin modal */}
-      <Modal
-        open={trashOpen}
-        onClose={() => setTrashOpen(false)}
-        title="سلة المحذوفات"
-        size="md"
-      >
-        <div className="space-y-3">
-          <p className="text-xs text-slate-400">
-            الطلاب المحذوفون من هذه المجموعة. يمكن استعادتهم أو حذفهم نهائياً. الحذف النهائي يزيل جميع السجلات المرتبطة (مدفوعات، حضور، درجات، سلوك).
-          </p>
-          {trashLoading ? (
-            <div className="flex items-center justify-center py-8">
-              <span className="text-xs text-slate-400">جارٍ التحميل...</span>
-            </div>
-          ) : trashedStudents.length === 0 ? (
-            <div className="glass-light rounded-xl p-8 text-center">
-              <Trash2 className="mx-auto text-slate-500 mb-3" size={28} />
-              <p className="text-sm text-slate-300">سلة المحذوفات فارغة</p>
-              <p className="text-xs text-slate-500 mt-1">لا يوجد طلاب محذوفون في هذه المجموعة</p>
-            </div>
-          ) : (
-            <div className="space-y-2 max-h-[400px] overflow-y-auto pr-1">
-              {trashedStudents.map((s) => (
-                <div
-                  key={s.id}
-                  className="glass-light rounded-xl p-3 flex items-center justify-between gap-3"
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0 ${s.gender === 'male' ? 'bg-blue-500/15 text-blue-300' : 'bg-pink-500/15 text-pink-300'}`}>
-                      {s.name.charAt(0)}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="font-semibold text-white text-sm truncate">{s.name}</p>
-                      {s.parent_phone && (
-                        <p className="text-[10px] text-slate-400">ولي الأمر: {s.parent_phone}</p>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1.5 flex-shrink-0">
-                    <button
-                      onClick={() => handleRestore(s.id, s.name)}
-                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 text-xs font-bold transition"
-                      title="استعادة الطالب"
-                    >
-                      <RestoreIcon size={13} />
-                      استعادة
-                    </button>
-                    <button
-                      onClick={() => setPermanentDeleteTarget(s)}
-                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 text-xs font-bold transition"
-                      title="حذف نهائي"
-                    >
-                      <Trash2 size={13} />
-                      نهائي
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-          <div className="flex justify-end pt-2">
-            <Button variant="secondary" onClick={() => setTrashOpen(false)}>إغلاق</Button>
-          </div>
-        </div>
-      </Modal>
-
-      {/* Permanent deletion — two-step confirmation */}
-      <ConfirmDialog
-        open={!!permanentDeleteTarget}
-        onClose={() => setPermanentDeleteTarget(null)}
-        onConfirm={handlePermanentDelete}
-        title="⚠️ حذف نهائي لا يمكن التراجع عنه"
-        subtext={`سيتم حذف الطالب «${permanentDeleteTarget?.name ?? ''}» وجميع سجلاته نهائياً (مدفوعات، حضور، درجات، سلوك، قاعة المشاهير). لا يمكن استعادة هذه البيانات بعد الحذف. هل أنت متأكد تماماً؟`}
-        confirmLabel="حذف نهائي"
+        title="🗑️ حذف الطالب نهائياً"
+        subtext={`هل أنت متأكد من حذف الطالب «${deleteTarget?.name ?? ''}»؟ سيتم استبعاده من جميع الإحصائيات والعدادات مع الاحتفاظ بسجلاته للمراجعة.`}
+        confirmLabel="تأكيد الحذف"
       />
 
       {/* Inline Fee Override Modal */}

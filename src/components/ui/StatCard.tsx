@@ -4,30 +4,25 @@ type StatCardProps = {
   label: string;
   value: ReactNode;
   icon: ReactNode;
-  color?: 'emerald' | 'amber' | 'blue' | 'red' | 'slate' | 'gold';
+  color?: 'emerald' | 'amber' | 'blue' | 'red' | 'slate';
   subtitle?: string;
 };
 
 const colorMap = {
-  gold: {
+  emerald: {
     glow: 'from-[#d4af37]/15 to-transparent',
     icon: 'text-[#e5c65a] bg-[#d4af37]/10 border border-[#d4af37]/20 shadow-lg shadow-black/30',
     value: 'text-[#e5c65a]',
   },
-  emerald: {
-    glow: 'from-emerald-500/15 to-transparent',
-    icon: 'text-emerald-300 bg-emerald-500/10 border border-emerald-400/20 shadow-lg shadow-emerald-900/20',
-    value: 'text-emerald-300',
-  },
   amber: {
-    glow: 'from-amber-500/15 to-transparent',
-    icon: 'text-amber-300 bg-amber-500/10 border border-amber-400/20 shadow-lg shadow-amber-900/20',
-    value: 'text-amber-300',
+    glow: 'from-[#d4af37]/15 to-transparent',
+    icon: 'text-[#e5c65a] bg-[#d4af37]/10 border border-[#d4af37]/20 shadow-lg shadow-black/30',
+    value: 'text-[#e5c65a]',
   },
   blue: {
-    glow: 'from-sky-500/15 to-transparent',
-    icon: 'text-sky-300 bg-sky-500/10 border border-sky-400/20 shadow-lg shadow-sky-900/20',
-    value: 'text-sky-300',
+    glow: 'from-[#d4af37]/15 to-transparent',
+    icon: 'text-[#e5c65a] bg-[#d4af37]/10 border border-[#d4af37]/20 shadow-lg shadow-black/30',
+    value: 'text-[#e5c65a]',
   },
   red: {
     glow: 'from-red-500/15 to-transparent',
@@ -45,7 +40,7 @@ export default function StatCard({
   label,
   value,
   icon,
-  color = 'gold',
+  color = 'emerald',
   subtitle,
 }: StatCardProps) {
   const c = colorMap[color];
