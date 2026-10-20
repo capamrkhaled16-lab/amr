@@ -1245,8 +1245,13 @@ export async function fetchStudentByParentToken(
     .eq('is_deleted', false)
     .maybeSingle();
 
-  if (error) throw new Error('تعذر الاتصال ببيانات الطالب. تحقق من الاتصال ثم حاول مرة أخرى.');
-  return data;
+  if (error) {
+    if (error.code === '22P02' || /invalid input syntax/i.test(error.message)) {
+      throw new Error('الرابط غير صالح. تأكد من نسخ الرابط كاملاً كما تم إرساله أو تواصل مع المعلم.');
+    }
+    throw new Error('تعذر الاتصال ببيانات الطالب. تحقق من الاتصال ثم حاول مرة أخرى.');
+  }
+  return data as Student | null;
 }
 
 export async function fetchOnlineGradesByStudent(

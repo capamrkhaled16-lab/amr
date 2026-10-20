@@ -1,5 +1,5 @@
 import { Component, type ReactNode } from 'react';
-import { AlertTriangle, RefreshCw, Home } from 'lucide-react';
+import { TriangleAlert as AlertTriangle, RefreshCw, Dome as Home } from 'lucide-react';
 
 type Props = { children: ReactNode; fallbackTitle?: string; fullPage?: boolean };
 type State = { hasError: boolean; error: Error | null };
@@ -52,7 +52,7 @@ export default class ErrorBoundary extends Component<Props, State> {
 
     const fullPage = this.props.fullPage;
     const containerCls = fullPage
-      ? 'min-h-screen flex items-center justify-center p-4 bg-slate-950'
+      ? 'min-h-screen flex items-center justify-center p-4 bg-[#080808]'
       : 'glass-card rounded-2xl p-8 text-center max-w-md mx-auto mt-8';
 
     return (

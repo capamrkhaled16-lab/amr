@@ -169,7 +169,7 @@ export default function ParentPortal() {
 
 function FullScreenLoader({ label }: { label: string }) {
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center px-6" dir="rtl">
+    <div className="min-h-screen bg-[#080808] flex flex-col items-center justify-center px-6" dir="rtl">
       <div className="flex flex-col items-center gap-4">
         <div className="relative">
           <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/20">
@@ -187,7 +187,7 @@ function FullScreenLoader({ label }: { label: string }) {
 
 function FullScreenError({ icon, message }: { icon: React.ReactNode; message: string }) {
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center px-6" dir="rtl">
+    <div className="min-h-screen bg-[#080808] flex flex-col items-center justify-center px-6" dir="rtl">
       <div className="flex flex-col items-center gap-4 max-w-sm text-center">
         <div className="w-20 h-20 rounded-full bg-slate-800/50 flex items-center justify-center">
           {icon}
@@ -228,8 +228,8 @@ function PortalContent({
   const monthSubscription = data.subscriptions.find((s) => s.month_key === selectedMonth);
 
   const monthFilteredAttendance = data.attendance.filter((a) => {
-    const attMonth = a.attendance_date.slice(0, 7);
-    return attMonth === selectedMonth;
+    if (!a.attendance_date) return false;
+    return a.attendance_date.slice(0, 7) === selectedMonth;
   });
 
   const monthFilteredBehavior = data.behavior.filter((b) => {
