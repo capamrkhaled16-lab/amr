@@ -1,5 +1,5 @@
 import { Component, type ReactNode } from 'react';
-import { TriangleAlert as AlertTriangle, RefreshCw, Dome as Home } from 'lucide-react';
+import { AlertTriangle, RefreshCw, Home } from 'lucide-react';
 
 type Props = { children: ReactNode; fallbackTitle?: string; fullPage?: boolean };
 type State = { hasError: boolean; error: Error | null };
