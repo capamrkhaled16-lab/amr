@@ -81,6 +81,21 @@ export function formatCurrency(amount: number): string {
  * - If the number already starts with 20, keeps it as-is
  * - If it starts with another country code (no leading 0), keeps it as-is
  */
+/**
+ * Strip invisible Unicode characters that WhatsApp and Arabic text editors
+ * can inject into shared links (BOM, BIDI marks, zero-width spaces, etc.).
+ * Returns a trimmed, clean ASCII-safe token string.
+ */
+export function sanitizeToken(raw: string | null | undefined): string {
+  if (!raw) return '';
+  return raw
+    // Remove zero-width chars, BOM, BIDI controls, and other invisible format marks
+    .replace(/[\u200B-\u200F\u202A-\u202E\u2060-\u206F\uFEFF\u00AD\u180E]/g, '')
+    // Remove any remaining non-printable control chars (except normal spaces/tabs)
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
+    .trim();
+}
+
 export function getMonthLabel(monthKey: string): string {
   if (!monthKey) return '—';
   const [y, m] = monthKey.split('-').map(Number);

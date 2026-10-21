@@ -14,7 +14,8 @@ import {
   fetchBehaviorEvals,
   currentMonthKey,
 } from '@/lib/data';
-import { getMonthLabel, formatArabicDate, formatCurrency, getGradeRating } from '@/lib/format';
+import { getMonthLabel, formatArabicDate, formatCurrency, getGradeRating, sanitizeToken } from '@/lib/format';
+import { supabase } from '@/lib/supabase';
 import { getMonthKey } from '@/lib/dates';
 import type {
   Student,
@@ -29,23 +30,7 @@ import type {
   HomeworkStatus,
   BehaviorEval,
 } from '@/lib/types';
-import {
-  GraduationCap,
-  Calendar,
-  BookOpen,
-  Award,
-  TrendingUp,
-  Wallet,
-  Receipt,
-  Users,
-  ChevronLeft,
-  ChevronRight,
-  AlertCircle,
-  Loader2,
-  Phone,
-  Sparkles,
-  FileText,
-} from 'lucide-react';
+import { GraduationCap, Calendar, BookOpen, Award, TrendingUp, Wallet, Receipt, Users, ChevronLeft, ChevronRight, CircleAlert as AlertCircle, Loader as Loader2, Phone, Sparkles, FileText } from 'lucide-react';
 import { PDFButton } from '@/components/ui/PDFButton';
 import { exportParentPortalPDF } from '@/lib/pdfExport';
 
@@ -67,7 +52,8 @@ interface ParentData {
 
 export default function ParentPortal() {
   const [searchParams] = useSearchParams();
-  const token = searchParams.get('token');
+  const rawToken = searchParams.get('token');
+  const token = sanitizeToken(rawToken);
   const initialMonth = searchParams.get('month');
 
   const [state, setState] = useState<LoadState>('loading');
@@ -118,17 +104,27 @@ export default function ParentPortal() {
         if (studentStatus) hwStatuses.push(studentStatus);
       }
 
-      const { data: groupData } = await import('@/lib/supabase').then((m) => m.supabase
-        .from('groups')
-        .select('name, grade_level:grade_levels(name, stage:academic_stages(name))')
-        .eq('id', groupId)
-        .maybeSingle());
+      let groupData: { name?: string; grade_level?: { name?: string; stage?: { name?: string } } } | null = null;
+      try {
+        const { data: gd, error: groupErr } = await supabase
+          .from('groups')
+          .select('name, grade_level:grade_levels(name, stage:academic_stages(name))')
+          .eq('id', groupId)
+          .maybeSingle();
+        if (groupErr) {
+          console.error('ParentPortal group lookup error:', groupErr.message);
+        } else {
+          groupData = gd as { name?: string; grade_level?: { name?: string; stage?: { name?: string } } } | null;
+        }
+      } catch (groupErr) {
+        console.error('ParentPortal group lookup exception:', groupErr);
+      }
 
       const enrichedStudent = {
         ...student,
-        group_name: (groupData as { name?: string } | null)?.name,
-        grade_name: (groupData as { grade_level?: { name?: string } } | null)?.grade_level?.name,
-        stage_name: (groupData as { grade_level?: { stage?: { name?: string } } } | null)?.grade_level?.stage?.name,
+        group_name: groupData?.name,
+        grade_name: groupData?.grade_level?.name,
+        stage_name: groupData?.grade_level?.stage?.name,
       };
 
       if (reqId === reqIdRef.current) {
@@ -142,7 +138,7 @@ export default function ParentPortal() {
           payments: payments ?? [],
           subscriptions: subscriptions ?? [],
           homework: homework ?? [],
-          homeworkStatuses,
+          homeworkStatuses: student?.homeworkStatuses || hwStatuses || [],
           behavior: behavior ?? [],
         });
         setState('success');

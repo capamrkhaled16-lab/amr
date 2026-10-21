@@ -860,13 +860,23 @@ export async function fetchExamsWithSubmissionCounts(
 }
 
 export async function fetchExamByAccessCode(code: string): Promise<OnlineExam | null> {
-  const { data } = await supabase
-    .from('exams')
-    .select('*')
-    .eq('access_code', code.trim().toUpperCase())
-    .eq('is_published', true)
-    .maybeSingle();
-  return data as OnlineExam | null;
+  if (!code) return null;
+  try {
+    const { data, error } = await supabase
+      .from('exams')
+      .select('*')
+      .eq('access_code', code.trim().toUpperCase())
+      .eq('is_published', true)
+      .maybeSingle();
+    if (error) {
+      console.error('fetchExamByAccessCode error:', error.message);
+      return null;
+    }
+    return data as OnlineExam | null;
+  } catch (err) {
+    console.error('fetchExamByAccessCode exception:', err);
+    return null;
+  }
 }
 
 export async function fetchRosterForExam(exam: OnlineExam): Promise<Student[]> {
@@ -1197,12 +1207,22 @@ export async function deleteCertificate(id: string): Promise<void> {
 export async function fetchStudentByParentToken(
   token: string
 ): Promise<Student | null> {
-  const { data } = await supabase
-    .from('students')
-    .select('*')
-    .eq('parent_token', token)
-    .maybeSingle();
-  return data;
+  if (!token) return null;
+  try {
+    const { data, error } = await supabase
+      .from('students')
+      .select('*')
+      .eq('parent_token', token)
+      .maybeSingle();
+    if (error) {
+      console.error('fetchStudentByParentToken error:', error.message);
+      return null;
+    }
+    return data;
+  } catch (err) {
+    console.error('fetchStudentByParentToken exception:', err);
+    return null;
+  }
 }
 
 export async function fetchOnlineGradesByStudent(
