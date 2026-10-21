@@ -1,25 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import {
-  X,
-  CheckCircle2,
-  Clock,
-  XCircle,
-  Wallet,
-  GraduationCap,
-  BookOpen,
-  Users,
-  Layers,
-  MapPin,
-  Calendar,
-  Award,
-  ClipboardCheck,
-  TrendingUp,
-  TrendingDown,
-  Minus,
-  ArrowLeftRight,
-} from 'lucide-react';
+import { X, CircleCheck as CheckCircle2, Clock, Circle as XCircle, Wallet, GraduationCap, BookOpen, Users, Layers, MapPin, Calendar, Award, ClipboardCheck, TrendingUp, TrendingDown, Minus, ArrowLeftRight } from 'lucide-react';
 import { formatCurrency, formatArabicDate } from '@/lib/format';
 import { supabase } from '@/lib/supabase';
 import { monthStart, nextMonthStart, currentMonthKey } from '@/lib/data';
@@ -82,7 +64,7 @@ export function StudentViewModal360({ open, student, onClose }: Props) {
 
   useEffect(() => {
     if (open) {
-      const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+      const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onCloseRef.current();
       window.addEventListener('keydown', onKey);
       lockBodyScroll();
       return () => {
@@ -90,9 +72,10 @@ export function StudentViewModal360({ open, student, onClose }: Props) {
         unlockBodyScroll();
       };
     }
-  }, [open, onClose]);
+  }, [open]);
 
   const requestIdRef = useRef(0);
+  const studentIdRef = useRef<string | undefined>(undefined);
 
   const loadData = useCallback(async () => {
     if (!student) return;
@@ -201,7 +184,10 @@ export function StudentViewModal360({ open, student, onClose }: Props) {
 
   useEffect(() => {
     if (open && student) {
-      setData(null);
+      if (studentIdRef.current !== student.id) {
+        studentIdRef.current = student.id;
+        setData(null);
+      }
       setMonthPaid(null);
       void loadData();
       const mk = currentMonthKey();

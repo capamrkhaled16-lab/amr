@@ -1,19 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import {
-  X,
-  CheckCircle2,
-  Clock,
-  XCircle,
-  Wallet,
-  GraduationCap,
-  BookOpen,
-  Users,
-  Layers,
-  MapPin,
-  UserCircle,
-} from 'lucide-react';
+import { X, CircleCheck as CheckCircle2, Clock, Circle as XCircle, Wallet, GraduationCap, BookOpen, Users, Layers, MapPin, CircleUser as UserCircle } from 'lucide-react';
 import { formatCurrency } from '@/lib/format';
 import { supabase } from '@/lib/supabase';
 import { currentMonthKey } from '@/lib/data';
@@ -37,9 +25,14 @@ export default function StudentViewModal({ open, student, onClose }: StudentView
   const [monthPaid, setMonthPaid] = useState<number | null>(null);
   const openRef = useRef(open);
   openRef.current = open;
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  const studentIdRef = useRef<string | undefined>(student?.id);
 
   useEffect(() => {
     if (!open || !student) return;
+    studentIdRef.current = student.id;
+    setMonthPaid(null);
     const mk = currentMonthKey();
     let cancelled = false;
     supabase
@@ -51,7 +44,7 @@ export default function StudentViewModal({ open, student, onClose }: StudentView
       .eq('is_historical_payment', false)
       .gt('amount', 0)
       .then(({ data }) => {
-        if (cancelled) return;
+        if (cancelled || studentIdRef.current !== student.id) return;
         const total = (data ?? []).reduce((s, p) => s + Number((p as { amount: number }).amount ?? 0), 0);
         setMonthPaid(total);
       });
@@ -63,13 +56,13 @@ export default function StudentViewModal({ open, student, onClose }: StudentView
     return () => {
       resetBodyScrollLock();
       document.body.style.overflow = '';
-      if (openRef.current) onClose();
+      if (openRef.current) onCloseRef.current();
     };
-  }, [onClose]);
+  }, []);
 
   useEffect(() => {
     if (open) {
-      const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+      const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onCloseRef.current();
       window.addEventListener('keydown', onKey);
       lockBodyScroll();
       return () => {
@@ -77,7 +70,7 @@ export default function StudentViewModal({ open, student, onClose }: StudentView
         unlockBodyScroll();
       };
     }
-  }, [open, onClose]);
+  }, [open]);
 
   if (!mounted) return null;
 

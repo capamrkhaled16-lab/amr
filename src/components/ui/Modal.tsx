@@ -32,13 +32,14 @@ export default function Modal({
   const scrollRef = useRef(0);
   const openRef = useRef(open);
   openRef.current = open;
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   useEffect(() => {
     setMounted(true);
     return () => {
       resetBodyScrollLock();
       document.body.style.overflow = '';
-      // Only remove THIS modal's portal backdrop, not all of them
       const ownBackdrop = document.querySelector('[data-portal-backdrop]');
       if (ownBackdrop && !ownBackdrop.querySelector('.glass-card, .premium-card')) {
         ownBackdrop.remove();
@@ -57,11 +58,11 @@ export default function Modal({
   useEffect(() => {
     if (!open) return;
     const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') onCloseRef.current();
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [open, onClose]);
+  }, [open]);
 
   if (!mounted) return null;
 

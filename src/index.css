@@ -359,3 +359,116 @@ select option:checked {
   user-select: none;
   -webkit-touch-callout: none;
 }
+
+/* ─── Parent Portal glassmorphism classes ─── */
+
+.pp-glass {
+  background: linear-gradient(145deg, rgba(20, 20, 22, 0.72), rgba(8, 8, 10, 0.78));
+  backdrop-filter: blur(24px) saturate(130%);
+  -webkit-backdrop-filter: blur(24px) saturate(130%);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.36), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  border-radius: 24px;
+  position: relative;
+  overflow: hidden;
+}
+
+.pp-glass::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.18), transparent 40%, rgba(6, 182, 212, 0.12));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+.pp-glow-border {
+  border: 1px solid transparent;
+  background-image: linear-gradient(rgba(10, 10, 12, 0.85), rgba(10, 10, 12, 0.85)), linear-gradient(135deg, rgba(16, 185, 129, 0.35), rgba(6, 182, 212, 0.2), rgba(212, 175, 55, 0.15));
+  background-origin: border-box;
+  background-clip: padding-box, border-box;
+}
+
+.pp-neon-emerald {
+  box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.2), 0 0 24px rgba(16, 185, 129, 0.08), 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+.pp-neon-cyan {
+  box-shadow: 0 0 0 1px rgba(6, 182, 212, 0.2), 0 0 24px rgba(6, 182, 212, 0.08), 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+.pp-neon-gold {
+  box-shadow: 0 0 0 1px rgba(212, 175, 55, 0.2), 0 0 24px rgba(212, 175, 55, 0.08), 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+.pp-neon-amber {
+  box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.2), 0 0 24px rgba(245, 158, 11, 0.06), 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+.pp-skeleton {
+  background: linear-gradient(110deg, rgba(255, 255, 255, 0.04) 8%, rgba(255, 255, 255, 0.08) 18%, rgba(255, 255, 255, 0.04) 33%);
+  background-size: 200% 100%;
+  animation: pp-shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes pp-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.pp-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid;
+}
+
+.pp-section-title {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.5);
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pp-progress-ring {
+  transform: rotate(-90deg);
+}
+
+.pp-float-btn {
+  position: fixed;
+  bottom: 20px;
+  left: 20px;
+  z-index: 50;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #25D366, #128C7E);
+  box-shadow: 0 4px 20px rgba(37, 211, 102, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.1);
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.pp-float-btn:hover {
+  transform: scale(1.08);
+  box-shadow: 0 6px 28px rgba(37, 211, 102, 0.5);
+}
+
+.pp-float-btn:active {
+  transform: scale(0.95);
+}
