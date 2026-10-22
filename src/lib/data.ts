@@ -183,7 +183,7 @@ export async function fetchStudentsByGroup(groupId: string): Promise<Student[]> 
   return swrFetch(`students_${groupId}`, async () => {
   const { data, error } = await supabase
     .from('students')
-    .select('id, name, phone, parent_phone, group_id, status, total_fees, paid_fees, is_exempt, discount_mode, discount_amount, discount_percent, fee_mode, pro_rata_sessions, join_month_key, enrollment_date, created_at')
+    .select('id, name, phone, parent_phone, group_id, status, total_fees, paid_fees, is_exempt, discount_mode, discount_amount, discount_percent, fee_mode, pro_rata_sessions, join_month_key, enrollment_date, created_at, fee_locked')
     .eq('group_id', groupId)
     .eq('status', 'active')
     .order('name');
@@ -229,7 +229,7 @@ export async function fetchDashboardKPIs(monthKey?: string): Promise<{
   const [studentsSettled, paymentsSettled, exemptionsSettled, groupsSettled] = await Promise.allSettled([
     timeout(supabase
       .from('students')
-      .select('id, name, phone, parent_phone, group_id, status, total_fees, paid_fees, is_exempt, discount_mode, discount_amount, discount_percent, fee_mode, pro_rata_sessions, join_month_key, enrollment_date, created_at, group:groups(name, schedule, grade_level:grade_levels(name, stage:academic_stages(name, sort_order)))')
+      .select('id, name, phone, parent_phone, group_id, status, total_fees, paid_fees, is_exempt, discount_mode, discount_amount, discount_percent, fee_mode, pro_rata_sessions, join_month_key, enrollment_date, created_at, fee_locked, group:groups(name, schedule, grade_level:grade_levels(name, stage:academic_stages(name, sort_order)))')
       .eq('status', 'active')
       .order('name')),
     timeout(supabase
@@ -299,7 +299,7 @@ export async function fetchAllStudents(): Promise<(Student & { group_name?: stri
   return swrFetch('all_students', async () => {
   const { data, error } = await supabase
     .from('students')
-    .select('id, name, phone, parent_phone, group_id, status, total_fees, paid_fees, is_exempt, discount_mode, discount_amount, discount_percent, fee_mode, pro_rata_sessions, join_month_key, enrollment_date, created_at, group:groups(name, schedule, grade_level:grade_levels(name, stage:academic_stages(name)))')
+    .select('id, name, phone, parent_phone, group_id, status, total_fees, paid_fees, is_exempt, discount_mode, discount_amount, discount_percent, fee_mode, pro_rata_sessions, join_month_key, enrollment_date, created_at, fee_locked, group:groups(name, schedule, grade_level:grade_levels(name, stage:academic_stages(name)))')
     .eq('status', 'active')
     .order('name');
   if (error) throw new Error(error.message);
@@ -474,7 +474,7 @@ export async function updateStudentTotalFees(
     .select('name, total_fees')
     .eq('id', id)
     .maybeSingle();
-  await supabase.from('students').update({ total_fees: newTotalFees }).eq('id', id);
+  await supabase.from('students').update({ total_fees: newTotalFees, fee_locked: true }).eq('id', id);
   invalidateByPrefix('students_');
   emitStudentsChanged();
   if (student) {
@@ -889,7 +889,7 @@ export async function fetchRosterForExam(exam: OnlineExam): Promise<Student[]> {
     if (groupIds.length === 0) return [];
     const { data } = await supabase
       .from('students')
-      .select('id, name, phone, parent_phone, group_id, status, total_fees, paid_fees, is_exempt, discount_mode, discount_amount, discount_percent, enrollment_date, created_at')
+      .select('id, name, phone, parent_phone, group_id, status, total_fees, paid_fees, is_exempt, discount_mode, discount_amount, discount_percent, enrollment_date, created_at, fee_locked')
       .in('group_id', groupIds)
       .eq('status', 'active')
       .order('name');
@@ -3019,13 +3019,15 @@ export async function syncStudentFeesToGradePrice(gradeLevelId: string, newBaseP
   const groupIds = (groups as { id: string }[]).map((g) => g.id);
   const { data: students } = await supabase
     .from('students')
-    .select('id, discount_amount, paid_fees')
+    .select('id, discount_amount, paid_fees, fee_locked')
     .in('group_id', groupIds)
     .eq('status', 'active')
     .eq('is_deleted', false);
   if (!students || students.length === 0) return 0;
   let updated = 0;
-  for (const s of (students as { id: string; discount_amount: number | null; paid_fees: number | null }[])) {
+  for (const s of (students as { id: string; discount_amount: number | null; paid_fees: number | null; fee_locked: boolean | null }[])) {
+    // Skip students whose fees were manually locked by an admin
+    if (s.fee_locked) continue;
     const discount = s.discount_amount ?? 0;
     const newTotal = Math.max(0, newBasePrice - discount);
     if (newTotal !== newBasePrice - discount && newTotal <= 0) continue;
@@ -3089,15 +3091,19 @@ export async function ensureMonthlySubscriptions(
   if (missing.length > 0 && baseAmount > 0) {
     const { data: studentRows } = await supabase
       .from('students')
-      .select('id, discount_amount')
+      .select('id, discount_amount, total_fees')
       .in('id', missing);
-    const discountMap = new Map<string, number>();
-    for (const r of (studentRows ?? []) as { id: string; discount_amount: number | null }[]) {
-      discountMap.set(r.id, r.discount_amount ?? 0);
+    const studentInfoMap = new Map<string, { discount: number; totalFees: number }>();
+    for (const r of (studentRows ?? []) as { id: string; discount_amount: number | null; total_fees: number | null }[]) {
+      studentInfoMap.set(r.id, { discount: r.discount_amount ?? 0, totalFees: r.total_fees ?? 0 });
     }
     const rows = missing.map((sid) => {
-      const discount = discountMap.get(sid) ?? 0;
-      const adjustedAmount = Math.max(0, baseAmount - discount);
+      const info = studentInfoMap.get(sid) ?? { discount: 0, totalFees: 0 };
+      // Respect manually-set total_fees (e.g. half-month for late joiners).
+      // Only fall back to baseAmount - discount when total_fees is zero/unset.
+      const adjustedAmount = info.totalFees > 0
+        ? info.totalFees
+        : Math.max(0, baseAmount - info.discount);
       return {
         student_id: sid,
         month: monthLabel,

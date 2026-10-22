@@ -63,6 +63,7 @@ import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import StudentViewModal360 from '@/components/ui/StudentViewModal360';
 import { useMonth } from '@/context/MonthContext';
 import AttendanceRingChart from '@/components/ui/AttendanceRingChart';
+import { useEventRefresh } from '@/hooks/useEventRefresh';
 
 type AttendanceModuleProps = {
   groupId: string;
@@ -320,6 +321,18 @@ export default function AttendanceModule({ groupId, students, groupName, stageNa
       .finally(() => { if (isMounted.current) { clearTimeout(timeout); setIsLoading(false); } });
     return () => clearTimeout(timeout);
   }, [loadSessions, loadArchives, loadGroupStats]);
+
+  // Instant cross-screen sync: re-fetch sessions/stats when other modules change data
+  const attendanceLoadRef = useRef(loadSessions);
+  const attendanceStatsRef = useRef(loadGroupStats);
+  attendanceLoadRef.current = loadSessions;
+  attendanceStatsRef.current = loadGroupStats;
+  useEventRefresh(['sessions:changed', 'attendance:changed', 'students:changed'], () => {
+    if (isMounted.current) {
+      void attendanceLoadRef.current();
+      void attendanceStatsRef.current();
+    }
+  });
 
   useEffect(() => {
     supabase.from('groups').select('schedule').eq('id', groupId).maybeSingle().then(({ data }) => {

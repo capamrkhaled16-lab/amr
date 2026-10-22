@@ -51,6 +51,7 @@ import {
   deletePaymentWithAudit,
 } from '@/lib/data';
 import { getCached, isCacheFresh } from '@/lib/cache';
+import { useEventRefresh } from '@/hooks/useEventRefresh';
 import { formatCurrency } from '@/lib/format';
 import { supabase } from '@/lib/supabase';
 import { checkMonthReset } from '@/lib/monthReset';
@@ -422,12 +423,24 @@ export default function DashboardPage() {
   loadGroupStatsRef.current = loadGroupStats;
   selectedGroupRef.current = selectedGroup;
 
+  // Instant cross-screen sync: when a mutation fires an event (e.g. payment
+  // saved in FinancesModule), bust the SWR cache and re-fetch KPIs/students
+  // immediately — no manual refresh needed.
+  const refreshEvents = ['students:changed', 'attendance:changed', 'payments:changed', 'grades:changed', 'homework:changed', 'behavior:changed', 'sessions:changed', 'groups:changed'];
+  useEventRefresh(refreshEvents, () => {
+    loadKPIsRef.current();
+    if (selectedGroupRef.current) {
+      loadStudentsRef.current();
+      loadGroupStatsRef.current();
+    }
+  });
+
   useEffect(() => {
     let debounced: ReturnType<typeof setTimeout> | null = null;
     let groupDebounced: ReturnType<typeof setTimeout> | null = null;
     const triggerKPIRefresh = () => {
       if (debounced) clearTimeout(debounced);
-      debounced = setTimeout(() => loadKPIsRef.current(), 1500);
+      debounced = setTimeout(() => loadKPIsRef.current(), 500);
     };
     const triggerGroupRefresh = () => {
       if (groupDebounced) clearTimeout(groupDebounced);
