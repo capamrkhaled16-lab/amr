@@ -42,6 +42,7 @@ export type GradeAverageResult = {
   totalScore: number;
   count: number;
   maxScore: number;
+  hasData: boolean;
 };
 
 export type GroupAverageResult = {
@@ -50,6 +51,7 @@ export type GroupAverageResult = {
   totalScore: number;
   studentCount: number;
   maxScore: number;
+  hasData: boolean;
 };
 
 // ============================================================
@@ -113,7 +115,7 @@ export function calcExamAverage(grades: RawGrade[]): GradeAverageResult {
   const valid = filterValidGrades(deduplicateGrades(grades));
   const count = valid.length;
   if (count === 0) {
-    return { averagePercent: 0, averageScore: 0, totalScore: 0, count: 0, maxScore: 0 };
+    return { averagePercent: 0, averageScore: 0, totalScore: 0, count: 0, maxScore: 0, hasData: false };
   }
   const totalScore = valid.reduce((sum, g) => sum + g.score, 0);
   const maxScore = valid[0].max_score;
@@ -125,6 +127,7 @@ export function calcExamAverage(grades: RawGrade[]): GradeAverageResult {
     totalScore: Math.round(totalScore * 100) / 100,
     count,
     maxScore,
+    hasData: true,
   };
 }
 
@@ -137,7 +140,7 @@ export function calcGroupAverage(grades: RawGrade[]): GroupAverageResult {
   const valid = filterValidGrades(deduplicateGrades(grades));
   const count = valid.length;
   if (count === 0) {
-    return { averagePercent: 0, averageScore: 0, totalScore: 0, studentCount: 0, maxScore: 0 };
+    return { averagePercent: 0, averageScore: 0, totalScore: 0, studentCount: 0, maxScore: 0, hasData: false };
   }
   const percents = toPercentages(valid);
   const totalScore = valid.reduce((sum, g) => sum + g.score, 0);
@@ -149,6 +152,7 @@ export function calcGroupAverage(grades: RawGrade[]): GroupAverageResult {
     totalScore: Math.round(totalScore * 100) / 100,
     studentCount: uniqueStudents,
     maxScore: 100,
+    hasData: true,
   };
 }
 
@@ -157,7 +161,7 @@ export function calcGroupAverage(grades: RawGrade[]): GroupAverageResult {
 // Returns a map of student_id → average percentage
 // ============================================================
 
-export function calcStudentAverages(grades: RawGrade[]): Map<string, { avgPercent: number; count: number; scores: number[] }> {
+export function calcStudentAverages(grades: RawGrade[]): Map<string, { avgPercent: number; count: number; scores: number[]; hasData: boolean }> {
   const valid = filterValidGrades(deduplicateGrades(grades));
   const byStudent = new Map<string, { scores: number[]; maxes: number[] }>();
   for (const g of valid) {
@@ -169,7 +173,7 @@ export function calcStudentAverages(grades: RawGrade[]): Map<string, { avgPercen
       byStudent.set(g.student_id, { scores: [g.score], maxes: [g.max_score] });
     }
   }
-  const result = new Map<string, { avgPercent: number; count: number; scores: number[] }>();
+  const result = new Map<string, { avgPercent: number; count: number; scores: number[]; hasData: boolean }>();
   for (const [studentId, data] of byStudent) {
     const percents = data.scores.map((s, i) => scoreToPercent(s, data.maxes[i]));
     const avgPercent = percents.reduce((sum, p) => sum + p, 0) / percents.length;
@@ -177,6 +181,7 @@ export function calcStudentAverages(grades: RawGrade[]): Map<string, { avgPercen
       avgPercent: Math.round(avgPercent * 100) / 100,
       count: data.scores.length,
       scores: data.scores,
+      hasData: true,
     });
   }
   return result;
@@ -191,7 +196,7 @@ export function calcGradeLevelAverage(grades: RawGrade[]): GradeAverageResult {
   const valid = filterValidGrades(deduplicateGrades(grades));
   const count = valid.length;
   if (count === 0) {
-    return { averagePercent: 0, averageScore: 0, totalScore: 0, count: 0, maxScore: 0 };
+    return { averagePercent: 0, averageScore: 0, totalScore: 0, count: 0, maxScore: 0, hasData: false };
   }
   const percents = toPercentages(valid);
   const totalScore = valid.reduce((sum, g) => sum + g.score, 0);
@@ -202,6 +207,7 @@ export function calcGradeLevelAverage(grades: RawGrade[]): GradeAverageResult {
     totalScore: Math.round(totalScore * 100) / 100,
     count,
     maxScore: 100,
+    hasData: true,
   };
 }
 

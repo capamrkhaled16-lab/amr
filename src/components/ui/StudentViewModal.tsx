@@ -84,15 +84,22 @@ export default function StudentViewModal({ open, student, onClose }: StudentView
           : 'رسوم كاملة'
     : '';
 
-  const displayPaid = monthPaid ?? student?.paid_fees ?? 0;
-  const remaining = student ? (student.total_fees ?? 0) - displayPaid : 0;
-  const fullyPaid = student ? remaining <= 0 || student.is_exempt : false;
+  const displayPaid = monthPaid ?? 0;
+  const remaining = student ? Math.max(0, (student.total_fees ?? 0) - displayPaid) : 0;
+  const fullyPaid = student
+    ? student.is_exempt
+      ? true
+      : monthPaid !== null && remaining <= 0 && displayPaid > 0
+    : false;
+  const hasNotPaid = monthPaid !== null && displayPaid === 0 && !student?.is_exempt;
   const statusLabel = student
     ? student.is_exempt
       ? 'معفي من الرسوم'
       : fullyPaid
-        ? 'مسدد بالكامل'
-        : 'مسدد جزئي'
+        ? 'تم الدفع'
+        : hasNotPaid
+          ? 'لم يدفع'
+          : 'مسدد جزئي'
     : '';
 
   return createPortal(
@@ -136,12 +143,16 @@ export default function StudentViewModal({ open, student, onClose }: StudentView
                   <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                     <span
                       className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                        fullyPaid
-                          ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                          : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                        student.is_exempt
+                          ? 'bg-sky-500/10 text-sky-400 border-sky-500/20'
+                          : fullyPaid
+                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                            : hasNotPaid
+                              ? 'bg-red-500/10 text-red-400 border-red-500/20'
+                              : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
                       }`}
                     >
-                      {fullyPaid ? <CheckCircle2 size={10} /> : <Clock size={10} />}
+                      {student.is_exempt ? <CheckCircle2 size={10} /> : fullyPaid ? <CheckCircle2 size={10} /> : hasNotPaid ? <XCircle size={10} /> : <Clock size={10} />}
                       {statusLabel}
                     </span>
                     {student.status === 'left' && (

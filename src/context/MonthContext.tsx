@@ -29,9 +29,13 @@ const MonthContext = createContext<MonthContextValue | null>(null);
 const STORAGE_KEY = 'alkhaled_active_month';
 
 function getStoredMonthKey(): string {
-  // Always default to the system current month on fresh load.
-  // Previous-month viewing is a within-session action only; we never
-  // persist a stale month across sessions to prevent data bleeding.
+  // Restore the previously selected month from localStorage so the app
+  // reopens exactly where the user left off — no forced reset to system month.
+  // Falls back to system current month only on very first load.
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored && /^\d{4}-\d{2}$/.test(stored)) return stored;
+  } catch { /* ignore */ }
   return getSystemMonthKey();
 }
 
@@ -54,16 +58,16 @@ export function MonthProvider({ children }: { children: ReactNode }) {
     clearAllCache();
   }, []);
 
-  // On mount: always reset to the system current month to prevent
-  // stale month data from bleeding into a new session.
+  // Restore persisted month on mount. We persist across sessions now
+  // so the app reopens on the same month the user last selected.
   useEffect(() => {
-    const sysKey = getSystemMonthKey();
-    if (sysKey !== monthRef.current) {
-      monthRef.current = sysKey;
-      setMonthKeyState(sysKey);
-      try { localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
-      clearAllCache();
-    }
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored && /^\d{4}-\d{2}$/.test(stored) && stored !== monthRef.current) {
+        monthRef.current = stored;
+        setMonthKeyState(stored);
+      }
+    } catch { /* ignore */ }
   }, []);
 
   const isStaleRequest = useCallback((requestMonthKey: string) => {

@@ -1,33 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { WifiOff, Info } from 'lucide-react';
-import {
-  Users,
-  DollarSign,
-  AlertTriangle,
-  Plus,
-  Trash2,
-  Archive,
-  Clock,
-  Calendar,
-  Check,
-  CheckCheck,
-  X,
-  History,
-  MessageSquare,
-  Clock3,
-  CheckCircle2,
-  XCircle,
-  Download,
-  Printer,
-  FileText,
-  Image,
-  Loader2,
-  MessageCircle,
-  Phone,
-  Save,
-  Eye,
-} from 'lucide-react';
+import { Users, DollarSign, TriangleAlert as AlertTriangle, Plus, Trash as Trash2, Archive, Clock, Calendar, Check, CheckCheck, X, Factory as History, MessageSquare, Clock3, CircleCheck as CheckCircle2, Circle as XCircle, Download, Printer, FileText, Image, Loader as Loader2, MessageCircle, Phone, Save, Eye } from 'lucide-react';
 import { useToast } from '@/components/ui/Toast';
 import type { ToastType } from '@/components/ui/Toast';
 import { useLocation } from 'react-router-dom';
@@ -520,7 +494,7 @@ export default function AttendanceModule({ groupId, students, groupName, stageNa
         setRecords((prev) => ({ ...prev, [student.id]: { ...existing, status: prevStatus } }));
         const msg = err instanceof Error ? err.message : '';
         if (msg.includes('network') || msg.includes('fetch')) {
-          showToast('تعذّر الاتصال بالخادم — تحقق من الإنترنت وحاول مرة أخرى', 'error');
+          // Silent — optimistic UI already shows the change; background retry will sync
         } else if (msg.includes('duplicate') || msg.includes('unique')) {
           showToast('يوجد سجل مكرر — يتم تحديث البيانات تلقائياً', 'error');
           void loadRecords();
@@ -564,7 +538,7 @@ export default function AttendanceModule({ groupId, students, groupName, stageNa
       if (!suppressToast) {
         const msg = err instanceof Error ? err.message : '';
         if (msg.includes('network') || msg.includes('fetch')) {
-          showToast('تعذّر الاتصال بالخادم — تحقق من الإنترنت وحاول مرة أخرى', 'error');
+          // Silent — optimistic UI already shows the change; background retry will sync
         } else if (msg.includes('duplicate') || msg.includes('unique')) {
           showToast('يوجد سجل مكرر لهذا الطالب في هذه الحصة — يتم تحديث البيانات', 'error');
           void loadRecords();

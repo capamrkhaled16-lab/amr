@@ -9,12 +9,12 @@ export type StudentAnalyticsInput = {
 };
 
 export type StudentAnalytics = {
-  attendanceRate: number;
-  gradeRate: number;
+  attendanceRate: number | null;
+  gradeRate: number | null;
   homeworkRate: number | null;
-  overallPercentage: number;
+  overallPercentage: number | null;
   motivationalMessage: string;
-  motivationalTone: 'excellent' | 'good' | 'average' | 'needs_improvement';
+  motivationalTone: 'excellent' | 'good' | 'average' | 'needs_improvement' | 'no_data';
 };
 
 export function computeStudentAnalytics(input: StudentAnalyticsInput): StudentAnalytics {
@@ -23,12 +23,13 @@ export function computeStudentAnalytics(input: StudentAnalyticsInput): StudentAn
   const totalAttendance = input.present + input.absent + (input.excused ?? 0);
   const attendanceRate = totalAttendance > 0
     ? Math.round(((input.present + (input.makeup ?? 0)) / totalAttendance) * 1000) / 10
-    : 0;
+    : null;
 
-  const validGrades = input.grades.filter((g) => g.maxScore > 0);
-  const gradeRate = validGrades.length > 0
+  const validGrades = input.grades.filter((g) => g.maxScore > 0 && typeof g.score === 'number' && !isNaN(g.score));
+  const hasGradeData = validGrades.length > 0;
+  const gradeRate = hasGradeData
     ? Math.round(validGrades.reduce((sum, g) => sum + (g.score / g.maxScore) * 100, 0) / validGrades.length * 10) / 10
-    : 0;
+    : null;
   // Uses the same formula as the centralized gradeCalc engine: each score
   // normalized to its own max, then averaged. Never mixes max_score with score.
 
@@ -47,14 +48,28 @@ export function computeStudentAnalytics(input: StudentAnalyticsInput): StudentAn
 
   // When no homework data exists, redistribute the 20% homework weight
   // to the remaining components: attendance 30→37.5%, grades 50→62.5%.
-  const overallPercentage = hasHomeworkData
-    ? Math.round((attendanceRate * 0.3 + gradeRate * 0.5 + (homeworkRate as number) * 0.2) * 10) / 10
-    : Math.round((attendanceRate * 0.375 + gradeRate * 0.625) * 10) / 10;
+  // When no grades are recorded either, overall is null — not a fake 0%.
+  let overallPercentage: number | null;
+  if (!hasGradeData && totalAttendance === 0 && !hasHomeworkData) {
+    overallPercentage = null;
+  } else if (!hasGradeData) {
+    // No grades but has attendance and/or homework — weight those only
+    const attWeight = hasHomeworkData ? 0.6 : 1.0;
+    const hwWeight = hasHomeworkData ? 0.4 : 0.0;
+    overallPercentage = Math.round(((attendanceRate ?? 0) * attWeight + (homeworkRate ?? 0) * hwWeight) * 10) / 10;
+  } else if (hasHomeworkData) {
+    overallPercentage = Math.round(((attendanceRate ?? 0) * 0.3 + (gradeRate ?? 0) * 0.5 + (homeworkRate as number) * 0.2) * 10) / 10;
+  } else {
+    overallPercentage = Math.round(((attendanceRate ?? 0) * 0.375 + (gradeRate ?? 0) * 0.625) * 10) / 10;
+  }
 
   let motivationalMessage: string;
   let motivationalTone: StudentAnalytics['motivationalTone'];
 
-  if (overallPercentage >= 90) {
+  if (overallPercentage === null) {
+    motivationalTone = 'no_data';
+    motivationalMessage = 'لا توجد درجات مسجلة بعد — سيتم احتساب النسبة عند تسجيل الدرجات.';
+  } else if (overallPercentage >= 90) {
     motivationalTone = 'excellent';
     motivationalMessage = 'أداء رائع ومتميز! نرجو الاستمرار في الحصول على أعلى الدرجات والثبات على هذا المستوى الراقي.';
   } else if (overallPercentage >= 75) {

@@ -184,12 +184,16 @@ export function StudentViewModal360({ open, student, onClose }: Props) {
 
   useEffect(() => {
     if (open && student) {
+      // Instant display: use cached student data so modal opens immediately
+      // without waiting for the async fetch. Show skeleton only on first load
+      // for a student we've never seen before.
       if (studentIdRef.current !== student.id) {
         studentIdRef.current = student.id;
-        setData(null);
+        // Don't clear data immediately — keep showing previous data while loading
+        // to avoid blank dark screen flicker. Only show skeleton if no data yet.
       }
+      // Load payment status from actual monthly transactions
       setMonthPaid(null);
-      void loadData();
       const mk = currentMonthKey();
       supabase
         .from('payments')
@@ -202,21 +206,30 @@ export function StudentViewModal360({ open, student, onClose }: Props) {
         .then(({ data: payData }) => {
           const total = (payData ?? []).reduce((s, p) => s + Number((p as { amount: number }).amount ?? 0), 0);
           setMonthPaid(total);
-        });
+        })
+        .catch(() => { /* silent — keep null, shows fallback */ });
+      void loadData();
     }
   }, [open, student?.id, loadData]);
 
   if (!mounted) return null;
 
-  const displayPaid = monthPaid ?? student?.paid_fees ?? 0;
-  const remaining = student ? (student.total_fees ?? 0) - displayPaid : 0;
-  const fullyPaid = student ? remaining <= 0 || student.is_exempt : false;
+  const displayPaid = monthPaid ?? 0;
+  const remaining = student ? Math.max(0, (student.total_fees ?? 0) - displayPaid) : 0;
+  const fullyPaid = student
+    ? student.is_exempt
+      ? true
+      : monthPaid !== null && remaining <= 0 && displayPaid > 0
+    : false;
+  const hasNotPaid = monthPaid !== null && displayPaid === 0 && !student?.is_exempt;
   const statusLabel = student
     ? student.is_exempt
       ? 'معفي من الرسوم'
       : fullyPaid
-        ? 'مسدد بالكامل'
-        : 'مسدد جزئي'
+        ? 'تم الدفع'
+        : hasNotPaid
+          ? 'لم يدفع'
+          : 'مسدد جزئي'
     : '';
 
   const activityBadge = data?.monitor ? getActivityBadge(data.monitor.activityLevel) : null;
@@ -305,12 +318,16 @@ export function StudentViewModal360({ open, student, onClose }: Props) {
                   <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                     <span
                       className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                        fullyPaid
-                          ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                          : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                        student.is_exempt
+                          ? 'bg-sky-500/10 text-sky-400 border-sky-500/20'
+                          : fullyPaid
+                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                            : hasNotPaid
+                              ? 'bg-red-500/10 text-red-400 border-red-500/20'
+                              : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
                       }`}
                     >
-                      {fullyPaid ? <CheckCircle2 size={10} /> : <Clock size={10} />}
+                      {student.is_exempt ? <CheckCircle2 size={10} /> : fullyPaid ? <CheckCircle2 size={10} /> : hasNotPaid ? <XCircle size={10} /> : <Clock size={10} />}
                       {statusLabel}
                     </span>
                     {activityBadge && (
