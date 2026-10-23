@@ -945,6 +945,262 @@ export async function exportParentPortalPDF(
   );
 }
 
+export async function exportMonthlyCollectionSheetPDF(
+  students: EnrichedStudent[],
+  meta: PDFReportMeta
+): Promise<boolean> {
+  const columns: PDFColumn[] = [
+    { key: 'idx', label: 'م', width: '5%', align: 'center' },
+    { key: 'name', label: 'اسم الطالب', width: '25%' },
+    { key: 'paid', label: 'المبلغ المدفوع', width: '15%', align: 'center' },
+    { key: 'remaining', label: 'المتبقي', width: '15%', align: 'center' },
+    { key: 'date', label: 'اليوم والتاريخ', width: '18%', align: 'center' },
+    { key: 'receiver', label: 'المستلم', width: '22%', align: 'center' },
+  ];
+
+  const rows: PDFRow[] = students.map((s, i) => ({
+    idx: i + 1,
+    name: s.name,
+    paid: '',
+    remaining: '',
+    date: '',
+    receiver: '',
+  }));
+
+  const totalsRow: PDFRow = {
+    idx: '', name: `الإجمالي (${students.length} طالب)`,
+    paid: '', remaining: '', date: '', receiver: '',
+  };
+
+  const groupSchedule = (students[0]?.group_schedule ?? '') as string;
+  const metaLineParts: string[] = [];
+  if (meta.stageName) metaLineParts.push(`المرحلة: ${meta.stageName}`);
+  if (meta.gradeName) metaLineParts.push(`الصف: ${meta.gradeName}`);
+  if (meta.groupName) metaLineParts.push(`المجموعة: ${meta.groupName}`);
+  if (groupSchedule) metaLineParts.push(`الميعاد: ${groupSchedule}`);
+  if (meta.monthLabel) metaLineParts.push(`الشهر: ${meta.monthLabel}`);
+
+  const customHTML = `<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${escapeHtml(meta.fileName ?? 'سجل التحصيل الشهري')}</title>
+<style>
+  @page {
+    size: A4 portrait;
+    margin: 14mm 10mm 16mm 10mm;
+    @bottom-right {
+      content: "صفحة " counter(page) " من " counter(pages);
+      font-family: 'Cairo', 'Tajawal', Tahoma, Arial, sans-serif;
+      font-size: 9px;
+      color: ${TEXT_MUTED};
+    }
+    @bottom-left {
+      content: "${escapeHtml(PLATFORM_NAME)}";
+      font-family: 'Cairo', 'Tajawal', Tahoma, Arial, sans-serif;
+      font-size: 9px;
+      color: ${TEXT_MUTED};
+    }
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  html, body {
+    font-family: 'Cairo', 'Tajawal', 'Segoe UI', Tahoma, Arial, sans-serif;
+    color: ${TEXT_DARK};
+    background: #ffffff;
+    line-height: 1.5;
+    font-size: 12px;
+  }
+  .report-header {
+    border-bottom: 3px solid ${GOLD};
+    padding-bottom: 12px;
+    margin-bottom: 14px;
+  }
+  .header-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 8px;
+  }
+  .header-brand {
+    font-size: 20px;
+    font-weight: 800;
+    color: ${NAVY};
+    letter-spacing: 0.3px;
+  }
+  .header-brand-sub {
+    font-size: 10px;
+    color: ${TEXT_MUTED};
+    margin-top: 2px;
+  }
+  .header-gen-date {
+    font-size: 10px;
+    color: ${TEXT_MUTED};
+    text-align: left;
+    line-height: 1.6;
+  }
+  .header-gen-date strong { color: ${NAVY}; }
+  .report-title {
+    font-size: 16px;
+    font-weight: 800;
+    color: ${NAVY};
+    padding: 4px 14px;
+    background: ${GOLD_LIGHT};
+    border-right: 4px solid ${GOLD};
+    border-radius: 4px;
+    display: inline-block;
+  }
+  .report-meta {
+    font-size: 11px;
+    color: ${TEXT_MUTED};
+    margin-top: 8px;
+    font-weight: 600;
+  }
+  .report-meta span { color: ${NAVY}; font-weight: 700; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+  }
+  thead { display: table-header-group; }
+  thead th {
+    background: ${NAVY};
+    color: #ffffff;
+    font-weight: 700;
+    font-size: 12px;
+    padding: 9px 6px;
+    border: 1.5px solid ${NAVY};
+    white-space: nowrap;
+  }
+  tbody td {
+    padding: 11px 6px;
+    font-size: 12px;
+    border: 1px solid ${BORDER};
+    vertical-align: middle;
+    height: 32px;
+  }
+  tbody tr { page-break-inside: avoid; break-inside: avoid; }
+  tbody tr:nth-child(even) { background: ${ZEBRA}; }
+  .blank-cell { color: transparent; }
+  .totals-row td {
+    background: ${GOLD_LIGHT};
+    font-weight: 800;
+    font-size: 12px;
+    border: 1px solid ${GOLD};
+    color: ${NAVY};
+    padding: 9px 6px;
+  }
+  .report-footer {
+    margin-top: 18px;
+    border-top: 1px solid ${BORDER};
+    padding-top: 8px;
+    font-size: 9px;
+    color: ${TEXT_MUTED};
+    text-align: center;
+  }
+  @media print { body { font-size: 12px; } .no-print { display: none !important; } }
+</style>
+</head>
+<body>
+<div class="report-header">
+  <div class="header-top">
+    <div>
+      <div class="header-brand">${PLATFORM_NAME}</div>
+      <div class="header-brand-sub">سجل التحصيل الشهري — للتعبئة اليدوية</div>
+    </div>
+    <div class="header-gen-date">
+      تاريخ الإصدار: <strong>${escapeHtml(formatDate(new Date()))}</strong><br>
+      الوقت: <strong>${new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}</strong>
+    </div>
+  </div>
+  <div class="report-title">سجل التحصيل الشهري</div>
+  <div class="report-meta">${metaLineParts.join('  •  ')}</div>
+</div>
+<table>
+  <thead><tr>${columns.map((col) => `<th style="${col.width ? `width:${col.width};` : ''}text-align:${col.align ?? 'right'};">${escapeHtml(col.label)}</th>`).join('')}</tr></thead>
+  <tbody>
+    ${rows.map((row, i) => {
+      const bg = i % 2 === 1 ? `background:${ZEBRA};` : '';
+      const cells = columns.map((col) => {
+        const val = row[col.key];
+        const isEmpty = val === '';
+        return `<td style="text-align:${col.align ?? 'right'};${bg}${isEmpty ? 'height:32px;' : ''}" class="${isEmpty ? 'blank-cell' : ''}">${escapeHtml(val ?? '')}</td>`;
+      }).join('');
+      return `<tr>${cells}</tr>`;
+    }).join('')}
+    <tr class="totals-row">
+      <td colspan="2" style="text-align:right;">${escapeHtml(totalsRow.name as string)}</td>
+      <td></td><td></td><td></td><td></td>
+    </tr>
+  </tbody>
+</table>
+<div class="report-footer">
+  ${PLATFORM_NAME} — تم إنشاء هذا السجل آلياً للطباعة والتعبئة اليدوية — ${escapeHtml(formatDate(new Date()))}
+</div>
+<script>
+(function() {
+  window.onload = function() {
+    setTimeout(function() { window.print(); }, 200);
+  };
+})();
+</script>
+</body>
+</html>`;
+
+  if (generating) return false;
+  generating = true;
+
+  try {
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'fixed';
+    iframe.style.left = '-9999px';
+    iframe.style.top = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = 'none';
+    document.body.appendChild(iframe);
+
+    await new Promise<void>((resolve) => {
+      const doc = iframe.contentDocument;
+      if (doc) {
+        doc.open();
+        doc.write(customHTML);
+        doc.close();
+        resolve();
+      } else {
+        resolve();
+      }
+    });
+
+    await new Promise<void>((resolve) => setTimeout(resolve, 300));
+
+    const cleanup = () => {
+      setTimeout(() => {
+        if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+      }, 1000);
+    };
+
+    try {
+      const cw = iframe.contentWindow;
+      if (cw) {
+        cw.focus();
+        cw.onafterprint = cleanup;
+      }
+      setTimeout(cleanup, 5000);
+    } catch {
+      cleanup();
+    }
+
+    return true;
+  } catch (err) {
+    console.error('[PDF Export] Collection sheet error:', err);
+    generating = false;
+    return false;
+  } finally {
+    setTimeout(() => { generating = false; }, 1500);
+  }
+}
+
 export async function exportBehaviorPDF(
   students: Student[],
   behavior: Record<string, { rating: string; note: string | null }[]>,

@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { useToast } from "../lib/toast";
 import { getArabicMonth, getTodayISO } from "../lib/dates";
+import { exportMonthlyCollectionSheetPDF } from "../lib/pdfExport";
+import { Printer } from "lucide-react";
 import type { AttendanceRecord, AttendanceStatus, GradeLevel, Group, Session, Student } from "../lib/types";
 
 const ZERO_UUID = "00000000-0000-0000-0000-000000000000";
@@ -243,6 +245,26 @@ export default function Attendance() {
     }
   };
 
+  const handleExportCollectionSheet = async () => {
+    if (!students.length || !selectedGroup) return;
+    const gradeLevel = gradeLevels.find((gl) => gl.id === selectedGrade);
+    const group = groups.find((g) => g.id === selectedGroup);
+    const enrichedStudents = students.map((s) => ({
+      ...s,
+      group_name: group?.name,
+      group_schedule: group?.schedule ?? null,
+      grade_name: gradeLevel?.name,
+      stage_name: undefined,
+    }));
+    await exportMonthlyCollectionSheetPDF(enrichedStudents, {
+      title: "سجل التحصيل الشهري",
+      monthLabel: getArabicMonth(new Date(sessionDate + "T00:00:00")),
+      groupName: group?.name,
+      gradeName: gradeLevel?.name,
+      fileName: "سجل_التحصيل_الشهري",
+    });
+  };
+
   const handleSetAll = async (status: AttendanceStatus) => {
     if (!students.length) return;
     for (const student of students) {
@@ -377,6 +399,13 @@ export default function Attendance() {
               ))}
             </div>
             <div className="flex gap-2">
+              <button
+                onClick={() => handleExportCollectionSheet()}
+                className="px-3 py-1.5 bg-amber-50 text-amber-700 rounded-lg text-sm font-semibold hover:bg-amber-100 transition flex items-center gap-1.5"
+              >
+                <Printer size={15} />
+                تصدير سجل التحصيل الشهري
+              </button>
               <button
                 onClick={() => handleSetAll("present")}
                 className="px-3 py-1.5 bg-success-50 text-success-700 rounded-lg text-sm font-semibold hover:bg-success-100 transition"
