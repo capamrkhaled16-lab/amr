@@ -2,42 +2,7 @@ import { useState, useEffect, useLayoutEffect, useCallback, useRef, Suspense, us
 import { useNavigate } from 'react-router-dom';
 import { lazyWithRetry } from '@/lib/lazyWithRetry';
 import { resetBodyScrollLock, lockBodyScroll, unlockBodyScroll } from '@/lib/bodyScrollLock';
-import {
-  Home,
-  Users,
-  UsersRound,
-  UserRound,
-  BarChart3,
-  Award,
-  ClipboardPenLine,
-  ClipboardList,
-  MessageCircle,
-  UserCog,
-  CreditCard,
-  Settings,
-  LogOut,
-  ChevronLeft,
-  GraduationCap,
-  ClipboardCheck,
-  CalendarDays,
-  BookOpen,
-  Trash2,
-  Menu,
-  X,
-  Maximize2,
-  Minimize2,
-  Globe,
-  Archive,
-  Wallet,
-  Calculator,
-  CalendarCheck,
-  Activity,
-  ShieldCheck,
-  Bot,
-  Brain,
-  FlaskConical,
-  Bell,
-} from 'lucide-react';
+import { Dome as Home, Users, UsersRound, UserRound, ChartBar as BarChart3, Award, ClipboardPenLine, ClipboardList, MessageCircle, UserCog, CreditCard, Settings, LogOut, ChevronLeft, GraduationCap, ClipboardCheck, CalendarDays, BookOpen, Trash as Trash2, Menu, X, Maximize2, Minimize2, Globe, Archive, Wallet, Calculator, CalendarCheck, Activity, ShieldCheck, Bot, Brain, FlaskConical, Bell, Printer } from 'lucide-react';
 import FloatingActionButton from '@/components/ui/FloatingActionButton';
 import { useAuth } from '@/context/AuthContext';
 import { useMonth } from '@/context/MonthContext';
@@ -53,6 +18,7 @@ import {
 import { getCached, isCacheFresh } from '@/lib/cache';
 import { useEventRefresh } from '@/hooks/useEventRefresh';
 import { formatCurrency } from '@/lib/format';
+import { exportMonthlyCollectionSheetPDF } from '@/lib/pdfExport';
 import { supabase } from '@/lib/supabase';
 import { checkMonthReset } from '@/lib/monthReset';
 import { computeFinancialSummary, filterStudentsByHierarchy } from '@/lib/financeCalc';
@@ -61,7 +27,7 @@ import { usePersistedState, getPersistedId, setPersistedId } from '@/hooks/usePe
 import { useMissingDataDetector } from '@/hooks/useMissingDataDetector';
 import { NOTIFICATION_NAVIGATE_EVENT, type NotificationActionTarget } from '@/context/NotificationContext';
 
-type EnrichedStudent = Student & { group_name?: string; grade_name?: string; stage_name?: string };
+type EnrichedStudent = Student & { group_name?: string; group_schedule?: string | null; grade_name?: string; stage_name?: string };
 import Navbar from '@/components/ui/Navbar';
 import Watermark from '@/components/ui/Watermark';
 import Modal from '@/components/ui/Modal';
@@ -217,6 +183,7 @@ export default function DashboardPage() {
   const [notifFocusStudentId, setNotifFocusStudentId] = useState<string | null>(null);
   const [commandBarOpen, setCommandBarOpen] = useState(false);
   const [taskCenterOpen, setTaskCenterOpen] = useState(false);
+  const [collectionExporting, setCollectionExporting] = useState(false);
 
   const loadStages = useCallback(async () => {
     try {
@@ -275,6 +242,26 @@ export default function DashboardPage() {
     const timeout = setTimeout(() => setKpiLoading(false), 3000);
     return () => clearTimeout(timeout);
   }, [kpiLoading]);
+
+  const handleMonthlyCollectionExport = async () => {
+    if (collectionExporting) return;
+    if (allStudents.length === 0) {
+      window.alert('لا يوجد طلاب نشطون للتصدير');
+      return;
+    }
+
+    setCollectionExporting(true);
+    try {
+      const exported = await exportMonthlyCollectionSheetPDF(allStudents, {
+        title: 'سجل التحصيل الشهري',
+        monthLabel: monthKey,
+        fileName: 'سجل_التحصيل_الشهري',
+      });
+      if (!exported) window.alert('تعذر إنشاء سجل التحصيل الشهري');
+    } finally {
+      setCollectionExporting(false);
+    }
+  };
 
   useEffect(() => {
     checkMonthReset();
@@ -820,6 +807,19 @@ export default function DashboardPage() {
               )}
             </div>
           )}
+
+          <div className="px-3 pb-2">
+            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider px-3 mb-1">التقارير</p>
+            <button
+              type="button"
+              onClick={handleMonthlyCollectionExport}
+              disabled={collectionExporting}
+              className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-[13px] font-semibold text-amber-300 hover:text-amber-200 hover:bg-amber-500/10 transition-all premium-interactive disabled:opacity-60 disabled:cursor-wait"
+            >
+              <span className="flex-shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-amber-400"><Printer size={16} /></span>
+              <span className="truncate">{collectionExporting ? 'جاري تجهيز السجل...' : 'سجل التحصيل الشهري (PDF)'}</span>
+            </button>
+          </div>
 
           {/* Nav items */}
           <nav className="flex-1 overflow-y-auto p-3 space-y-0.5 modal-body premium-scroll">
