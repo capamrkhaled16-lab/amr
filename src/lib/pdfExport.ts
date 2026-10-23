@@ -952,7 +952,7 @@ export async function exportMonthlyCollectionSheetPDF(
   const groups = new Map<string, { students: EnrichedStudent[]; stage: string; grade: string; name: string; schedule: string }>();
   for (const student of students) {
     const groupName = student.group_name ?? 'غير محدد';
-    const groupKey = `${student.stage_name ?? ''}|${student.grade_name ?? ''}|${groupName}|${student.group_schedule ?? ''}`;
+    const groupKey = `${student.group_id ?? ''}|${student.stage_name ?? ''}|${student.grade_name ?? ''}|${groupName}|${student.group_schedule ?? ''}`;
     const existing = groups.get(groupKey);
     if (existing) {
       existing.students.push(student);
@@ -978,8 +978,12 @@ export async function exportMonthlyCollectionSheetPDF(
   ];
 
   const generatedAt = new Date();
-  const groupSections = Array.from(groups.values()).map((group) => {
-    const rows = group.students.map((student, index) => ({ idx: index + 1, name: student.name, paid: '', remaining: '', day: '', date: '', receiver: '' }));
+  const groupSections = Array.from(groups.values())
+    .sort((left, right) => `${left.stage}|${left.grade}|${left.name}|${left.schedule}`.localeCompare(`${right.stage}|${right.grade}|${right.name}|${right.schedule}`, 'ar'))
+    .map((group) => {
+    const rows = [...group.students]
+      .sort((left, right) => left.name.localeCompare(right.name, 'ar'))
+      .map((student, index) => ({ idx: index + 1, name: student.name, paid: '', remaining: '', day: '', date: '', receiver: '' }));
     const header = `<div class="group-header"><div><span>المرحلة</span><strong>${escapeHtml(group.stage)}</strong></div><div><span>الصف</span><strong>${escapeHtml(group.grade)}</strong></div><div><span>المجموعة</span><strong>${escapeHtml(group.name)}</strong></div><div><span>الميعاد</span><strong>${escapeHtml(group.schedule)}</strong></div></div>`;
     const table = `<table><thead><tr>${columns.map((column) => `<th style="${column.width ? `width:${column.width};` : ''}text-align:${column.align ?? 'right'};">${escapeHtml(column.label)}</th>`).join('')}</tr></thead><tbody>${rows.map((row, index) => `<tr>${columns.map((column) => `<td style="text-align:${column.align ?? 'right'};${index % 2 === 1 ? `background:${ZEBRA};` : ''}">${escapeHtml(row[column.key as keyof typeof row] ?? '')}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
     return `<section class="group-section">${header}${table}</section>`;
