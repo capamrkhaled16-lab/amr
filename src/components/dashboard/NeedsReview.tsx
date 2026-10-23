@@ -15,6 +15,7 @@ import { fetchReviewItems, fetchAbsentSessions, type ReviewItem, type AbsentSess
 import { StudentViewModal360 } from '@/components/ui/StudentViewModal360';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { formatArabicDate, openWhatsAppURL } from '@/lib/format';
+import { useMonth } from '@/context/MonthContext';
 import type { Student } from '@/lib/types';
 
 type EnrichedStudent = Student & { group_name?: string; grade_name?: string; stage_name?: string };
@@ -32,6 +33,7 @@ const TYPE_META: Record<ReviewItem['type'], { icon: typeof AlertCircle; color: s
 };
 
 export default function NeedsReview({ allStudents }: Props) {
+  const { monthKey } = useMonth();
   const [items, setItems] = useState<ReviewItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -47,14 +49,14 @@ export default function NeedsReview({ allStudents }: Props) {
     setLoading(true);
     setError(false);
     try {
-      const data = await fetchReviewItems(allStudents);
+      const data = await fetchReviewItems(allStudents, monthKey);
       setItems(data);
     } catch {
       setError(true);
     } finally {
       setLoading(false);
     }
-  }, [allStudents]);
+  }, [allStudents, monthKey]);
 
   useEffect(() => {
     void load();
@@ -95,7 +97,7 @@ export default function NeedsReview({ allStudents }: Props) {
     setAbsentSessions([]);
     setAbsenceLoading(true);
     try {
-      const sessions = await fetchAbsentSessions(item.studentId);
+      const sessions = await fetchAbsentSessions(item.studentId, monthKey);
       setAbsentSessions(sessions);
     } catch {
       setAbsentSessions([]);

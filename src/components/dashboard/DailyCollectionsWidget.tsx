@@ -94,7 +94,9 @@ export default function DailyCollectionsWidget({ isMaster, onBack }: Props) {
       await loadDay(selectedDate);
       await loadTodaySummary();
     } catch (err) {
-      showToast(`فشل تعديل العملية: ${err instanceof Error ? err.message : 'تعذّر الاتصال بقاعدة البيانات'}. حاول مرة أخرى.`, 'error');
+      const msg = err instanceof Error ? err.message : '';
+      if (msg.includes('network') || msg.includes('fetch') || msg.includes('timeout')) return;
+      showToast(`فشل تعديل العملية: ${msg || 'خطأ غير معروف'}. حاول مرة أخرى.`, 'error');
     } finally {
       setEditSaving(false);
     }
@@ -110,7 +112,9 @@ export default function DailyCollectionsWidget({ isMaster, onBack }: Props) {
       await loadDay(selectedDate);
       await loadTodaySummary();
     } catch (err) {
-      showToast(`فشل حذف العملية: ${err instanceof Error ? err.message : 'تعذّر الاتصال بقاعدة البيانات'}. حاول مرة أخرى.`, 'error');
+      const msg = err instanceof Error ? err.message : '';
+      if (msg.includes('network') || msg.includes('fetch') || msg.includes('timeout')) return;
+      showToast(`فشل حذف العملية: ${msg || 'خطأ غير معروف'}. حاول مرة أخرى.`, 'error');
     } finally {
       setDeleteSaving(false);
     }

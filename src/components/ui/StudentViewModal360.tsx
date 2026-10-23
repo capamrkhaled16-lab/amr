@@ -5,6 +5,7 @@ import { X, CircleCheck as CheckCircle2, Clock, Circle as XCircle, Wallet, Gradu
 import { formatCurrency, formatArabicDate } from '@/lib/format';
 import { supabase } from '@/lib/supabase';
 import { monthStart, nextMonthStart, currentMonthKey } from '@/lib/data';
+import { getCached, setCached } from '@/lib/cache';
 import { fetchStudentMonitoringData, fetchPerformanceTrends, getActivityBadge, type StudentMonitorData, type PerformanceTrend } from '@/lib/studentMonitoring';
 import type { Student, AttendanceRecord, CenterGrade, HomeworkStatus, BehaviorEval, CenterExam } from '@/lib/types';
 import { Skeleton } from '@/components/ui/Skeleton';
@@ -81,7 +82,15 @@ export function StudentViewModal360({ open, student, onClose }: Props) {
     if (!student) return;
     const studentId = student.id;
     const reqId = ++requestIdRef.current;
-    setLoading(true);
+    // Show cached data instantly if available — zero blank screen
+    const cacheKey = `student360_${studentId}`;
+    const cachedData = getCached<Student360Data>(cacheKey);
+    if (cachedData) {
+      setData(cachedData);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
     try {
       const mStart = monthStart();
       const mEnd = nextMonthStart();
@@ -165,7 +174,7 @@ export function StudentViewModal360({ open, student, onClose }: Props) {
       }
 
       if (reqId !== requestIdRef.current) return;
-      setData({
+      const freshData: Student360Data = {
         attendance: (attRes.data ?? []) as AttendanceRecord[],
         grades: enrichedGrades,
         homework: (hwRes.data ?? []) as HomeworkStatus[],
@@ -173,10 +182,11 @@ export function StudentViewModal360({ open, student, onClose }: Props) {
         transfers,
         monitor: monitorMap.get(studentId) ?? null,
         trend: trendMap.get(studentId) ?? null,
-      });
+      };
+      setData(freshData);
+      setCached(cacheKey, freshData, 120_000);
     } catch {
-      // Preserve last valid data on transient fetch failure —
-      // clearing data here makes the modal appear empty on network blips.
+      // Silent: keep cached/last valid data on transient fetch failure.
     } finally {
       if (reqId === requestIdRef.current) setLoading(false);
     }
@@ -189,11 +199,13 @@ export function StudentViewModal360({ open, student, onClose }: Props) {
       // for a student we've never seen before.
       if (studentIdRef.current !== student.id) {
         studentIdRef.current = student.id;
-        // Don't clear data immediately — keep showing previous data while loading
-        // to avoid blank dark screen flicker. Only show skeleton if no data yet.
       }
-      // Load payment status from actual monthly transactions
-      setMonthPaid(null);
+      // Restore cached payment amount for instant display
+      const payCacheKey = `student_pay_${student.id}_${currentMonthKey()}`;
+      const cachedPay = getCached<number>(payCacheKey);
+      if (cachedPay != null) setMonthPaid(cachedPay);
+      else setMonthPaid(null);
+      void loadData();
       const mk = currentMonthKey();
       supabase
         .from('payments')
@@ -206,30 +218,29 @@ export function StudentViewModal360({ open, student, onClose }: Props) {
         .then(({ data: payData }) => {
           const total = (payData ?? []).reduce((s, p) => s + Number((p as { amount: number }).amount ?? 0), 0);
           setMonthPaid(total);
+          setCached(payCacheKey, total, 120_000);
         })
-        .catch(() => { /* silent — keep null, shows fallback */ });
-      void loadData();
+        .catch(() => { /* silent — keep cached amount on network failure */ });
     }
   }, [open, student?.id, loadData]);
 
   if (!mounted) return null;
 
-  const displayPaid = monthPaid ?? 0;
-  const remaining = student ? Math.max(0, (student.total_fees ?? 0) - displayPaid) : 0;
-  const fullyPaid = student
-    ? student.is_exempt
-      ? true
-      : monthPaid !== null && remaining <= 0 && displayPaid > 0
-    : false;
-  const hasNotPaid = monthPaid !== null && displayPaid === 0 && !student?.is_exempt;
+  // Accurate payment badge: use actual payment transactions for active month
+  const displayPaid = monthPaid != null ? monthPaid : (student?.paid_fees ?? 0);
+  const totalFees = student?.total_fees ?? 0;
+  const remaining = student ? Math.max(0, totalFees - displayPaid) : 0;
+  const hasQueriedPayments = monthPaid != null;
+  const fullyPaid = student ? (hasQueriedPayments ? displayPaid >= totalFees && totalFees > 0 : remaining <= 0) || student.is_exempt : false;
+  const isPartial = hasQueriedPayments && displayPaid > 0 && displayPaid < totalFees;
   const statusLabel = student
     ? student.is_exempt
       ? 'معفي من الرسوم'
       : fullyPaid
         ? 'تم الدفع'
-        : hasNotPaid
-          ? 'لم يدفع'
-          : 'مسدد جزئي'
+        : isPartial
+          ? 'مسدد جزئي'
+          : 'لم يدفع'
     : '';
 
   const activityBadge = data?.monitor ? getActivityBadge(data.monitor.activityLevel) : null;

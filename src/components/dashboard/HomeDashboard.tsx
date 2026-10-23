@@ -328,7 +328,7 @@ export default function HomeDashboard({
       </div>
 
       {/* Hall of Fame */}
-      <HallOfFame groupId={groupId} onViewStudent={setViewTarget} />
+      <HallOfFame groupId={groupId} onViewStudent={setViewTarget} onNavigate={onNavigate} />
 
       {/* Drill-down modal */}
       <DrillDownModal
