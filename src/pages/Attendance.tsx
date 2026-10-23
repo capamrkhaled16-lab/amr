@@ -247,20 +247,48 @@ export default function Attendance() {
 
   const handleExportCollectionSheet = async () => {
     if (!students.length || !selectedGroup) return;
-    const gradeLevel = gradeLevels.find((gl) => gl.id === selectedGrade);
-    const group = groups.find((g) => g.id === selectedGroup);
-    const enrichedStudents = students.map((s) => ({
-      ...s,
-      group_name: group?.name,
-      group_schedule: group?.schedule ?? null,
-      grade_name: gradeLevel?.name,
-      stage_name: undefined,
-    }));
+
+    const { data: groupRows, error: groupsError } = await supabase
+      .from("groups")
+      .select("id, name, schedule, grade_level:grade_levels(name, stage:academic_stages(name))")
+      .order("name");
+    if (groupsError || !groupRows?.length) {
+      showWarning("لم يتم تحميل المجموعات للتصدير");
+      return;
+    }
+
+    const groupIds = groupRows.map((group) => group.id as string);
+    const { data: studentRows, error: studentsError } = await supabase
+      .from("students")
+      .select("*, group_id")
+      .in("group_id", groupIds)
+      .eq("status", "active")
+      .eq("is_deleted", false)
+      .order("name");
+    if (studentsError || !studentRows?.length) {
+      showWarning("لا يوجد طلاب نشطون للتصدير");
+      return;
+    }
+
+    const groupLookup = new Map(groupRows.map((group) => [group.id as string, group]));
+    const enrichedStudents = (studentRows as Student[]).map((student) => {
+      const group = groupLookup.get(student.group_id ?? "") as {
+        name?: string;
+        schedule?: string | null;
+        grade_level?: { name?: string; stage?: { name?: string } | null } | null;
+      } | undefined;
+      return {
+        ...student,
+        group_name: group?.name,
+        group_schedule: group?.schedule ?? null,
+        grade_name: group?.grade_level?.name,
+        stage_name: group?.grade_level?.stage?.name,
+      };
+    });
+
     await exportMonthlyCollectionSheetPDF(enrichedStudents, {
       title: "سجل التحصيل الشهري",
       monthLabel: getArabicMonth(new Date(sessionDate + "T00:00:00")),
-      groupName: group?.name,
-      gradeName: gradeLevel?.name,
       fileName: "سجل_التحصيل_الشهري",
     });
   };
