@@ -2,8 +2,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { useToast } from "../lib/toast";
 import { getArabicMonth, getTodayISO } from "../lib/dates";
-import { exportMonthlyCollectionSheetPDF } from "../lib/pdfExport";
-import { Printer } from "lucide-react";
 import type { AttendanceRecord, AttendanceStatus, GradeLevel, Group, Session, Student } from "../lib/types";
 
 const ZERO_UUID = "00000000-0000-0000-0000-000000000000";
@@ -245,54 +243,6 @@ export default function Attendance() {
     }
   };
 
-  const handleExportCollectionSheet = async () => {
-    if (!students.length || !selectedGroup) return;
-
-    const { data: groupRows, error: groupsError } = await supabase
-      .from("groups")
-      .select("id, name, schedule, grade_level:grade_levels(name, stage:academic_stages(name))")
-      .order("name");
-    if (groupsError || !groupRows?.length) {
-      showWarning("لم يتم تحميل المجموعات للتصدير");
-      return;
-    }
-
-    const groupIds = groupRows.map((group) => group.id as string);
-    const { data: studentRows, error: studentsError } = await supabase
-      .from("students")
-      .select("*, group_id")
-      .in("group_id", groupIds)
-      .eq("status", "active")
-      .eq("is_deleted", false)
-      .order("name");
-    if (studentsError || !studentRows?.length) {
-      showWarning("لا يوجد طلاب نشطون للتصدير");
-      return;
-    }
-
-    const groupLookup = new Map(groupRows.map((group) => [group.id as string, group]));
-    const enrichedStudents = (studentRows as Student[]).map((student) => {
-      const group = groupLookup.get(student.group_id ?? "") as {
-        name?: string;
-        schedule?: string | null;
-        grade_level?: { name?: string; stage?: { name?: string } | null } | null;
-      } | undefined;
-      return {
-        ...student,
-        group_name: group?.name,
-        group_schedule: group?.schedule ?? null,
-        grade_name: group?.grade_level?.name,
-        stage_name: group?.grade_level?.stage?.name,
-      };
-    });
-
-    await exportMonthlyCollectionSheetPDF(enrichedStudents, {
-      title: "سجل التحصيل الشهري",
-      monthLabel: getArabicMonth(new Date(sessionDate + "T00:00:00")),
-      fileName: "سجل_التحصيل_الشهري",
-    });
-  };
-
   const handleSetAll = async (status: AttendanceStatus) => {
     if (!students.length) return;
     for (const student of students) {
@@ -427,13 +377,6 @@ export default function Attendance() {
               ))}
             </div>
             <div className="flex gap-2">
-              <button
-                onClick={() => handleExportCollectionSheet()}
-                className="px-3 py-1.5 bg-amber-50 text-amber-700 rounded-lg text-sm font-semibold hover:bg-amber-100 transition flex items-center gap-1.5"
-              >
-                <Printer size={15} />
-                تصدير سجل التحصيل الشهري
-              </button>
               <button
                 onClick={() => handleSetAll("present")}
                 className="px-3 py-1.5 bg-success-50 text-success-700 rounded-lg text-sm font-semibold hover:bg-success-100 transition"

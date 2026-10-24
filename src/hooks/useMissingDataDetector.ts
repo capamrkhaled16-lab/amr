@@ -357,18 +357,11 @@ export function useMissingDataDetector({ onNavigate: _onNavigate }: MissingDataO
       // =================================================================
       const allStudentIds = students.map((s) => s.id);
       if (allStudentIds.length > 0) {
-        // Scope absence counting to the current calendar month only
-        const { currentMonthKey, monthStart, nextMonthStart } = await import('@/lib/data');
-        const mk = currentMonthKey();
-        const mStart = monthStart(mk);
-        const mEnd = nextMonthStart(mk);
         const recentAttRes = await supabase
           .from('attendance')
           .select('student_id, status, attendance_date')
           .in('student_id', allStudentIds)
           .neq('status', 'unrecorded')
-          .gte('attendance_date', mStart)
-          .lt('attendance_date', mEnd)
           .order('attendance_date', { ascending: false })
           .limit(500);
 

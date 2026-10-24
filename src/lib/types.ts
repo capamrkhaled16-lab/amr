@@ -42,7 +42,6 @@ export interface Student {
   fee_mode: string;
   pro_rata_sessions: number;
   join_month_key: string | null;
-  fee_locked: boolean;
 }
 
 export interface Session {

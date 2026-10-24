@@ -30,7 +30,6 @@ export async function resolvePaymentSnapshot(
   thisPaymentAmount: number,
   paymentDate?: string,
   receiptNumber?: string,
-  collectorName?: string,
 ): Promise<PaymentSnapshot | null> {
   const { data: student } = await supabase
     .from('students')
@@ -107,7 +106,7 @@ export async function resolvePaymentSnapshot(
     paymentDate: paymentDate ?? new Date().toISOString().slice(0, 10),
     recordedAt: new Date().toISOString(),
     receiptNumber,
-    collectorName,
+    collectorName: undefined,
     groupName: s.group?.name,
     gradeName: s.group?.grade_level?.name,
     stageName: s.group?.grade_level?.stage?.name,

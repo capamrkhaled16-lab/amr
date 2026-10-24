@@ -162,9 +162,7 @@ export default function EndOfDayAudit({ allGroups }: { allGroups: Group[] }) {
       setDismissedIds((prev) => new Set(prev).add(student.id));
       showToast(`تم تسجيل ${status === 'present' ? 'حضور' : 'غياب'} ${student.name}`, 'success');
     } catch (err) {
-      const msg = err instanceof Error ? err.message : '';
-      if (msg.includes('network') || msg.includes('fetch') || msg.includes('timeout')) return;
-      showToast(`فشل تسجيل الحضور: ${msg || 'خطأ غير معروف'}. حاول مرة أخرى.`, 'error');
+      showToast(`فشل تسجيل الحضور: ${err instanceof Error ? err.message : 'تعذّر الاتصال بقاعدة البيانات'}. حاول مرة أخرى.`, 'error');
     }
   }
 

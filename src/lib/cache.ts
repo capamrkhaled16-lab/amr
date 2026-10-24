@@ -12,8 +12,8 @@
  */
 
 const PREFIX = 'cache_';
-const DEFAULT_TTL = 120_000; // 2 minutes — longer persistence across app restarts
-const LONG_TTL = 600_000; // 10 minutes for reference data
+const DEFAULT_TTL = 60_000; // 1 minute
+const LONG_TTL = 300_000; // 5 minutes for reference data
 
 type CacheEntry<T> = {
   data: T;

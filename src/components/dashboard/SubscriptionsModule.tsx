@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { CalendarDays, CircleCheck as CheckCircle2, TriangleAlert as AlertTriangle, Clock, Archive, Plus, Factory as History, TrendingDown, DollarSign, Percent, Printer, Receipt, BookOpen, Send, Eye } from 'lucide-react';
+import { CalendarDays, CheckCircle2, AlertTriangle, Clock, Archive, Plus, History, TrendingDown, DollarSign, Percent, Printer, Receipt, BookOpen, Send, Eye } from 'lucide-react';
 import StudentViewModal from '@/components/ui/StudentViewModal';
 import type { Student, MonthlySubscription } from '@/lib/types';
 import {
@@ -17,12 +17,12 @@ import {
 import { fetchGradeLevelBaseSubscription } from '@/lib/data';
 import { formatCurrency, formatArabicDate, normalizePhoneForWhatsApp } from '@/lib/format';
 import { resolvePaymentSnapshot, openPaymentWhatsApp } from '@/lib/whatsappPayment';
+import { ARABIC_MONTHS } from '@/lib/constants';
 import { buildReceiptHTML, printDocument } from '@/lib/export';
 import { invalidateByPrefix } from '@/lib/cache';
 import { useAuth } from '@/context/AuthContext';
 import { useMonth } from '@/context/MonthContext';
 import { useSettings } from '@/context/SettingsContext';
-import { useToast } from '@/lib/toast';
 import { supabase } from '@/lib/supabase';
 import Button from '@/components/ui/Button';
 import Modal from '@/components/ui/Modal';
@@ -61,7 +61,6 @@ export default function SubscriptionsModule({ groupId, gradeLevelId }: Props) {
 
   const actorName = isMaster ? 'المدرس' : assistant?.display_name ?? assistant?.username ?? 'مساعد';
   const { settings } = useSettings();
-  const toast = useToast();
 
   const load = useCallback(async () => {
     try {
@@ -229,19 +228,18 @@ export default function SubscriptionsModule({ groupId, gradeLevelId }: Props) {
 
   async function sendReceiptWhatsApp(r: { receiptNumber: string; studentName: string; amount: number; date: string; month?: string; note?: string | null; recordedBy?: string | null; groupName?: string; gradeName?: string; stageName?: string; baseSubscription?: number; studentId?: string }) {
     if (!r.studentId) {
-      toast.showError('تعذّر تحديد الطالب');
+      showToast('تعذّر تحديد الطالب', 'error');
       return;
     }
     const snapshot = await resolvePaymentSnapshot(
       r.studentId,
-      monthKey,
+      r.month ? `${r.month.split(' ')[1]}-${String(ARABIC_MONTHS.indexOf(r.month.split(' ')[0]) + 1).padStart(2, '0')}` : monthKey,
       r.amount,
       r.date,
       r.receiptNumber,
-      r.recordedBy ?? actorName,
     );
     if (!snapshot) {
-      toast.showError('تعذّر جلب بيانات الدفع');
+      showToast('تعذّر جلب بيانات الدفع', 'error');
       return;
     }
     openPaymentWhatsApp(snapshot, settings.platform_name);

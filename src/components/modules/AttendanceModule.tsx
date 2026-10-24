@@ -1,7 +1,33 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { WifiOff, Info } from 'lucide-react';
-import { Users, DollarSign, TriangleAlert as AlertTriangle, Plus, Trash as Trash2, Archive, Clock, Calendar, Check, CheckCheck, X, Factory as History, MessageSquare, Clock3, CircleCheck as CheckCircle2, Circle as XCircle, Download, Printer, FileText, Image, Loader as Loader2, MessageCircle, Phone, Save, Eye } from 'lucide-react';
+import {
+  Users,
+  DollarSign,
+  AlertTriangle,
+  Plus,
+  Trash2,
+  Archive,
+  Clock,
+  Calendar,
+  Check,
+  CheckCheck,
+  X,
+  History,
+  MessageSquare,
+  Clock3,
+  CheckCircle2,
+  XCircle,
+  Download,
+  Printer,
+  FileText,
+  Image,
+  Loader2,
+  MessageCircle,
+  Phone,
+  Save,
+  Eye,
+} from 'lucide-react';
 import { useToast } from '@/components/ui/Toast';
 import type { ToastType } from '@/components/ui/Toast';
 import { useLocation } from 'react-router-dom';
@@ -37,7 +63,6 @@ import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import StudentViewModal360 from '@/components/ui/StudentViewModal360';
 import { useMonth } from '@/context/MonthContext';
 import AttendanceRingChart from '@/components/ui/AttendanceRingChart';
-import { useEventRefresh } from '@/hooks/useEventRefresh';
 
 type AttendanceModuleProps = {
   groupId: string;
@@ -296,18 +321,6 @@ export default function AttendanceModule({ groupId, students, groupName, stageNa
     return () => clearTimeout(timeout);
   }, [loadSessions, loadArchives, loadGroupStats]);
 
-  // Instant cross-screen sync: re-fetch sessions/stats when other modules change data
-  const attendanceLoadRef = useRef(loadSessions);
-  const attendanceStatsRef = useRef(loadGroupStats);
-  attendanceLoadRef.current = loadSessions;
-  attendanceStatsRef.current = loadGroupStats;
-  useEventRefresh(['sessions:changed', 'attendance:changed', 'students:changed'], () => {
-    if (isMounted.current) {
-      void attendanceLoadRef.current();
-      void attendanceStatsRef.current();
-    }
-  });
-
   useEffect(() => {
     supabase.from('groups').select('schedule').eq('id', groupId).maybeSingle().then(({ data }) => {
       if (data?.schedule) setGroupSchedule(data.schedule as string);
@@ -494,7 +507,7 @@ export default function AttendanceModule({ groupId, students, groupName, stageNa
         setRecords((prev) => ({ ...prev, [student.id]: { ...existing, status: prevStatus } }));
         const msg = err instanceof Error ? err.message : '';
         if (msg.includes('network') || msg.includes('fetch')) {
-          // Silent — optimistic UI already shows the change; background retry will sync
+          showToast('تعذّر الاتصال بالخادم — تحقق من الإنترنت وحاول مرة أخرى', 'error');
         } else if (msg.includes('duplicate') || msg.includes('unique')) {
           showToast('يوجد سجل مكرر — يتم تحديث البيانات تلقائياً', 'error');
           void loadRecords();
@@ -538,7 +551,7 @@ export default function AttendanceModule({ groupId, students, groupName, stageNa
       if (!suppressToast) {
         const msg = err instanceof Error ? err.message : '';
         if (msg.includes('network') || msg.includes('fetch')) {
-          // Silent — optimistic UI already shows the change; background retry will sync
+          showToast('تعذّر الاتصال بالخادم — تحقق من الإنترنت وحاول مرة أخرى', 'error');
         } else if (msg.includes('duplicate') || msg.includes('unique')) {
           showToast('يوجد سجل مكرر لهذا الطالب في هذه الحصة — يتم تحديث البيانات', 'error');
           void loadRecords();

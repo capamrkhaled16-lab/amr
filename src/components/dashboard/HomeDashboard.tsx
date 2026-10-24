@@ -44,7 +44,6 @@ import { Skeleton } from '@/components/ui/Skeleton';
 import { useMonth } from '@/context/MonthContext';
 import { PDFButton } from '@/components/ui/PDFButton';
 import { exportDashboardSummaryPDF, exportStudentListPDF, exportMonthlyPaymentSummaryPDF } from '@/lib/pdfExport';
-import AnalyticsCharts from '@/components/dashboard/AnalyticsCharts';
 
 function getCurrentMonthLabel(): string {
   const d = new Date();
@@ -280,20 +279,6 @@ export default function HomeDashboard({
         )}
       </AnimatePresence>
 
-      {/* Analytics charts — only for master view with financial data */}
-      {isMaster && (
-        <AnalyticsCharts
-          allStudents={allStudents}
-          monthlyPaidMap={monthlyPaidMap}
-          fullyPaid={fullyPaid}
-          partialPaid={partialPaid}
-          unpaidCount={unpaidCount}
-          totalCollected={totalCollected}
-          totalRemaining={totalRemaining}
-          totalStudents={totalStudents}
-        />
-      )}
-
       {/* Quick access cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
         <QuickCard
@@ -328,7 +313,7 @@ export default function HomeDashboard({
       </div>
 
       {/* Hall of Fame */}
-      <HallOfFame groupId={groupId} onViewStudent={setViewTarget} onNavigate={onNavigate} />
+      <HallOfFame groupId={groupId} onViewStudent={setViewTarget} />
 
       {/* Drill-down modal */}
       <DrillDownModal

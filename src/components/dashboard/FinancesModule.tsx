@@ -606,11 +606,9 @@ export default function FinancesModule({ focusStageId, focusGradeId, focusGroupI
     try {
       await deleteExpense(target.id);
       showToast(`تم حذف مصروف (${EXPENSE_CATEGORIES.find((c) => c.id === target.category)?.label ?? target.category}) بقيمة ${formatCurrency(target.amount)} ج.م — بواسطة ${actorName}`, 'success');
-    } catch (err) {
+    } catch {
       setExpenses(prevExpenses);
-      const msg = err instanceof Error ? err.message : '';
-      if (msg.includes('network') || msg.includes('fetch') || msg.includes('timeout')) return;
-      showToast(`فشل حذف المصروف: ${msg || 'خطأ غير معروف'}. تمت استعادة المصروف.`, 'error');
+      showToast(`فشل حذف المصروف: ${err instanceof Error ? err.message : 'تعذّر الاتصال بقاعدة البيانات'}. تمت استعادة المصروف.`, 'error');
     }
   }
 
@@ -752,12 +750,10 @@ export default function FinancesModule({ focusStageId, focusGradeId, focusGroupI
       }
       const delStudent = students.find((s) => s.id === target.student_id);
       showToast(`تم حذف دفعة بقيمة ${formatCurrency(target.amount ?? 0)} ج.م للطالب ${delStudent?.name ?? ''} — بواسطة ${actorName}`, 'success');
-    } catch (err) {
+    } catch {
       setMonthlyPaidMap((prev) => { const m = new Map(prev); m.set(target.student_id, (m.get(target.student_id) ?? 0) + (target.amount ?? 0)); return m; });
       setPayments((prev) => [...prev, target].sort((a, b) => b.payment_date.localeCompare(a.payment_date)));
-      const msg = err instanceof Error ? err.message : '';
-      if (msg.includes('network') || msg.includes('fetch') || msg.includes('timeout')) return;
-      showToast(`فشل حذف الدفعة: ${msg || 'خطأ غير معروف'}. تمت استعادة الدفعة.`, 'error');
+      showToast(`فشل حذف الدفعة: ${err instanceof Error ? err.message : 'تعذّر الاتصال بقاعدة البيانات'}. تمت استعادة الدفعة.`, 'error');
     } finally {
       setDeletePayLoading(false);
     }
@@ -786,11 +782,9 @@ export default function FinancesModule({ focusStageId, focusGradeId, focusGroupI
       loadStudents();
       const feeStudent = students.find((s) => s.id === studentId);
       showToast(`تم تعديل المصاريف للطالب ${feeStudent?.name ?? ''} إلى ${formatCurrency(val)} ج.م — بواسطة ${actorName}`, 'success');
-    } catch (err) {
+    } catch {
       setStudents(prevStudents);
-      const msg = err instanceof Error ? err.message : '';
-      if (msg.includes('network') || msg.includes('fetch') || msg.includes('timeout')) return;
-      showToast(`فشل حفظ المصاريف: ${msg || 'خطأ غير معروف'}. تمت استعادة القيمة السابقة.`, 'error');
+      showToast(`فشل حفظ المصاريف: ${err instanceof Error ? err.message : 'تعذّر الاتصال بقاعدة البيانات'}. تمت استعادة القيمة السابقة.`, 'error');
     }
   }
 
@@ -806,11 +800,9 @@ export default function FinancesModule({ focusStageId, focusGradeId, focusGroupI
       loadStudents();
       const monthLabel = getMonthLabel(monthKey);
       showToast(`${wasExempt ? 'تم إلغاء إعفاء' : 'تم تفعيل إعفاء'} الطالب ${target.name} لشهر ${monthLabel} — بواسطة ${actorName}`, 'success');
-    } catch (err) {
+    } catch {
       setMonthExemptMap((prev) => { const m = new Map(prev); if (wasExempt) m.set(target.id, true); else m.delete(target.id); return m; });
-      const msg = err instanceof Error ? err.message : '';
-      if (msg.includes('network') || msg.includes('fetch') || msg.includes('timeout')) return;
-      showToast(`فشل تحديث الإعفاء: ${msg || 'خطأ غير معروف'}. تمت استعادة الحالة السابقة.`, 'error');
+      showToast(`فشل تحديث الإعفاء: ${err instanceof Error ? err.message : 'تعذّر الاتصال بقاعدة البيانات'}. تمت استعادة الحالة السابقة.`, 'error');
     }
   }
 
@@ -865,11 +857,9 @@ export default function FinancesModule({ focusStageId, focusGradeId, focusGroupI
       loadStudents();
       const discLabel = mode === 'percent' ? `خصم ${pct}%` : mode === 'fixed' ? `خصم ${formatCurrency(fixedAmt)} ج.م` : 'إلغاء الخصم';
       showToast(`${discLabel} للطالب ${target.name} — بواسطة ${actorName}`, 'success');
-    } catch (err) {
+    } catch {
       setStudents(prevStudents);
-      const msg = err instanceof Error ? err.message : '';
-      if (msg.includes('network') || msg.includes('fetch') || msg.includes('timeout')) return;
-      showToast(`فشل تطبيق الخصم: ${msg || 'خطأ غير معروف'}. تمت استعادة القيمة السابقة.`, 'error');
+      showToast(`فشل تطبيق الخصم: ${err instanceof Error ? err.message : 'تعذّر الاتصال بقاعدة البيانات'}. تمت استعادة القيمة السابقة.`, 'error');
     }
   }
 
@@ -900,10 +890,8 @@ export default function FinancesModule({ focusStageId, focusGradeId, focusGroupI
       setAdjustTarget(null);
       setAdjustAmount('');
       setAdjustNote('');
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : '';
-      if (msg.includes('network') || msg.includes('fetch') || msg.includes('timeout')) return;
-      showToast(`فشل خصم المستحقات: ${msg || 'خطأ غير معروف'}. حاول مرة أخرى.`, 'error');
+    } catch {
+      showToast(`فشل خصم المستحقات: ${err instanceof Error ? err.message : 'تعذّر الاتصال بقاعدة البيانات'}. حاول مرة أخرى.`, 'error');
     } finally {
       setAdjustSaving(false);
     }
