@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { CalendarDays, CheckCircle2, AlertTriangle, Clock, Archive, Plus, History, TrendingDown, DollarSign, Percent, Printer, Receipt, BookOpen, Send, Eye } from 'lucide-react';
+import { CalendarDays, CircleCheck as CheckCircle2, TriangleAlert as AlertTriangle, Clock, Archive, Plus, Factory as History, TrendingDown, DollarSign, Percent, Printer, Receipt, BookOpen, Send, Eye } from 'lucide-react';
 import StudentViewModal from '@/components/ui/StudentViewModal';
 import type { Student, MonthlySubscription } from '@/lib/types';
 import {
