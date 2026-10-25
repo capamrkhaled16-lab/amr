@@ -2,8 +2,6 @@ import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { useToast } from "../lib/toast";
 import { formatCurrency, getArabicMonth, getMonthKey } from "../lib/dates";
-import { deletePaymentWithAudit } from "../lib/data";
-import { invalidateByPrefix } from "../lib/cache";
 import type { Expense, Group, Payment, Student } from "../lib/types";
 
 type Tab = "payments" | "expenses" | "subscriptions";
@@ -149,15 +147,23 @@ export default function Financials() {
 
   const handleDeletePayment = async (payment: Payment) => {
     if (!confirm("حذف هذه الدفعة؟")) return;
-    try {
-      await deletePaymentWithAudit(payment.id, "المدرس", "master");
-      invalidateByPrefix("students_");
-      invalidateByPrefix("payments_");
-      invalidateByPrefix("monthly_");
+    const { error } = await supabase
+      .from("payments")
+      .update({ is_deleted: true, deleted_at: new Date().toISOString() })
+      .eq("id", payment.id);
+
+    if (error) {
+      showWarning("لم يتم الحذف");
+    } else {
+      const student = students.find((s) => s.id === payment.student_id);
+      if (student) {
+        await supabase
+          .from("students")
+          .update({ paid_fees: Math.max(0, Number(student.paid_fees) - Number(payment.amount)) })
+          .eq("id", student.id);
+      }
       showSuccess("تم حذف الدفعة");
       await loadPayments();
-    } catch (err) {
-      showWarning("لم يتم الحذف");
     }
   };
 
