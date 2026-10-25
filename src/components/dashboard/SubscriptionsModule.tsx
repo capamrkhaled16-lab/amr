@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { CalendarDays, CircleCheck as CheckCircle2, TriangleAlert as AlertTriangle, Clock, Archive, Plus, Factory as History, TrendingDown, DollarSign, Percent, Printer, Receipt, BookOpen, Send, Eye, MessageCircle, Copy } from 'lucide-react';
+import { CalendarDays, CheckCircle2, AlertTriangle, Clock, Archive, Plus, History, TrendingDown, DollarSign, Percent, Printer, Receipt, BookOpen, Send, Eye } from 'lucide-react';
 import StudentViewModal from '@/components/ui/StudentViewModal';
 import type { Student, MonthlySubscription } from '@/lib/types';
 import {
@@ -15,9 +15,8 @@ import {
   fetchStudentPaymentHistory,
 } from '@/lib/data';
 import { fetchGradeLevelBaseSubscription } from '@/lib/data';
-import { formatCurrency, formatArabicDate, openWhatsAppURL } from '@/lib/format';
-import { resolvePaymentSnapshot, buildPaymentWhatsAppMessage, buildPaymentWhatsAppLink, openPaymentWhatsApp, type PaymentSnapshot } from '@/lib/whatsappPayment';
-import { useToast } from '@/lib/toast';
+import { formatCurrency, formatArabicDate, normalizePhoneForWhatsApp } from '@/lib/format';
+import { resolvePaymentSnapshot, openPaymentWhatsApp } from '@/lib/whatsappPayment';
 import { ARABIC_MONTHS } from '@/lib/constants';
 import { buildReceiptHTML, printDocument } from '@/lib/export';
 import { invalidateByPrefix } from '@/lib/cache';
@@ -62,8 +61,6 @@ export default function SubscriptionsModule({ groupId, gradeLevelId }: Props) {
 
   const actorName = isMaster ? 'المدرس' : assistant?.display_name ?? assistant?.username ?? 'مساعد';
   const { settings } = useSettings();
-  const { showToast } = useToast();
-  const [whatsappBusyId, setWhatsappBusyId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -229,74 +226,23 @@ export default function SubscriptionsModule({ groupId, gradeLevelId }: Props) {
     }
   }
 
-  function monthKeyFromMonthLabel(monthLabel?: string): string {
-    if (!monthLabel) return monthKey;
-    const parts = monthLabel.split(' ');
-    if (parts.length < 2) return monthKey;
-    return `${parts[1]}-${String(ARABIC_MONTHS.indexOf(parts[0]) + 1).padStart(2, '0')}`;
-  }
-
-  async function resolveReceiptSnapshot(r: { receiptNumber: string; studentName: string; amount: number; date: string; month?: string; note?: string | null; recordedBy?: string | null; groupName?: string; gradeName?: string; stageName?: string; baseSubscription?: number; studentId?: string }): Promise<PaymentSnapshot | null> {
+  async function sendReceiptWhatsApp(r: { receiptNumber: string; studentName: string; amount: number; date: string; month?: string; note?: string | null; recordedBy?: string | null; groupName?: string; gradeName?: string; stageName?: string; baseSubscription?: number; studentId?: string }) {
     if (!r.studentId) {
       showToast('تعذّر تحديد الطالب', 'error');
-      return null;
+      return;
     }
     const snapshot = await resolvePaymentSnapshot(
       r.studentId,
-      monthKeyFromMonthLabel(r.month),
+      r.month ? `${r.month.split(' ')[1]}-${String(ARABIC_MONTHS.indexOf(r.month.split(' ')[0]) + 1).padStart(2, '0')}` : monthKey,
       r.amount,
       r.date,
       r.receiptNumber,
     );
     if (!snapshot) {
       showToast('تعذّر جلب بيانات الدفع', 'error');
-      return null;
+      return;
     }
-    return { ...snapshot, collectorName: r.recordedBy ?? snapshot.collectorName };
-  }
-
-  async function sendReceiptWhatsApp(r: { receiptNumber: string; studentName: string; amount: number; date: string; month?: string; note?: string | null; recordedBy?: string | null; groupName?: string; gradeName?: string; stageName?: string; baseSubscription?: number; studentId?: string }) {
-    const snapshot = await resolveReceiptSnapshot(r);
-    if (!snapshot) return;
     openPaymentWhatsApp(snapshot, settings.platform_name);
-  }
-
-  async function sendLatestPaymentWhatsApp(studentId: string) {
-    if (whatsappBusyId === studentId) return;
-    setWhatsappBusyId(studentId);
-    try {
-      const { data: latest, error } = await supabase
-        .from('payments')
-        .select('id, amount, payment_date, receipt_number, note, recorded_by, month_key')
-        .eq('student_id', studentId)
-        .eq('is_deleted', false)
-        .order('recorded_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (error || !latest) {
-        showToast('لا توجد دفعة مسجلة لهذا الطالب', 'error');
-        return;
-      }
-      const pay = latest as { id: string; amount: number; payment_date: string; receipt_number: string | null; note: string | null; recorded_by: string | null; month_key: string | null };
-      const receiptMonth = pay.month_key ?? monthKey;
-      const snapshot = await resolvePaymentSnapshot(
-        studentId,
-        receiptMonth,
-        pay.amount,
-        pay.payment_date,
-        pay.receipt_number ?? undefined,
-      );
-      if (!snapshot) {
-        showToast('تعذّر جلب بيانات الدفع', 'error');
-        return;
-      }
-      const enriched: PaymentSnapshot = { ...snapshot, collectorName: pay.recorded_by ?? snapshot.collectorName };
-      openWhatsAppURL(buildPaymentWhatsAppLink(enriched, settings.platform_name));
-    } catch {
-      showToast('تعذّر إرسال رسالة واتساب', 'error');
-    } finally {
-      setWhatsappBusyId(null);
-    }
   }
 
   async function handleArchiveMonth() {
@@ -466,18 +412,6 @@ export default function SubscriptionsModule({ groupId, gradeLevelId }: Props) {
                     </div>
                     <div className="flex gap-2 flex-wrap">
                       <Button size="sm" variant="secondary" onClick={() => setViewTarget(s)} title="عرض بيانات الطالب"><Eye size={14} /> عرض</Button>
-                      {sub.amount_paid > 0 && (
-                        <button
-                          type="button"
-                          onClick={() => sendLatestPaymentWhatsApp(s.id)}
-                          disabled={whatsappBusyId === s.id}
-                          title="إرسال إيصال الدفع عبر واتساب"
-                          className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold text-emerald-300 bg-emerald-500/15 border border-emerald-500/30 hover:bg-emerald-500/25 hover:text-emerald-200 transition disabled:opacity-50 disabled:cursor-wait"
-                        >
-                          {whatsappBusyId === s.id ? <span className="inline-block w-3.5 h-3.5 border-2 border-emerald-300/40 border-t-emerald-300 rounded-full animate-spin" /> : <MessageCircle size={14} />}
-                          واتساب
-                        </button>
-                      )}
                       {!isFull && (
                         <>
                           <Button size="sm" variant="secondary" onClick={() => handleFullPay(sub)} title="تسجيل دفع كامل"><CheckCircle2 size={14} /> دفع كامل</Button>
@@ -614,17 +548,6 @@ export default function SubscriptionsModule({ groupId, gradeLevelId }: Props) {
             </div>
             <div className="flex gap-2">
               <Button variant="secondary" className="flex-1" onClick={() => setLastReceipt(null)}>إغلاق</Button>
-              <Button variant="secondary" className="flex-1" onClick={async () => {
-                if (!lastReceipt) return;
-                const snap = await resolveReceiptSnapshot(lastReceipt);
-                if (!snap) return;
-                try {
-                  await navigator.clipboard.writeText(buildPaymentWhatsAppMessage(snap, settings.platform_name));
-                  showToast('تم نسخ نص الإيصال', 'success');
-                } catch {
-                  showToast('تعذّر نسخ النص', 'error');
-                }
-              }}><Copy size={16} /> نسخ</Button>
               <Button variant="secondary" className="flex-1" onClick={() => lastReceipt && sendReceiptWhatsApp(lastReceipt)}><Send size={16} /> واتساب</Button>
               <Button className="flex-1" onClick={() => lastReceipt && printDocument(`إيصال ${lastReceipt.receiptNumber}`, buildReceiptHTML({ ...lastReceipt, platformName: settings.platform_name, managementName: settings.management_name }))}><Printer size={16} /> طباعة</Button>
             </div>

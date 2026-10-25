@@ -92,8 +92,6 @@ export function computeFinancialSummary(
 
     if (category === 'fullyPaid') {
       fullyPaid++;
-      collected += paid;
-      totalDue += fees;
     } else if (category === 'partial') {
       partialPaid++;
       remaining += Math.max(0, fees - paid);

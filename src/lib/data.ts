@@ -226,23 +226,18 @@ export async function fetchDashboardKPIs(monthKey?: string): Promise<{
 
   // Use allSettled so a single failed request doesn't kill the entire startup.
   // Students query is critical — if it fails, we throw. Others degrade gracefully.
-  // PRIMARY source for paid amounts: monthly_subscriptions (has month_key + amount_paid).
-  // Fallback: payments table (may lack month_key on some DB schemas).
-  const [studentsSettled, subsSettled, paymentsSettled, exemptionsSettled, groupsSettled] = await Promise.allSettled([
+  const [studentsSettled, paymentsSettled, exemptionsSettled, groupsSettled] = await Promise.allSettled([
     timeout(supabase
       .from('students')
       .select('id, name, phone, parent_phone, group_id, status, total_fees, paid_fees, is_exempt, discount_mode, discount_amount, discount_percent, fee_mode, pro_rata_sessions, join_month_key, enrollment_date, created_at, group:groups(name, schedule, grade_level:grade_levels(name, stage:academic_stages(name, sort_order)))')
       .eq('status', 'active')
       .order('name')),
     timeout(supabase
-      .from('monthly_subscriptions')
-      .select('student_id, amount_paid')
-      .eq('month_key', mk)
-      .gt('amount_paid', 0)),
-    timeout(supabase
       .from('payments')
-      .select('student_id, amount, payment_date')
+      .select('student_id, amount')
+      .eq('month_key', mk)
       .eq('is_deleted', false)
+      .eq('is_historical_payment', false)
       .gt('amount', 0)),
     timeout(supabase
       .from('monthly_subscriptions')
@@ -271,29 +266,14 @@ export async function fetchDashboardKPIs(monthKey?: string): Promise<{
     stage_name: s.group?.grade_level?.stage?.name,
   }));
 
-  // Build monthlyPaidMap from monthly_subscriptions (authoritative, month-scoped).
-  // Fall back to payments table only if subscriptions yield nothing for this month.
   const monthlyPaidArr: [string, number][] = [];
-  const tempMap = new Map<string, number>();
-  if (subsSettled.status === 'fulfilled' && !subsSettled.value.error) {
-    for (const row of (subsSettled.value.data ?? []) as { student_id: string; amount_paid: number }[]) {
-      tempMap.set(row.student_id, (tempMap.get(row.student_id) ?? 0) + (row.amount_paid ?? 0));
+  if (paymentsSettled.status === 'fulfilled' && !paymentsSettled.value.error) {
+    const tempMap = new Map<string, number>();
+    for (const p of (paymentsSettled.value.data ?? []) as { student_id: string; amount: number }[]) {
+      tempMap.set(p.student_id, (tempMap.get(p.student_id) ?? 0) + (p.amount ?? 0));
     }
+    for (const [k, v] of tempMap) monthlyPaidArr.push([k, v]);
   }
-  if (tempMap.size === 0 && paymentsSettled.status === 'fulfilled' && !paymentsSettled.value.error) {
-    // payments table may lack month_key; scope by payment_date within the month.
-    const [y, m] = mk.split('-').map(Number);
-    const start = `${y}-${String(m).padStart(2, '0')}-01`;
-    const nextMonthDate = new Date(y, m, 1);
-    const end = `${nextMonthDate.getFullYear()}-${String(nextMonthDate.getMonth() + 1).padStart(2, '0')}-01`;
-    for (const p of (paymentsSettled.value.data ?? []) as { student_id: string; amount: number; payment_date: string }[]) {
-      const pd = p.payment_date ?? '';
-      if (pd >= start && pd < end) {
-        tempMap.set(p.student_id, (tempMap.get(p.student_id) ?? 0) + (p.amount ?? 0));
-      }
-    }
-  }
-  for (const [k, v] of tempMap) monthlyPaidArr.push([k, v]);
 
   const monthExemptArr: string[] = [];
   if (exemptionsSettled.status === 'fulfilled' && !exemptionsSettled.value.error) {
