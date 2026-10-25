@@ -1806,8 +1806,13 @@ export async function deletePaymentWithAudit(
     const delAuditNote = `حذف دفعة شهر ${payMonthLabel} — ${delStudentName} — ${formatCurrency(payRow.amount ?? 0)} ج.م`;
     await createAuditLog(actorName, actorRole, 'payment_delete', payRow.student_id, payRow.amount, delAuditNote);
   }
-  const { error: delError } = await supabase.from('payments').delete().eq('id', id);
+  const { error: delError } = await supabase.from('payments').update({ is_deleted: true, deleted_at: new Date().toISOString() }).eq('id', id);
   if (delError) throw new Error(delError.message);
+  invalidateByPrefix('payments_');
+  invalidateByPrefix('students_');
+  invalidateByPrefix('monthly_');
+  invalidateByPrefix('groupstats_');
+  invalidateByPrefix('feestotals_');
   emitPaymentsChanged();
 }
 
