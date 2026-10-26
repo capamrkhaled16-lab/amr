@@ -2280,11 +2280,16 @@ export async function searchStudents(query: string): Promise<(Student & { group_
   if (searchAbortController) searchAbortController.abort();
   searchAbortController = new AbortController();
   try {
+    // Build OR filter: name/phone/parent_phone ilike, plus exact id match if query looks like a UUID prefix
+    const orParts = [`name.ilike.%${q}%,phone.ilike.%${q}%,parent_phone.ilike.%${q}%`];
+    if (/^[0-9a-fA-F-]{6,}$/.test(q)) {
+      orParts.push(`id.eq.${q}`);
+    }
     const { data } = await supabase
       .from('students')
       .select('*, group:groups(name, grade_level:grade_levels(name, stage:academic_stages(name)))')
       .eq('status', 'active')
-      .or(`name.ilike.%${q}%,phone.ilike.%${q}%,parent_phone.ilike.%${q}%`)
+      .or(orParts.join(','))
       .order('name')
       .limit(20)
       .abortSignal(searchAbortController.signal);

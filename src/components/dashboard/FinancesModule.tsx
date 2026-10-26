@@ -281,7 +281,10 @@ export default function FinancesModule({ focusStageId, focusGradeId, focusGroupI
   const unpaidStudents = students.filter((s) => !monthExemptMap.has(s.id) && (monthlyPaidMap.get(s.id) ?? 0) < (s.total_fees ?? 0) && (s.total_fees ?? 0) > 0 && (s.fee_mode ?? 'full') !== 'deferred' && !isNewThisMonth(s, monthKey));
 
   const filteredStudents = studentQuery.trim()
-    ? students.filter((s) => s.name.toLowerCase().includes(studentQuery.trim().toLowerCase()))
+    ? students.filter((s) => {
+        const q = studentQuery.trim().toLowerCase();
+        return s.name.toLowerCase().includes(q) || s.id.toLowerCase().includes(q);
+      })
     : students;
 
   function isNewStudent(s: EnrichedStudent): boolean {

@@ -883,14 +883,14 @@ export default function DashboardPage() {
             ) : (
             <ErrorBoundary fallbackTitle="تعذّر تحميل الرئيسية">
               <HomeDashboard
-                totalStudents={selectedStage || selectedGrade || selectedGroup ? filteredStudents.length : allStudents.length}
-                totalCollected={selectedStage || selectedGrade || selectedGroup ? financialSummary.collected : globalFinancialSummary.collected}
-                totalRemaining={selectedStage || selectedGrade || selectedGroup ? financialSummary.remaining : globalFinancialSummary.remaining}
-                fullyPaid={selectedStage || selectedGrade || selectedGroup ? financialSummary.fullyPaid : globalFinancialSummary.fullyPaid}
-                partialPaid={selectedStage || selectedGrade || selectedGroup ? financialSummary.partialPaid : globalFinancialSummary.partialPaid}
-                unpaidCount={selectedStage || selectedGrade || selectedGroup ? financialSummary.unpaid : globalFinancialSummary.unpaid}
+                totalStudents={allStudents.length}
+                totalCollected={globalFinancialSummary.collected}
+                totalRemaining={globalFinancialSummary.remaining}
+                fullyPaid={globalFinancialSummary.fullyPaid}
+                partialPaid={globalFinancialSummary.partialPaid}
+                unpaidCount={globalFinancialSummary.unpaid}
                 isMaster={isMaster}
-                allStudents={selectedStage || selectedGrade || selectedGroup ? filteredStudents : allStudents}
+                allStudents={allStudents}
                 monthlyPaidMap={monthlyPaidMap}
                 monthExemptMap={monthExemptMap}
                 groupsCount={allGroups.length}

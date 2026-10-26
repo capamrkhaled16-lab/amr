@@ -125,7 +125,7 @@ export default function GlobalSearch({ onNavigate }: Props) {
       setHighlight((h) => Math.max(h - 1, 0));
     } else if (e.key === 'Enter') {
       e.preventDefault();
-      handleSelect(results[highlight], 'group');
+      openPreview(results[highlight]);
     } else if (e.key === 'Escape') {
       setOpen(false);
     }
@@ -187,7 +187,7 @@ export default function GlobalSearch({ onNavigate }: Props) {
                   {results.map((s, i) => (
                     <li key={s.id}
                       onMouseEnter={() => setHighlight(i)}
-                      onClick={() => handleSelect(s, 'group')}
+                      onClick={() => openPreview(s)}
                       className={`px-3 py-2 flex items-center gap-2.5 transition cursor-pointer ${
                         i === highlight ? 'bg-emerald-500/10' : 'hover:bg-white/5'
                       }`}
