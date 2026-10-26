@@ -683,21 +683,68 @@ export default function DashboardPage() {
       <Navbar
         onLogout={handleLogout}
         onSearchNavigate={async (s, target) => {
-          if (!s.group_id && target === 'group') return;
-          // Use the search result's own embedded data — no name-based lookup
-          const stage = stages.find((st) => st.name === s.stage_name);
-          if (stage) setSelectedStage(stage);
-          if (s.grade_name) {
-            const gdata = await fetchGradeLevels(stage?.id ?? '');
-            const gl = gdata.find((g) => g.name === s.grade_name);
-            if (gl) setSelectedGrade(gl);
-            const grps = await fetchGroups(gl?.id ?? '');
-            const grp = grps.find((g) => g.id === s.group_id);
-            if (grp) setSelectedGroup(grp);
+          if (!s.group_id && target !== 'profile') return;
+          // ID-based lookup: resolve stage and grade from the group's foreign keys
+          // rather than matching by name (which fails with similar names).
+          if (s.group_id) {
+            // Find the group in allGroups (already loaded) or fetch it directly
+            let grp = allGroups.find((g) => g.id === s.group_id) ?? null;
+            if (!grp) {
+              // Fallback: fetch groups for the grade level if we can resolve it
+              // For now, set the group directly from the search result's embedded data
+              grp = s.group_id ? { id: s.group_id, name: s.group_name ?? '', grade_level_id: '', schedule: null } as Group : null;
+            }
+            // Resolve grade + stage via the group's grade_level relationship
+            // Use fetchGroups to find the full group object with grade_level_id
+            try {
+              // Check if the group is already in the current groups list
+              let fullGrp = groups.find((g) => g.id === s.group_id) ?? null;
+              if (!fullGrp && selectedGrade) {
+                const gradeGroups = await fetchGroups(selectedGrade.id);
+                fullGrp = gradeGroups.find((g) => g.id === s.group_id) ?? null;
+              }
+              // If we still don't have it, try to resolve via allGroups
+              if (!fullGrp) {
+                fullGrp = grp;
+              }
+              // Resolve grade level from allGroups enriched data
+              const enrichedGrp = allGroups.find((g) => g.id === s.group_id);
+              const gradeLevelId = fullGrp?.grade_level_id ?? enrichedGrp?.grade_level_id ?? '';
+              // Find the grade in gradeLevels or fetch it
+              let gl = gradeLevels.find((g) => g.id === gradeLevelId) ?? null;
+              if (!gl && gradeLevelId) {
+                // Fetch stages to find the right stage, then grade levels
+                const stagesData = await fetchStages();
+                for (const st of stagesData) {
+                  const gdata = await fetchGradeLevels(st.id);
+                  const found = gdata.find((g) => g.id === gradeLevelId);
+                  if (found) {
+                    gl = found;
+                    if (st.id !== selectedStage?.id) setSelectedStage(st);
+                    break;
+                  }
+                }
+              } else if (gl && gl.stage_id !== selectedStage?.id) {
+                const stage = stages.find((st) => st.id === gl!.stage_id);
+                if (stage) setSelectedStage(stage);
+              }
+              if (gl) setSelectedGrade(gl);
+              if (fullGrp) setSelectedGroup(fullGrp);
+            } catch {
+              // Fallback: just set the group from search result
+              if (grp) setSelectedGroup(grp);
+            }
           }
-          setSearchFocus({ stageId: stage?.id ?? '', gradeId: '', groupId: s.group_id ?? '', studentId: s.id });
+          setSearchFocus({ stageId: selectedStage?.id ?? '', gradeId: selectedGrade?.id ?? '', groupId: s.group_id ?? '', studentId: s.id });
           setNotifFocusStudentId(s.id);
-          setTab(target === 'finance' ? 'finances' : 'attendance');
+          const tabMap: Record<string, Tab> = {
+            finance: 'finances',
+            attendance: 'attendance',
+            homework: 'tracking',
+            exams: 'exams',
+            profile: 'home',
+          };
+          setTab(tabMap[target] ?? 'attendance');
         }}
         rightContent={
           isMaster ? (

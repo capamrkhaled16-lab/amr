@@ -681,9 +681,9 @@ export default function FinancesModule({ focusStageId, focusGradeId, focusGroupI
       (groupLine ? `📚 المجموعة: ${groupLine}\n` : '') +
       gradeLine +
       `📅 الشهر: ${monthLabel}\n` +
-      `💎 إجمالي المصروفات: ${formatCurrency(totalFees)} ج.م\n` +
+      (totalFees > 0 ? `💎 إجمالي المصروفات: ${formatCurrency(totalFees)} ج.م\n` : '') +
       `✨ إجمالي المدفوع حالياً: ${formatCurrency(totalPaid)} ج.م\n` +
-      `📌 المبلغ المتبقي: ${formatCurrency(remaining)} ج.م\n` +
+      (remaining > 0 ? `📌 المبلغ المتبقي: ${formatCurrency(remaining)} ج.م\n` : '') +
       (dateDisplay ? `📆 تاريخ المعاملة: ${dateDisplay}\n` : '') +
       (r.receiptNumber ? `🧾 رقم الإيصال: ${r.receiptNumber}\n` : '') +
       `✅ حالة السداد: ${statusLabel}\n` +
@@ -814,15 +814,17 @@ export default function FinancesModule({ focusStageId, focusGradeId, focusGroupI
     setStudents((prev) => prev.map((s) => s.id === studentId ? { ...s, total_fees: val } : s));
     setEditingFeeId(null);
     setFeeEditValue('');
-    setFeeSaving(false);
+    setFeeSaving(true);
     try {
       await updateStudentTotalFees(studentId, val, actorName, isMaster ? 'master' : 'assistant');
-      loadStudents();
+      await loadStudents();
       const feeStudent = students.find((s) => s.id === studentId);
       showToast(`تم تعديل المصاريف للطالب ${feeStudent?.name ?? ''} إلى ${formatCurrency(val)} ج.م — بواسطة ${actorName}`, 'success');
     } catch (err) {
       setStudents(prevStudents);
       showToast(`فشل حفظ المصاريف: ${err instanceof Error ? err.message : 'تعذّر الاتصال بقاعدة البيانات'}. تمت استعادة القيمة السابقة.`, 'error');
+    } finally {
+      setFeeSaving(false);
     }
   }
 
@@ -874,7 +876,7 @@ export default function FinancesModule({ focusStageId, focusGradeId, focusGroupI
         : target.total_fees;
       return { ...s, discount_mode: mode, discount_percent: pct, discount_amount: fixedAmt, total_fees: newFees };
     }));
-    setDiscountSaving(false);
+    setDiscountSaving(true);
     setDiscountTarget(null);
     setDiscountMode(null);
     setDiscountInput('');
@@ -898,6 +900,8 @@ export default function FinancesModule({ focusStageId, focusGradeId, focusGroupI
     } catch (err) {
       setStudents(prevStudents);
       showToast(`فشل تطبيق الخصم: ${err instanceof Error ? err.message : 'تعذّر الاتصال بقاعدة البيانات'}. تمت استعادة القيمة السابقة.`, 'error');
+    } finally {
+      setDiscountSaving(false);
     }
   }
 
@@ -1010,7 +1014,7 @@ export default function FinancesModule({ focusStageId, focusGradeId, focusGroupI
       totalDueAtPayment: r.totalDueAtPayment,
       totalPaidAtPayment: r.totalPaidAtPayment,
     });
-    showToast('تم إرسال إشعار الدفع عبر واتساب', 'success');
+    showToast('تم فتح واتساب — الرجاء الضغط على زر الإرسال داخل واتساب لتأكيد التوصيل', 'info');
   }
 
   async function openReceiptPicker(s: EnrichedStudent) {
@@ -1256,7 +1260,7 @@ export default function FinancesModule({ focusStageId, focusGradeId, focusGroupI
                     const isFull = remaining <= 0;
                     const pct = s.total_fees > 0 ? Math.min(100, Math.round((monthlyPaid / s.total_fees) * 100)) : 0;
                     return (
-                      <motion.div id={`fin-student-${s.id}`} key={s.id} layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={`glass-light rounded-xl p-4 border ${highlightId === s.id ? 'border-emerald-400 ring-2 ring-emerald-400/50 shadow-lg shadow-emerald-500/20' : isFull ? 'border-emerald-500/40 ring-1 ring-emerald-500/20' : 'border-red-500/40 ring-1 ring-red-500/20'}`}>
+                      <motion.div id={`fin-student-${s.id}`} key={s.id} layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={`glass-light rounded-xl p-4 border ${highlightId === s.id ? 'border-[#d4af37] ring-2 ring-[#d4af37]/40 shadow-lg shadow-[#d4af37]/20' : isFull ? 'border-emerald-500/40 ring-1 ring-emerald-500/20' : 'border-red-500/40 ring-1 ring-red-500/20'}`}>
                         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 flex-wrap">
@@ -1655,7 +1659,16 @@ export default function FinancesModule({ focusStageId, focusGradeId, focusGroupI
         </div>
       </Modal>
 
-      <Modal open={!!editPaymentTarget} onClose={() => { setEditPaymentTarget(null); setEditPayAmount(''); setEditPayNote(''); setEditPayDate(''); setEditPayMonth(''); }} title="تعديل دفعة" size="sm">
+      <Modal open={!!editPaymentTarget} onClose={() => {
+        const isDirty = editPaymentTarget && (
+          String(editPayAmount) !== String(editPaymentTarget.amount ?? '') ||
+          editPayNote !== (editPaymentTarget.note ?? '') ||
+          editPayDate !== (editPaymentTarget.payment_date ?? '') ||
+          editPayMonth !== (editPaymentTarget.month_key ?? '')
+        );
+        if (isDirty && !confirm('يوجد تعديلات غير محفوظة. هل تريد الإغلاق بدون حفظ؟')) return;
+        setEditPaymentTarget(null); setEditPayAmount(''); setEditPayNote(''); setEditPayDate(''); setEditPayMonth('');
+      }} title="تعديل دفعة" size="sm">
         {editPaymentTarget && (() => {
           const student = historyStudent ?? students.find((s) => s.id === editPaymentTarget.student_id) ?? null;
           const totalFees = student?.total_fees ?? 0;
@@ -1718,7 +1731,16 @@ export default function FinancesModule({ focusStageId, focusGradeId, focusGroupI
                 <input type="text" value={editPayNote} onChange={(e) => setEditPayNote(e.target.value)} placeholder="ملاحظة على الدفعة" className={inputCls} />
               </div>
               <div className="flex gap-3 justify-end">
-                <Button variant="secondary" onClick={() => { setEditPaymentTarget(null); setEditPayAmount(''); setEditPayNote(''); setEditPayDate(''); setEditPayMonth(''); }}>إلغاء</Button>
+                <Button variant="secondary" onClick={() => {
+                  const isDirty = editPaymentTarget && (
+                    String(editPayAmount) !== String(editPaymentTarget.amount ?? '') ||
+                    editPayNote !== (editPaymentTarget.note ?? '') ||
+                    editPayDate !== (editPaymentTarget.payment_date ?? '') ||
+                    editPayMonth !== (editPaymentTarget.month_key ?? '')
+                  );
+                  if (isDirty && !confirm('يوجد تعديلات غير محفوظة. هل تريد الإغلاق بدون حفظ؟')) return;
+                  setEditPaymentTarget(null); setEditPayAmount(''); setEditPayNote(''); setEditPayDate(''); setEditPayMonth('');
+                }}>إلغاء</Button>
                 <Button onClick={handleEditPayment} loading={editPaySaving} disabled={!editPayAmount || parseFloat(editPayAmount) <= 0}>حفظ التعديل</Button>
               </div>
             </div>

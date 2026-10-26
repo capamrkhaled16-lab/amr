@@ -9,7 +9,7 @@ import GlobalSearch from './GlobalSearch';
 type NavbarProps = {
   onLogout?: () => void;
   rightContent?: React.ReactNode;
-  onSearchNavigate?: (student: { group_id: string | null; id: string; name: string }, target: 'finance' | 'group') => void;
+  onSearchNavigate?: (student: { group_id: string | null; id: string; name: string }, target: 'finance' | 'attendance' | 'homework' | 'exams' | 'profile') => void;
   onOpenFinances?: () => void;
   onOpenArchive?: () => void;
 };
