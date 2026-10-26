@@ -131,7 +131,7 @@ export default function Students() {
     if (!confirm(`حذف الطالب "${student.name}"؟`)) return;
     const { error } = await supabase
       .from("students")
-      .update({ is_deleted: true })
+      .update({ is_deleted: true, status: "deleted" })
       .eq("id", student.id);
 
     if (error) {

@@ -131,6 +131,9 @@ export default function FinancesModule({ focusStageId, focusGradeId, focusGroupI
   const [deleteStudentTarget, setDeleteStudentTarget] = useState<EnrichedStudent | null>(null);
   const [deleteStudentLoading, setDeleteStudentLoading] = useState(false);
   const [studentQuery, setStudentQuery] = useState('');
+  const [receiptPickerStudent, setReceiptPickerStudent] = useState<EnrichedStudent | null>(null);
+  const [receiptPickerPayments, setReceiptPickerPayments] = useState<Payment[]>([]);
+  const [receiptPickerLoading, setReceiptPickerLoading] = useState(false);
   useEffect(() => { setStudentQuery(''); }, [selectedGroup]);
   const [paySubmitting, setPaySubmitting] = useState(false);
   const [deletePayLoading, setDeletePayLoading] = useState(false);
@@ -480,6 +483,22 @@ export default function FinancesModule({ focusStageId, focusGradeId, focusGroupI
       }
       const monthLabel = getMonthLabel(monthKey);
       showToast(`تم تسجيل دفع مصروفات شهر ${monthLabel} للطالب ${savedStudent.name} — المبلغ ${formatCurrency(amount)} ج.م — بواسطة ${actorName}`, 'success');
+      sendReceiptWhatsAppText({
+        receiptNumber: payment.receipt_number,
+        studentName: savedStudent.name,
+        studentId: savedStudent.id,
+        amount,
+        date: payment.payment_date,
+        monthKey,
+        note: savedNote || null,
+        recordedBy: actorName,
+        groupName: selectedGroup?.name,
+        gradeName: selectedGrade?.name,
+        stageName: selectedStage?.name,
+        recordedAt: payment.recorded_at,
+        totalDueAtPayment,
+        totalPaidAtPayment,
+      });
     } catch (err) {
       console.error('[handleAddPayment] Payment save failed:', err);
       setMonthlyPaidMap((prev) => { const m = new Map(prev); m.set(savedStudent.id, Math.max(0, (m.get(savedStudent.id) ?? 0) - amount)); return m; });
@@ -553,6 +572,22 @@ export default function FinancesModule({ focusStageId, focusGradeId, focusGroupI
       }
       const monthLabel = getMonthLabel(monthKey);
       showToast(`تم دفع كامل مصروفات شهر ${monthLabel} للطالب ${student.name} — المبلغ ${formatCurrency(remaining)} ج.م — بواسطة ${actorName}`, 'success');
+      sendReceiptWhatsAppText({
+        receiptNumber: payment.receipt_number,
+        studentName: student.name,
+        studentId: student.id,
+        amount: remaining,
+        date: payment.payment_date,
+        monthKey,
+        note: 'دفع كامل',
+        recordedBy: actorName,
+        groupName: selectedGroup?.name,
+        gradeName: selectedGrade?.name,
+        stageName: selectedStage?.name,
+        recordedAt: payment.recorded_at,
+        totalDueAtPayment,
+        totalPaidAtPayment,
+      });
     } catch (err) {
       console.error('[handleQuickFullPay] Payment save failed:', err);
       setMonthlyPaidMap((prev) => { const m = new Map(prev); m.set(student.id, Math.max(0, (m.get(student.id) ?? 0) - remaining)); return m; });
@@ -591,7 +626,7 @@ export default function FinancesModule({ focusStageId, focusGradeId, focusGroupI
       await createExpense(expForm.category, amount, expForm.description.trim() || null, expForm.date, actorName);
       loadExpenses();
       showToast(`تم تسجيل مصروف (${EXPENSE_CATEGORIES.find((c) => c.id === expForm.category)?.label ?? expForm.category}) بقيمة ${formatCurrency(amount)} ج.م — بواسطة ${actorName}`, 'success');
-    } catch {
+    } catch (err) {
       setExpenses((prev) => prev.filter((e) => e.id !== tempExpense.id));
       showToast(`فشل تسجيل المصروف: ${err instanceof Error ? err.message : 'خطأ في الاتصال بقاعدة البيانات'}. حاول مرة أخرى.`, 'error');
     }
@@ -606,7 +641,7 @@ export default function FinancesModule({ focusStageId, focusGradeId, focusGroupI
     try {
       await deleteExpense(target.id);
       showToast(`تم حذف مصروف (${EXPENSE_CATEGORIES.find((c) => c.id === target.category)?.label ?? target.category}) بقيمة ${formatCurrency(target.amount)} ج.م — بواسطة ${actorName}`, 'success');
-    } catch {
+    } catch (err) {
       setExpenses(prevExpenses);
       showToast(`فشل حذف المصروف: ${err instanceof Error ? err.message : 'تعذّر الاتصال بقاعدة البيانات'}. تمت استعادة المصروف.`, 'error');
     }
@@ -750,7 +785,7 @@ export default function FinancesModule({ focusStageId, focusGradeId, focusGroupI
       }
       const delStudent = students.find((s) => s.id === target.student_id);
       showToast(`تم حذف دفعة بقيمة ${formatCurrency(target.amount ?? 0)} ج.م للطالب ${delStudent?.name ?? ''} — بواسطة ${actorName}`, 'success');
-    } catch {
+    } catch (err) {
       setMonthlyPaidMap((prev) => { const m = new Map(prev); m.set(target.student_id, (m.get(target.student_id) ?? 0) + (target.amount ?? 0)); return m; });
       setPayments((prev) => [...prev, target].sort((a, b) => b.payment_date.localeCompare(a.payment_date)));
       showToast(`فشل حذف الدفعة: ${err instanceof Error ? err.message : 'تعذّر الاتصال بقاعدة البيانات'}. تمت استعادة الدفعة.`, 'error');
@@ -782,7 +817,7 @@ export default function FinancesModule({ focusStageId, focusGradeId, focusGroupI
       loadStudents();
       const feeStudent = students.find((s) => s.id === studentId);
       showToast(`تم تعديل المصاريف للطالب ${feeStudent?.name ?? ''} إلى ${formatCurrency(val)} ج.م — بواسطة ${actorName}`, 'success');
-    } catch {
+    } catch (err) {
       setStudents(prevStudents);
       showToast(`فشل حفظ المصاريف: ${err instanceof Error ? err.message : 'تعذّر الاتصال بقاعدة البيانات'}. تمت استعادة القيمة السابقة.`, 'error');
     }
@@ -800,7 +835,7 @@ export default function FinancesModule({ focusStageId, focusGradeId, focusGroupI
       loadStudents();
       const monthLabel = getMonthLabel(monthKey);
       showToast(`${wasExempt ? 'تم إلغاء إعفاء' : 'تم تفعيل إعفاء'} الطالب ${target.name} لشهر ${monthLabel} — بواسطة ${actorName}`, 'success');
-    } catch {
+    } catch (err) {
       setMonthExemptMap((prev) => { const m = new Map(prev); if (wasExempt) m.set(target.id, true); else m.delete(target.id); return m; });
       showToast(`فشل تحديث الإعفاء: ${err instanceof Error ? err.message : 'تعذّر الاتصال بقاعدة البيانات'}. تمت استعادة الحالة السابقة.`, 'error');
     }
@@ -857,7 +892,7 @@ export default function FinancesModule({ focusStageId, focusGradeId, focusGroupI
       loadStudents();
       const discLabel = mode === 'percent' ? `خصم ${pct}%` : mode === 'fixed' ? `خصم ${formatCurrency(fixedAmt)} ج.م` : 'إلغاء الخصم';
       showToast(`${discLabel} للطالب ${target.name} — بواسطة ${actorName}`, 'success');
-    } catch {
+    } catch (err) {
       setStudents(prevStudents);
       showToast(`فشل تطبيق الخصم: ${err instanceof Error ? err.message : 'تعذّر الاتصال بقاعدة البيانات'}. تمت استعادة القيمة السابقة.`, 'error');
     }
@@ -890,7 +925,7 @@ export default function FinancesModule({ focusStageId, focusGradeId, focusGroupI
       setAdjustTarget(null);
       setAdjustAmount('');
       setAdjustNote('');
-    } catch {
+    } catch (err) {
       showToast(`فشل خصم المستحقات: ${err instanceof Error ? err.message : 'تعذّر الاتصال بقاعدة البيانات'}. حاول مرة أخرى.`, 'error');
     } finally {
       setAdjustSaving(false);
@@ -973,6 +1008,43 @@ export default function FinancesModule({ focusStageId, focusGradeId, focusGroupI
       totalPaidAtPayment: r.totalPaidAtPayment,
     });
     showToast('تم إرسال إشعار الدفع عبر واتساب', 'success');
+  }
+
+  async function openReceiptPicker(s: EnrichedStudent) {
+    setReceiptPickerStudent(s);
+    setReceiptPickerPayments([]);
+    setReceiptPickerLoading(true);
+    try {
+      const data = await fetchPayments(s.id, monthKey);
+      setReceiptPickerPayments(data);
+    } catch {
+      setReceiptPickerPayments([]);
+    } finally {
+      setReceiptPickerLoading(false);
+    }
+  }
+
+  function sendExistingReceiptWhatsApp(s: EnrichedStudent, p: Payment) {
+    const totalFees = s.total_fees ?? 0;
+    const totalPaid = monthlyPaidMap.get(s.id) ?? 0;
+    sendReceiptWhatsAppText({
+      receiptNumber: p.receipt_number ?? '',
+      studentName: s.name,
+      studentId: s.id,
+      amount: p.amount ?? 0,
+      date: p.payment_date ?? '',
+      monthKey: p.month_key ?? monthKey,
+      note: p.note ?? null,
+      recordedBy: p.recorded_by ?? actorName,
+      groupName: s.group_name ?? selectedGroup?.name,
+      gradeName: s.grade_name ?? selectedGrade?.name,
+      stageName: s.stage_name ?? selectedStage?.name,
+      recordedAt: p.recorded_at ?? null,
+      totalDueAtPayment: totalFees,
+      totalPaidAtPayment: totalPaid,
+    });
+    setReceiptPickerStudent(null);
+    setReceiptPickerPayments([]);
   }
 
   useEffect(() => { loadExpenses(); }, []);
@@ -1254,6 +1326,7 @@ export default function FinancesModule({ focusStageId, focusGradeId, focusGroupI
                             <Button size="sm" variant="secondary" onClick={() => setViewTarget(s)} title="عرض بيانات الطالب"><Eye size={14} /> عرض</Button>
                             <Button size="sm" variant="secondary" onClick={() => { setHistoryStudent(s); loadPayments(s); }}><History size={14} /> السجل</Button>
                             <Button size="sm" variant="secondary" onClick={() => openPayStudent(s)} title="إضافة دفعة / تعديل سريع"><Plus size={14} /></Button>
+                            <Button size="sm" variant="secondary" onClick={() => openReceiptPicker(s)} title="إرسال إيصال واتساب لدفعة موجودة"><MessageCircle size={14} /></Button>
                             {isMaster && (
                               <Button size="sm" variant="ghost" onClick={() => setDeleteStudentTarget(s)} title="حذف الطالب" className="text-red-400 hover:bg-red-500/10"><Trash2 size={14} /></Button>
                             )}
@@ -2013,6 +2086,41 @@ export default function FinancesModule({ focusStageId, focusGradeId, focusGroupI
         subtext={`سيتم حذف الطالب «${deleteStudentTarget?.name ?? ''}» نهائياً باستخدام معرّفه الفريد (Student ID). لا يؤثر على أي طالب آخر حتى لو كان له نفس الاسم. سيتم التعامل مع البيانات المرتبطة (الحضور، الدفعات، الواجبات) وفق العلاقات الحالية بدون كسر البيانات التاريخية. هل أنت متأكد؟`}
         confirmLabel="تأكيد الحذف"
       />
+
+      <Modal
+        open={!!receiptPickerStudent}
+        onClose={() => { setReceiptPickerStudent(null); setReceiptPickerPayments([]); }}
+        title={`إرسال إيصال واتساب — ${receiptPickerStudent?.name ?? ''}`}
+        size="sm"
+      >
+        <div className="space-y-3">
+          {receiptPickerLoading ? (
+            <div className="flex items-center justify-center py-6 gap-2 text-slate-400"><Loader2 size={18} className="animate-spin" /> جاري تحميل الدفعات...</div>
+          ) : receiptPickerPayments.length === 0 ? (
+            <p className="text-center text-slate-400 py-6 glass-light rounded-xl">لا توجد دفعات مسجلة لهذا الطالب في هذا الشهر.</p>
+          ) : (
+            <>
+              <p className="text-xs text-slate-400 text-center">اختر الدفعة التي تريد إرسال إيصالها عبر واتساب:</p>
+              <div className="space-y-2 max-h-72 overflow-y-auto">
+                {receiptPickerPayments.map((p) => (
+                  <button
+                    key={p.id}
+                    onClick={() => sendExistingReceiptWhatsApp(receiptPickerStudent!, p)}
+                    className="w-full glass-light rounded-xl p-3 flex items-center justify-between hover:bg-white/[0.08] transition active:scale-[0.98] text-right"
+                  >
+                    <div className="min-w-0">
+                      <p className="font-bold text-emerald-400 text-sm">{formatCurrency(p.amount ?? 0)} ج.م</p>
+                      <p className="text-xs text-slate-400 mt-0.5">{formatArabicDate(p.payment_date)}</p>
+                      {p.receipt_number && <p className="text-[10px] text-slate-500 mt-0.5 font-mono" dir="ltr">{p.receipt_number}</p>}
+                    </div>
+                    <MessageCircle size={18} className="text-emerald-400 flex-shrink-0" />
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      </Modal>
 
       <StudentViewModal open={!!viewTarget} student={viewTarget} onClose={() => setViewTarget(null)} />
     </div>

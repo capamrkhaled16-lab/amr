@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CalendarDays, CircleCheck as CheckCircle2, TriangleAlert as AlertTriangle, Clock, Archive, Plus, Factory as History, TrendingDown, DollarSign, Percent, Printer, Receipt, BookOpen, Send, Eye, MessageCircle, Copy } from 'lucide-react';
 import StudentViewModal from '@/components/ui/StudentViewModal';
@@ -148,6 +148,23 @@ export default function SubscriptionsModule({ groupId, gradeLevelId }: Props) {
       .finally(() => !cancelled && setReceiptPreviewLoading(false));
     return () => { cancelled = true; };
   }, [lastReceipt, settings.platform_name]);
+
+  // Auto-open WhatsApp with the receipt message shortly after a payment is
+  // recorded, so the user can confirm/send to the parent without an extra tap.
+  const autoWaFiredRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!lastReceipt || !lastReceipt.studentId) return;
+    const key = `${lastReceipt.receiptNumber}`;
+    if (autoWaFiredRef.current === key) return;
+    autoWaFiredRef.current = key;
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      if (cancelled) return;
+      void sendReceiptWhatsApp(lastReceipt);
+    }, 900);
+    return () => { cancelled = true; clearTimeout(timer); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastReceipt]);
 
   async function handleFullPay(sub: MonthlySubscription) {
     const remaining = sub.amount_due - sub.amount_paid;
@@ -488,23 +505,24 @@ export default function SubscriptionsModule({ groupId, gradeLevelId }: Props) {
                         <p className="text-xs text-red-400 mt-1.5 flex items-center gap-1 font-semibold"><TrendingDown size={12} /> متأخرات سابقة: {formatCurrency(studentArchived.amount_due - studentArchived.amount_paid)} ج.م</p>
                       )}
                     </div>
-                    <div className="flex gap-2 flex-wrap">
+                    <div className="flex gap-2 flex-wrap items-center">
                       <Button size="sm" variant="secondary" onClick={() => setViewTarget(s)} title="عرض بيانات الطالب"><Eye size={14} /> عرض</Button>
-                      <button
-                        type="button"
-                        onClick={() => sendLatestPaymentWhatsApp(s.id)}
-                        disabled={whatsappBusyId === s.id}
-                        title="إرسال إيصال الدفع أو تذكير السداد عبر واتساب"
-                        className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold text-emerald-300 bg-emerald-500/15 border border-emerald-500/30 hover:bg-emerald-500/25 hover:text-emerald-200 transition disabled:opacity-50 disabled:cursor-wait"
-                      >
-                        {whatsappBusyId === s.id ? <span className="inline-block w-3.5 h-3.5 border-2 border-emerald-300/40 border-t-emerald-300 rounded-full animate-spin" /> : <MessageCircle size={14} />}
-                        واتساب
-                      </button>
                       {!isFull && (
                         <>
                           <Button size="sm" variant="secondary" onClick={() => handleFullPay(sub)} title="تسجيل دفع كامل"><CheckCircle2 size={14} /> دفع كامل</Button>
                           <Button size="sm" variant="secondary" onClick={() => handleHalfMonthPay(sub)} title="تسجيل دفع نصف شهر للطلاب المنضمين متأخراً"><Clock size={14} /> نصف الشهر</Button>
                           <Button size="sm" onClick={() => { setPayTarget(sub); setPayAmount(''); setPayNote(''); setIsLate(sub.is_archived); }}><Plus size={14} /> دفعة جزئية</Button>
+                          <button
+                            type="button"
+                            onClick={() => sendLatestPaymentWhatsApp(s.id)}
+                            disabled={whatsappBusyId === s.id}
+                            title="إرسال إيصال الدفع أو تذكير السداد عبر واتساب"
+                            aria-label="واتساب"
+                            className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold text-emerald-200 bg-emerald-500/20 border-2 border-emerald-400/50 hover:bg-emerald-500/30 hover:text-emerald-100 hover:border-emerald-300/70 shadow-sm shadow-emerald-500/10 transition disabled:opacity-50 disabled:cursor-wait"
+                          >
+                            {whatsappBusyId === s.id ? <span className="inline-block w-3.5 h-3.5 border-2 border-emerald-300/40 border-t-emerald-300 rounded-full animate-spin" /> : <MessageCircle size={16} />}
+                            واتساب
+                          </button>
                           {isMaster && (
                             <Button size="sm" variant="secondary" onClick={() => { setDiscountTarget(sub); setDiscountAmount(String(sub.amount_due)); }} title="تعديل المبلغ المطلوب (خصم مخصص)"><Percent size={14} /> خصم</Button>
                           )}
@@ -513,6 +531,19 @@ export default function SubscriptionsModule({ groupId, gradeLevelId }: Props) {
                             <Button size="sm" variant="warning" onClick={() => { setPayTarget(sub); setPayAmount(''); setPayNote(''); setIsLate(true); }} title="تسجيل دفع متأخر للشهر المنتهي"><Clock size={14} /> دفع متأخر</Button>
                           )}
                         </>
+                      )}
+                      {isFull && (
+                        <button
+                          type="button"
+                          onClick={() => sendLatestPaymentWhatsApp(s.id)}
+                          disabled={whatsappBusyId === s.id}
+                          title="إرسال إيصال الدفع عبر واتساب"
+                          aria-label="واتساب"
+                          className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold text-emerald-200 bg-emerald-500/20 border-2 border-emerald-400/50 hover:bg-emerald-500/30 hover:text-emerald-100 hover:border-emerald-300/70 shadow-sm shadow-emerald-500/10 transition disabled:opacity-50 disabled:cursor-wait"
+                        >
+                          {whatsappBusyId === s.id ? <span className="inline-block w-3.5 h-3.5 border-2 border-emerald-300/40 border-t-emerald-300 rounded-full animate-spin" /> : <MessageCircle size={16} />}
+                          واتساب
+                        </button>
                       )}
                     </div>
                   </div>

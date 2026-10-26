@@ -6,6 +6,7 @@ import { calcStudentAverages, type RawGrade } from './gradeCalc';
 import { swrFetch, invalidateCache, invalidateByPrefix, withTimeout } from './cache';
 import { idempotencyGuard, generateOpKey } from './idempotency';
 import { safeWrite, generateOpKey as safeOpKey } from './safeWrite';
+import { formatCurrency } from './format';
 import { emitPaymentsChanged, emitAttendanceChanged, emitStudentsChanged, emitSessionsChanged, emitHomeworkChanged, emitBehaviorChanged, emitGradesChanged, emitGroupsChanged } from './eventBus';
 
 export function currentMonthKey(): string {
@@ -228,7 +229,7 @@ export async function fetchDashboardKPIs(monthKey?: string): Promise<{
   // Students query is critical — if it fails, we throw. Others degrade gracefully.
   // PRIMARY source for paid amounts: monthly_subscriptions (has month_key + amount_paid).
   // Fallback: payments table (may lack month_key on some DB schemas).
-  const [studentsSettled, subsSettled, paymentsSettled, exemptionsSettled, groupsSettled] = await Promise.allSettled([
+  const [studentsSettled, subsSettled, exemptionsSettled, groupsSettled] = await Promise.allSettled([
     timeout(supabase
       .from('students')
       .select('id, name, phone, parent_phone, group_id, status, total_fees, paid_fees, is_exempt, discount_mode, discount_amount, discount_percent, fee_mode, pro_rata_sessions, join_month_key, enrollment_date, created_at, group:groups(name, schedule, grade_level:grade_levels(name, stage:academic_stages(name, sort_order)))')
@@ -239,11 +240,6 @@ export async function fetchDashboardKPIs(monthKey?: string): Promise<{
       .select('student_id, amount_paid')
       .eq('month_key', mk)
       .gt('amount_paid', 0)),
-    timeout(supabase
-      .from('payments')
-      .select('student_id, amount, payment_date')
-      .eq('is_deleted', false)
-      .gt('amount', 0)),
     timeout(supabase
       .from('monthly_subscriptions')
       .select('student_id')
@@ -273,6 +269,9 @@ export async function fetchDashboardKPIs(monthKey?: string): Promise<{
 
   // Build monthlyPaidMap from monthly_subscriptions (authoritative, month-scoped).
   // Fall back to payments table only if subscriptions yield nothing for this month.
+  // IMPORTANT: scope the payments fallback by month_key (not payment_date range).
+  // payment_date can fall outside the assigned month (e.g. a September payment
+  // recorded in October), so date-range filtering leaks cross-month amounts.
   const monthlyPaidArr: [string, number][] = [];
   const tempMap = new Map<string, number>();
   if (subsSettled.status === 'fulfilled' && !subsSettled.value.error) {
@@ -280,15 +279,19 @@ export async function fetchDashboardKPIs(monthKey?: string): Promise<{
       tempMap.set(row.student_id, (tempMap.get(row.student_id) ?? 0) + (row.amount_paid ?? 0));
     }
   }
-  if (tempMap.size === 0 && paymentsSettled.status === 'fulfilled' && !paymentsSettled.value.error) {
-    // payments table may lack month_key; scope by payment_date within the month.
-    const [y, m] = mk.split('-').map(Number);
-    const start = `${y}-${String(m).padStart(2, '0')}-01`;
-    const nextMonthDate = new Date(y, m, 1);
-    const end = `${nextMonthDate.getFullYear()}-${String(nextMonthDate.getMonth() + 1).padStart(2, '0')}-01`;
-    for (const p of (paymentsSettled.value.data ?? []) as { student_id: string; amount: number; payment_date: string }[]) {
-      const pd = p.payment_date ?? '';
-      if (pd >= start && pd < end) {
+  if (tempMap.size === 0) {
+    // Re-query payments scoped by month_key so October totals never include
+    // September rows. The earlier broad query fetches all non-deleted payments
+    // (needed for the legacy date-range fallback) and cannot be filtered here.
+    const { data: monthPayments, error: monthPayErr } = await supabase
+      .from('payments')
+      .select('student_id, amount')
+      .eq('month_key', mk)
+      .eq('is_deleted', false)
+      .eq('is_historical_payment', false)
+      .gt('amount', 0);
+    if (!monthPayErr && monthPayments) {
+      for (const p of monthPayments as { student_id: string; amount: number }[]) {
         tempMap.set(p.student_id, (tempMap.get(p.student_id) ?? 0) + (p.amount ?? 0));
       }
     }
@@ -520,10 +523,12 @@ export async function setStudentStatus(
     .select('name, group_id, total_fees, paid_fees')
     .eq('id', id)
     .maybeSingle();
-  await supabase.from('students').update({ status, is_deleted: status !== 'active' }).eq('id', id);
-  // Invalidate student caches for the group
-  const groupId = (student as { group_id?: string } | null)?.group_id;
-  if (groupId) invalidateCache(`students_${groupId}`);
+  const { error } = await supabase.from('students').update({ status, is_deleted: status !== 'active' }).eq('id', id);
+  if (error) throw new Error(error.message);
+  // Invalidate all student caches so dashboard KPIs and lists refresh from DB
+  invalidateByPrefix('students_');
+  invalidateCache('all_students');
+  invalidateByPrefix('kpi_');
   if (status !== 'active') {
     const now = new Date();
     const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -565,13 +570,21 @@ export async function hardDeleteStudent(
     .select('name, group_id')
     .eq('id', id)
     .maybeSingle();
-  await supabase.from('payments').delete().eq('student_id', id);
-  await supabase.from('attendance').delete().eq('student_id', id);
-  await supabase.from('homework_status').delete().eq('student_id', id);
-  await supabase.from('monthly_subscriptions').delete().eq('student_id', id);
-  await supabase.from('hall_of_fame').delete().eq('student_id', id);
-  await supabase.from('students').delete().eq('id', id);
-  if (student?.group_id) invalidateCache(`students_${student.group_id}`);
+  // Cascade-delete child rows. Surface errors instead of silently swallowing
+  // them — a swallowed RLS denial leaves the student in the DB and the UI
+  // claims success, which is what caused deleted records to reappear.
+  const childTables = ['payments', 'attendance', 'homework_status', 'monthly_subscriptions', 'hall_of_fame'] as const;
+  for (const table of childTables) {
+    const { error } = await supabase.from(table).delete().eq('student_id', id);
+    if (error) throw new Error(`تعذّر حذف سجلات ${table}: ${error.message}`);
+  }
+  const { error: studentErr } = await supabase.from('students').delete().eq('id', id);
+  if (studentErr) throw new Error(studentErr.message);
+  // Bust every cache that may hold this student so lists, KPIs, and the
+  // dashboard re-fetch from the database instead of showing stale rows.
+  invalidateByPrefix('students_');
+  invalidateCache('all_students');
+  invalidateByPrefix('kpi_');
   if (student) {
     await createAuditLog(actorName, actorRole, 'student_delete', id, null, `حذف نهائي: ${student.name}`);
   }
