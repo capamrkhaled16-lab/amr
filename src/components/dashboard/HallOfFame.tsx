@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Trophy, Star, TrendingUp, CalendarCheck, Medal, BookOpen, Heart, Award,
-  ChevronDown, Loader2, AlertTriangle, CheckCircle2, XCircle, Minus, TrendingDown, User,
+  Trophy, Star, TrendingUp, CalendarCheck, BookOpen, Heart, Award,
+  ChevronDown, Loader2, AlertTriangle, CheckCircle2, XCircle, Minus, TrendingDown, User, Info,
 } from 'lucide-react';
 import type { HallOfFameEntry, Student } from '@/lib/types';
 import { fetchHallOfFame, fetchRankBreakdown, fetchStudentsByIds } from '@/lib/data';
@@ -14,6 +14,91 @@ import { formatArabicDate } from '@/lib/format';
 import Modal from '@/components/ui/Modal';
 import { PDFButton } from '@/components/ui/PDFButton';
 import { exportHallOfFamePDF } from '@/lib/pdfExport';
+
+const RANK_EMOJI: Record<number, string> = { 1: '🥇', 2: '🥈', 3: '🥉' };
+
+function rankBadge(rank: number): string {
+  return RANK_EMOJI[rank] ?? `#${rank}`;
+}
+
+function buildRankExplanation(
+  entry: HallOfFameEntry,
+  rank: number,
+  ranked: RankedEntry[],
+  breakdown: BreakdownData | null
+): string {
+  const studentName = entry.name;
+  const totalScore = toNum(entry.overall_score).toFixed(2);
+  const avgExam = Math.round(toNum(entry.avg_score));
+  const attRate = Math.round(toNum(entry.attendance_rate));
+  const hwRate = entry.homework_rate != null ? Math.round(toNum(entry.homework_rate)) : null;
+  const behScore = Math.round(toNum(entry.behavior_score));
+
+  // Find the next-ranked student (different rank) to compute the gap
+  const nextEntry = ranked.find((r) => r.rank === rank + 1);
+  const gap = nextEntry ? (toNum(entry.overall_score) - toNum(nextEntry.overall_score)).toFixed(2) : null;
+  // Find the previous-ranked student to compute the distance to climb
+  const prevEntry = ranked.slice().reverse().find((r) => r.rank === rank - 1);
+  const prevGap = prevEntry ? (toNum(prevEntry.overall_score) - toNum(entry.overall_score)).toFixed(2) : null;
+
+  const rankLabelStr = rank === 1 ? 'الأول' : rank === 2 ? 'الثاني' : rank === 3 ? 'الثالث' : `الـ${rank}`;
+  const rankEmoji = RANK_EMOJI[rank] ?? '';
+
+  // Build criteria strengths/weaknesses from real data
+  const strengths: string[] = [];
+  const improvements: string[] = [];
+
+  if (avgExam >= 85) strengths.push(`معدل امتحانات ممتاز (${avgExam}%)`);
+  else if (avgExam < 50) improvements.push(`معدل الامتحانات يحتاج تحسين (${avgExam}%)`);
+
+  if (attRate >= 90) strengths.push(`حضور ملتزم (${attRate}%)`);
+  else if (attRate < 70) improvements.push(`نسبة الحضور تحتاج متابعة (${attRate}%)`);
+
+  if (hwRate != null) {
+    if (hwRate >= 90) strengths.push(`التزام كامل بالواجبات (${hwRate}%)`);
+    else if (hwRate < 70) improvements.push(`إكمال الواجبات يحتاج تحسين (${hwRate}%)`);
+  }
+
+  if (behScore >= 85) strengths.push(`سلوك إيجابي ومشاركة (${behScore}%)`);
+  else if (behScore < 60) improvements.push(`السلوك يحتاج اهتمام (${behScore}%)`);
+
+  if (breakdown && breakdown.deductedPoints.length === 0) {
+    strengths.push('لا توجد نقاط منقوصة');
+  }
+
+  const parts: string[] = [];
+
+  // Opening
+  if (rank === 1) {
+    parts.push(`${rankEmoji} يستحق الطالب ${studentName} المركز الأول بفضل أدائه المتميز وفقًا لمعايير التقييم المعتمدة. حقق درجة إجمالية ${totalScore} من 100، وتفوّق في ${strengths.length > 0 ? strengths.join('، ') : 'معايير التقييم'}.`);
+  } else {
+    parts.push(`${rankEmoji} يستحق الطالب ${studentName} المركز ${rankLabelStr} بفضل أدائه الجيد وفقًا لمعايير التقييم المعتمدة. حقق درجة إجمالية ${totalScore} من 100${strengths.length > 0 ? `، وتميّز في ${strengths.join('، ')}` : ''}.`);
+  }
+
+  // Gap to next/prev
+  if (rank === 1 && gap) {
+    parts.push(`يتقدّم على صاحب المركز الثاني بفارق ${gap} نقطة.`);
+  } else if (rank > 1 && prevGap) {
+    parts.push(`الفارق بينه وبين صاحب المركز ${rank === 2 ? 'الأول' : rank === 3 ? 'الثاني' : `الـ${rank - 1}`} هو ${prevGap} نقطة.`);
+    if (gap) {
+      parts.push(`ويتقدّم على صاحب المركز التالي بفارق ${gap} نقطة.`);
+    }
+  }
+
+  // Improvements
+  if (improvements.length > 0) {
+    if (rank === 1) {
+      parts.push(`للحفاظ على الصدارة، يُنصح بتحسين: ${improvements.join('، ')}.`);
+    } else {
+      parts.push(`للتقدّم إلى مركز أعى، يحتاج إلى تحسين: ${improvements.join('، ')}.`);
+    }
+  }
+
+  // Formula note
+  parts.push(`معادلة الترتيب: الامتحانات 35% + الحضور 25% + الواجبات 20% + السلوك 20%. في حال تساوي الدرجة الإجمالية، يُرجّح بمعدل الامتحانات ثم الحضور ثم الواجبات ثم السلوك.`);
+
+  return parts.join(' ');
+}
 
 type HallOfFameProps = {
   groupId?: string;
@@ -252,7 +337,7 @@ export default function HallOfFame({ groupId, refreshKey = 0, onViewStudent }: H
                   className={`w-full text-right flex items-center gap-3 p-3 rounded-xl transition hover:bg-amber-500/10 ${rank <= 3 ? 'bg-gradient-to-l from-amber-500/10 to-transparent border border-amber-500/20' : 'glass-light'}`}
                 >
                   <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black text-sm flex-shrink-0 ${rank <= 3 ? `bg-gradient-to-br ${medalColors[rank - 1]} text-slate-900 shadow-lg` : 'bg-white/5 text-slate-400 border border-white/10'}`}>
-                    {rank <= 3 ? <Medal size={18} /> : rank}
+                    {rank <= 3 ? <span className="text-lg leading-none">{RANK_EMOJI[rank]}</span> : rank}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-bold text-white break-words leading-snug">{entry.name}</p>
@@ -285,17 +370,20 @@ export default function HallOfFame({ groupId, refreshKey = 0, onViewStudent }: H
         title="تحليل تفصيلي للترتيب"
         size="lg"
       >
-        {selectedEntry && (
+        {selectedEntry && (() => {
+          const selectedRank = rankedEntries.find((r) => r.id === selectedEntry.id)?.rank ?? 1;
+          return (
           <div className="space-y-4 text-right">
-            {/* Student header */}
-            <div className="flex items-center gap-3 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20">
-              <div className="p-3 rounded-2xl bg-amber-500/15 text-amber-400">
-                <Award size={24} />
+            {/* Student header with rank badge */}
+            <div className="flex items-center gap-3 p-4 rounded-2xl bg-gradient-to-l from-amber-500/15 to-transparent border border-amber-500/20">
+              <div className="p-3 rounded-2xl bg-amber-500/15 text-amber-400 flex items-center justify-center">
+                <span className="text-2xl leading-none">{RANK_EMOJI[selectedRank] ?? ''}</span>
+                <Award size={20} className="mr-1" />
               </div>
               <div className="flex-1">
                 <h4 className="font-bold text-white text-lg">{selectedEntry.name}</h4>
                 <p className="text-xs text-amber-300">
-                  {selectedEntry.group_name} — {selectedEntry.grade_name}
+                  {selectedEntry.group_name} — {selectedEntry.grade_name} — {rankLabel(selectedRank)}
                 </p>
               </div>
               <div className="text-center">
@@ -329,6 +417,40 @@ export default function HallOfFame({ groupId, refreshKey = 0, onViewStudent }: H
               <ScoreCard label="الواجبات" value={selectedEntry.homework_rate == null ? '—' : `${Math.round(toNum(selectedEntry.homework_rate))}%`} icon={<BookOpen size={14} />} color="text-violet-400" weight="20%" />
               <ScoreCard label="السلوك" value={`${Math.round(toNum(selectedEntry.behavior_score))}%`} icon={<Heart size={14} />} color="text-rose-400" weight="20%" />
             </div>
+
+            {/* Why does the student deserve this rank? */}
+            <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="glass-card rounded-2xl p-4 space-y-3 border border-amber-500/20">
+              <h4 className="font-bold text-sm text-amber-300 flex items-center gap-2">
+                <Info size={16} />
+                لماذا يستحق هذا المركز؟
+              </h4>
+              <p className="text-sm text-slate-200 leading-relaxed">
+                {buildRankExplanation(selectedEntry, selectedRank, rankedEntries, breakdown)}
+              </p>
+              {(() => {
+                const nextEntry = rankedEntries.find((r) => r.rank === selectedRank + 1);
+                const prevEntry = rankedEntries.slice().reverse().find((r) => r.rank === selectedRank - 1);
+                if (!nextEntry && !prevEntry) return null;
+                return (
+                  <div className="grid grid-cols-2 gap-2 pt-1">
+                    {prevEntry && (
+                      <div className="glass-light rounded-xl p-2.5 text-center">
+                        <p className="text-[10px] text-slate-500">الفارق عن المركز الأعلى</p>
+                        <p className="text-sm font-bold text-red-400">+{(toNum(prevEntry.overall_score) - toNum(selectedEntry.overall_score)).toFixed(2)}</p>
+                        <p className="text-[9px] text-slate-600">{prevEntry.name}</p>
+                      </div>
+                    )}
+                    {nextEntry && (
+                      <div className="glass-light rounded-xl p-2.5 text-center">
+                        <p className="text-[10px] text-slate-500">الفارق عن المركز التالي</p>
+                        <p className="text-sm font-bold text-emerald-400">{(toNum(selectedEntry.overall_score) - toNum(nextEntry.overall_score)).toFixed(2)}</p>
+                        <p className="text-[9px] text-slate-600">{nextEntry.name}</p>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+            </motion.div>
 
             {breakdownLoading ? (
               <div className="flex items-center justify-center py-12">
@@ -462,7 +584,8 @@ export default function HallOfFame({ groupId, refreshKey = 0, onViewStudent }: H
               </AnimatePresence>
             ) : null}
           </div>
-        )}
+        );
+        })()}
       </Modal>
     </>
   );

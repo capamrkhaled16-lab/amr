@@ -460,71 +460,44 @@ export default function DashboardPage() {
   }, []);
 
   // Smart auto-refresh: when the app returns to the foreground (visibilitychange,
-  // focus, pageshow) or reconnects (online), refresh data once. A watchdog recovers
-  // a stuck/frozen session after 10s → 20s → 60s backoff. All reloads are
+  // focus, pageshow) or reconnects (online), refresh data once. All reloads are
   // debounced and deduped to prevent loops, duplicate requests, or logout.
   useEffect(() => {
-    let lastRefresh = Date.now();
+    let lastRefresh = 0;
     let pendingTimer: ReturnType<typeof setTimeout> | null = null;
-    let watchdog: ReturnType<typeof setTimeout> | null = null;
-    let refreshing = false;
 
-    const doRefresh = (reason: string) => {
-      if (refreshing) return;
+    const doRefresh = () => {
       const now = Date.now();
       // Throttle: at most one refresh per 4s to avoid duplicate requests.
       if (now - lastRefresh < 4000) return;
-      refreshing = true;
       lastRefresh = now;
       try {
+        invalidateByPrefix('students_');
+        invalidateByPrefix('kpi_');
         loadKPIsRef.current();
         if (selectedGroupRef.current) {
           loadStudentsRef.current();
           loadGroupStatsRef.current();
         }
-        invalidateByPrefix('students_');
-        invalidateByPrefix('kpi_');
-      } catch (err) {
-        console.warn('[auto-refresh] refresh failed:', reason, err);
-      } finally {
-        // Release the lock shortly after; the fetches are fire-and-forget.
-        setTimeout(() => { refreshing = false; }, 1500);
-      }
+      } catch { /* ignore — realtime will catch up */ }
     };
 
-    const scheduleRefresh = (reason: string) => {
+    const scheduleRefresh = () => {
       if (pendingTimer) clearTimeout(pendingTimer);
       pendingTimer = setTimeout(() => {
         pendingTimer = null;
-        doRefresh(reason);
+        doRefresh();
       }, 600);
     };
 
     const onVisibility = () => {
-      if (document.visibilityState === 'visible') scheduleRefresh('visibility');
+      if (document.visibilityState === 'visible') scheduleRefresh();
     };
-    const onFocus = () => scheduleRefresh('focus');
-    const onOnline = () => scheduleRefresh('online');
+    const onFocus = () => scheduleRefresh();
+    const onOnline = () => scheduleRefresh();
     const onPageShow = (e: PageTransitionEvent) => {
-      if (e.persisted) scheduleRefresh('pageshow-bfcr');
+      if (e.persisted) scheduleRefresh();
     };
-
-    // Watchdog: if the tab stays visible but no refresh has happened in 10/20/60s,
-    // nudge it. This recovers from a frozen/swapped-out tab without a full reload.
-    const scheduleWatchdog = () => {
-      if (watchdog) clearTimeout(watchdog);
-      watchdog = setTimeout(() => {
-        if (document.visibilityState === 'visible') doRefresh('watchdog-10s');
-        watchdog = setTimeout(() => {
-          if (document.visibilityState === 'visible') doRefresh('watchdog-20s');
-          watchdog = setTimeout(() => {
-            if (document.visibilityState === 'visible') doRefresh('watchdog-60s');
-            scheduleWatchdog();
-          }, 60000);
-        }, 20000);
-      }, 10000);
-    };
-    scheduleWatchdog();
 
     document.addEventListener('visibilitychange', onVisibility);
     window.addEventListener('focus', onFocus);
@@ -533,7 +506,6 @@ export default function DashboardPage() {
 
     return () => {
       if (pendingTimer) clearTimeout(pendingTimer);
-      if (watchdog) clearTimeout(watchdog);
       document.removeEventListener('visibilitychange', onVisibility);
       window.removeEventListener('focus', onFocus);
       window.removeEventListener('online', onOnline);
