@@ -50,7 +50,7 @@ import {
   fetchGroupStats,
   deletePaymentWithAudit,
 } from '@/lib/data';
-import { getCached, isCacheFresh } from '@/lib/cache';
+import { getCached, isCacheFresh, invalidateByPrefix } from '@/lib/cache';
 import { formatCurrency } from '@/lib/format';
 import { supabase } from '@/lib/supabase';
 import { checkMonthReset } from '@/lib/monthReset';
@@ -459,6 +459,88 @@ export default function DashboardPage() {
     };
   }, []);
 
+  // Smart auto-refresh: when the app returns to the foreground (visibilitychange,
+  // focus, pageshow) or reconnects (online), refresh data once. A watchdog recovers
+  // a stuck/frozen session after 10s → 20s → 60s backoff. All reloads are
+  // debounced and deduped to prevent loops, duplicate requests, or logout.
+  useEffect(() => {
+    let lastRefresh = Date.now();
+    let pendingTimer: ReturnType<typeof setTimeout> | null = null;
+    let watchdog: ReturnType<typeof setTimeout> | null = null;
+    let refreshing = false;
+
+    const doRefresh = (reason: string) => {
+      if (refreshing) return;
+      const now = Date.now();
+      // Throttle: at most one refresh per 4s to avoid duplicate requests.
+      if (now - lastRefresh < 4000) return;
+      refreshing = true;
+      lastRefresh = now;
+      try {
+        loadKPIsRef.current();
+        if (selectedGroupRef.current) {
+          loadStudentsRef.current();
+          loadGroupStatsRef.current();
+        }
+        invalidateByPrefix('students_');
+        invalidateByPrefix('kpi_');
+      } catch (err) {
+        console.warn('[auto-refresh] refresh failed:', reason, err);
+      } finally {
+        // Release the lock shortly after; the fetches are fire-and-forget.
+        setTimeout(() => { refreshing = false; }, 1500);
+      }
+    };
+
+    const scheduleRefresh = (reason: string) => {
+      if (pendingTimer) clearTimeout(pendingTimer);
+      pendingTimer = setTimeout(() => {
+        pendingTimer = null;
+        doRefresh(reason);
+      }, 600);
+    };
+
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') scheduleRefresh('visibility');
+    };
+    const onFocus = () => scheduleRefresh('focus');
+    const onOnline = () => scheduleRefresh('online');
+    const onPageShow = (e: PageTransitionEvent) => {
+      if (e.persisted) scheduleRefresh('pageshow-bfcr');
+    };
+
+    // Watchdog: if the tab stays visible but no refresh has happened in 10/20/60s,
+    // nudge it. This recovers from a frozen/swapped-out tab without a full reload.
+    const scheduleWatchdog = () => {
+      if (watchdog) clearTimeout(watchdog);
+      watchdog = setTimeout(() => {
+        if (document.visibilityState === 'visible') doRefresh('watchdog-10s');
+        watchdog = setTimeout(() => {
+          if (document.visibilityState === 'visible') doRefresh('watchdog-20s');
+          watchdog = setTimeout(() => {
+            if (document.visibilityState === 'visible') doRefresh('watchdog-60s');
+            scheduleWatchdog();
+          }, 60000);
+        }, 20000);
+      }, 10000);
+    };
+    scheduleWatchdog();
+
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('focus', onFocus);
+    window.addEventListener('online', onOnline);
+    window.addEventListener('pageshow', onPageShow);
+
+    return () => {
+      if (pendingTimer) clearTimeout(pendingTimer);
+      if (watchdog) clearTimeout(watchdog);
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('focus', onFocus);
+      window.removeEventListener('online', onOnline);
+      window.removeEventListener('pageshow', onPageShow);
+    };
+  }, []);
+
   useEffect(() => {
     if (sidebarOpen) {
       lockBodyScroll();
@@ -684,6 +766,10 @@ export default function DashboardPage() {
         onLogout={handleLogout}
         onSearchNavigate={async (s, target) => {
           if (!s.group_id && target !== 'profile') return;
+          // Hoist resolved values so searchFocus uses them, not stale React state.
+          let resolvedStage: AcademicStage | null = selectedStage;
+          let resolvedGrade: GradeLevel | null = selectedGrade;
+          let resolvedGroupId = s.group_id ?? '';
           // ID-based lookup: resolve stage and grade from the group's foreign keys
           // rather than matching by name (which fails with similar names).
           if (s.group_id) {
@@ -720,22 +806,36 @@ export default function DashboardPage() {
                   const found = gdata.find((g) => g.id === gradeLevelId);
                   if (found) {
                     gl = found;
-                    if (st.id !== selectedStage?.id) setSelectedStage(st);
+                    if (st.id !== selectedStage?.id) {
+                      setSelectedStage(st);
+                      resolvedStage = st;
+                    }
                     break;
                   }
                 }
               } else if (gl && gl.stage_id !== selectedStage?.id) {
                 const stage = stages.find((st) => st.id === gl!.stage_id);
-                if (stage) setSelectedStage(stage);
+                if (stage) {
+                  setSelectedStage(stage);
+                  resolvedStage = stage;
+                }
               }
-              if (gl) setSelectedGrade(gl);
-              if (fullGrp) setSelectedGroup(fullGrp);
+              if (gl) {
+                setSelectedGrade(gl);
+                resolvedGrade = gl;
+              }
+              if (fullGrp) {
+                setSelectedGroup(fullGrp);
+                resolvedGroupId = fullGrp.id;
+              }
             } catch {
               // Fallback: just set the group from search result
               if (grp) setSelectedGroup(grp);
             }
           }
-          setSearchFocus({ stageId: selectedStage?.id ?? '', gradeId: selectedGrade?.id ?? '', groupId: s.group_id ?? '', studentId: s.id });
+          // Build searchFocus from the RESOLVED values, not the stale state
+          // (setSelectedStage/Grade/Group batch and don't update synchronously).
+          setSearchFocus({ stageId: resolvedStage?.id ?? '', gradeId: resolvedGrade?.id ?? '', groupId: resolvedGroupId, studentId: s.id });
           setNotifFocusStudentId(s.id);
           const tabMap: Record<string, Tab> = {
             finance: 'finances',

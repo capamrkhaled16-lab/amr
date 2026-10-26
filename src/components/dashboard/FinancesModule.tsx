@@ -486,22 +486,6 @@ export default function FinancesModule({ focusStageId, focusGradeId, focusGroupI
       }
       const monthLabel = getMonthLabel(monthKey);
       showToast(`تم تسجيل دفع مصروفات شهر ${monthLabel} للطالب ${savedStudent.name} — المبلغ ${formatCurrency(amount)} ج.م — بواسطة ${actorName}`, 'success');
-      sendReceiptWhatsAppText({
-        receiptNumber: payment.receipt_number,
-        studentName: savedStudent.name,
-        studentId: savedStudent.id,
-        amount,
-        date: payment.payment_date,
-        monthKey,
-        note: savedNote || null,
-        recordedBy: actorName,
-        groupName: selectedGroup?.name,
-        gradeName: selectedGrade?.name,
-        stageName: selectedStage?.name,
-        recordedAt: payment.recorded_at,
-        totalDueAtPayment,
-        totalPaidAtPayment,
-      });
     } catch (err) {
       console.error('[handleAddPayment] Payment save failed:', err);
       setMonthlyPaidMap((prev) => { const m = new Map(prev); m.set(savedStudent.id, Math.max(0, (m.get(savedStudent.id) ?? 0) - amount)); return m; });
@@ -575,22 +559,6 @@ export default function FinancesModule({ focusStageId, focusGradeId, focusGroupI
       }
       const monthLabel = getMonthLabel(monthKey);
       showToast(`تم دفع كامل مصروفات شهر ${monthLabel} للطالب ${student.name} — المبلغ ${formatCurrency(remaining)} ج.م — بواسطة ${actorName}`, 'success');
-      sendReceiptWhatsAppText({
-        receiptNumber: payment.receipt_number,
-        studentName: student.name,
-        studentId: student.id,
-        amount: remaining,
-        date: payment.payment_date,
-        monthKey,
-        note: 'دفع كامل',
-        recordedBy: actorName,
-        groupName: selectedGroup?.name,
-        gradeName: selectedGrade?.name,
-        stageName: selectedStage?.name,
-        recordedAt: payment.recorded_at,
-        totalDueAtPayment,
-        totalPaidAtPayment,
-      });
     } catch (err) {
       console.error('[handleQuickFullPay] Payment save failed:', err);
       setMonthlyPaidMap((prev) => { const m = new Map(prev); m.set(student.id, Math.max(0, (m.get(student.id) ?? 0) - remaining)); return m; });
@@ -2064,7 +2032,7 @@ export default function FinancesModule({ focusStageId, focusGradeId, focusGroupI
                   }}
                 >
                   {whatsappSending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
-                  إرسال عبر واتساب
+                  تأكيد السداد والمتابعة لواتساب
                 </Button>
               </div>
             </div>
