@@ -165,7 +165,7 @@ export default function CertificateModule({ students }: CertificateModuleProps) 
       particleCount: 120,
       spread: 75,
       origin: { y: 0.6 },
-      colors: ['#1e3a5f', '#c8a040', '#8b1538', '#e8d088', '#fbbf24'],
+      colors: ['#d4af37', '#f0d774', '#9a7d1f', '#fbbf24', '#e8d088'],
     });
   }
 
@@ -235,17 +235,18 @@ export default function CertificateModule({ students }: CertificateModuleProps) 
 
   const showCertificate = (selected && issued) || (selected && previewing);
 
-  // Premium color palette
+  // Premium black-and-gold palette
   const COLORS = {
-    deepBlue: '#1e3a5f',
-    burgundy: '#8b1538',
-    gold: '#c8a040',
-    goldLight: '#e8d088',
-    goldDark: '#a67c28',
-    cream: '#fffcf5',
-    creamDark: '#f5f0e0',
-    ink: '#2a2a2a',
-    inkLight: '#555',
+    black: '#0a0a0a',
+    charcoal: '#1a1a1a',
+    charcoalLight: '#222222',
+    gold: '#d4af37',
+    goldLight: '#f0d774',
+    goldDark: '#9a7d1f',
+    goldGlow: 'rgba(212,175,55,0.15)',
+    white: '#f5f5f5',
+    whiteDim: '#cccccc',
+    whiteFaint: '#888888',
   };
 
   const isLandscape = orientation === 'landscape';
@@ -484,23 +485,29 @@ export default function CertificateModule({ students }: CertificateModuleProps) 
               <div
                 id="certificate-print-area"
                 ref={printRef}
-                className="relative overflow-hidden mx-auto bg-white"
+                className="relative overflow-hidden mx-auto"
                 style={{
                   aspectRatio: isLandscape ? '297 / 210' : '210 / 297',
                   maxWidth: '100%',
                   width: isLandscape ? '1100px' : '800px',
+                  background: `radial-gradient(ellipse at 50% 30%, ${COLORS.charcoalLight} 0%, ${COLORS.black} 70%)`,
                 }}
               >
-                {/* ── Linen paper texture background ── */}
+                {/* ── Geometric gold ambient pattern ── */}
                 <div
-                  className="absolute inset-0"
+                  className="absolute inset-0 pointer-events-none"
                   style={{
-                    background: `linear-gradient(135deg, ${COLORS.cream} 0%, ${COLORS.creamDark} 50%, ${COLORS.cream} 100%)`,
-                    backgroundImage: `
-                      repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(200,160,64,0.015) 2px, rgba(200,160,64,0.015) 4px),
-                      repeating-linear-gradient(90deg, transparent, transparent 2px, rgba(200,160,64,0.015) 2px, rgba(200,160,64,0.015) 4px),
-                      linear-gradient(135deg, ${COLORS.cream} 0%, ${COLORS.creamDark} 50%, ${COLORS.cream} 100%)
-                    `,
+                    opacity: 0.04,
+                    backgroundImage: `radial-gradient(circle at 20% 20%, ${COLORS.gold} 1px, transparent 1px), radial-gradient(circle at 80% 80%, ${COLORS.gold} 1px, transparent 1px)`,
+                    backgroundSize: '40px 40px',
+                  }}
+                />
+                {/* ── Diagonal gold mesh ── */}
+                <div
+                  className="absolute inset-0 pointer-events-none"
+                  style={{
+                    opacity: 0.03,
+                    backgroundImage: `repeating-linear-gradient(45deg, transparent, transparent 30px, ${COLORS.gold} 30px, ${COLORS.gold} 31px), repeating-linear-gradient(-45deg, transparent, transparent 30px, ${COLORS.gold} 30px, ${COLORS.gold} 31px)`,
                   }}
                 />
 
@@ -511,57 +518,49 @@ export default function CertificateModule({ students }: CertificateModuleProps) 
                     inset: '12px',
                     border: `3px solid ${COLORS.gold}`,
                     borderRadius: '8px',
-                    boxShadow: `inset 0 0 0 1px ${COLORS.goldLight}, inset 0 0 0 5px transparent, inset 0 0 0 6px ${COLORS.gold}`,
+                    boxShadow: `inset 0 0 0 1px ${COLORS.goldLight}, inset 0 0 0 5px transparent, inset 0 0 0 6px ${COLORS.goldDark}`,
                   }}
                 />
                 {/* Inner thin border */}
                 <div
                   className="absolute pointer-events-none"
                   style={{
-                    inset: '22px',
+                    inset: '20px',
                     border: `1px solid ${COLORS.goldDark}`,
-                    borderRadius: '4px',
+                    borderRadius: '3px',
                   }}
                 />
                 {/* Innermost accent line */}
                 <div
                   className="absolute pointer-events-none"
                   style={{
-                    inset: '28px',
+                    inset: '26px',
                     border: `0.5px solid ${COLORS.goldLight}`,
+                    opacity: 0.4,
                     borderRadius: '2px',
                   }}
                 />
 
                 {/* ── Corner ornaments (Arabesque style) ── */}
                 {[
-                  { pos: 'top-[16px] right-[16px]', rotate: '0deg' },
-                  { pos: 'top-[16px] left-[16px]', rotate: '270deg' },
-                  { pos: 'bottom-[16px] right-[16px]', rotate: '90deg' },
-                  { pos: 'bottom-[16px] left-[16px]', rotate: '180deg' },
+                  { pos: 'top-[14px] right-[14px]', rotate: '0deg' },
+                  { pos: 'top-[14px] left-[14px]', rotate: '270deg' },
+                  { pos: 'bottom-[14px] right-[14px]', rotate: '90deg' },
+                  { pos: 'bottom-[14px] left-[14px]', rotate: '180deg' },
                 ].map((corner, i) => (
                   <div key={i} className={`absolute ${corner.pos} pointer-events-none`} style={{ transform: `rotate(${corner.rotate})` }}>
-                    <svg width="52" height="52" viewBox="0 0 52 52" fill="none">
-                      <path d="M4 4 Q26 4 26 26 Q4 26 4 4 Z" fill={COLORS.gold} opacity="0.12" />
-                      <path d="M4 4 L4 20 M4 4 L20 4" stroke={COLORS.gold} strokeWidth="2.5" strokeLinecap="round" />
-                      <circle cx="8" cy="8" r="3" fill={COLORS.gold} />
-                      <circle cx="8" cy="8" r="5" stroke={COLORS.goldDark} strokeWidth="0.8" fill="none" />
-                      <path d="M14 4 Q18 4 18 8" stroke={COLORS.gold} strokeWidth="1.5" fill="none" />
-                      <path d="M4 14 Q4 18 8 18" stroke={COLORS.gold} strokeWidth="1.5" fill="none" />
+                    <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
+                      <path d="M4 4 Q28 4 28 28 Q4 28 4 4 Z" fill={COLORS.gold} opacity="0.08" />
+                      <path d="M4 4 L4 24 M4 4 L24 4" stroke={COLORS.gold} strokeWidth="2.5" strokeLinecap="round" />
+                      <circle cx="10" cy="10" r="3.5" fill={COLORS.gold} />
+                      <circle cx="10" cy="10" r="6" stroke={COLORS.goldDark} strokeWidth="0.8" fill="none" />
+                      <path d="M16 4 Q22 4 22 10" stroke={COLORS.gold} strokeWidth="1.5" fill="none" />
+                      <path d="M4 16 Q4 22 10 22" stroke={COLORS.gold} strokeWidth="1.5" fill="none" />
+                      <circle cx="22" cy="4" r="1.5" fill={COLORS.goldLight} />
+                      <circle cx="4" cy="22" r="1.5" fill={COLORS.goldLight} />
                     </svg>
                   </div>
                 ))}
-
-                {/* ── Subtle guilloche pattern (security-paper feel) ── */}
-                <div
-                  className="absolute inset-0 pointer-events-none"
-                  style={{
-                    opacity: 0.025,
-                    backgroundImage: `radial-gradient(ellipse at 50% 50%, ${COLORS.gold} 0.5px, transparent 0.5px), radial-gradient(ellipse at 50% 50%, ${COLORS.deepBlue} 0.3px, transparent 0.3px)`,
-                    backgroundSize: '30px 30px, 15px 15px',
-                    backgroundPosition: '0 0, 7px 7px',
-                  }}
-                />
 
                 {/* ── Content ── */}
                 <div
@@ -569,7 +568,7 @@ export default function CertificateModule({ students }: CertificateModuleProps) 
                   style={{
                     padding: isLandscape ? '40px 60px' : '50px 50px',
                     fontFamily: "'Noto Naskh Arabic', 'Amiri', serif",
-                    color: COLORS.ink,
+                    color: COLORS.white,
                     boxSizing: 'border-box',
                     overflow: 'hidden',
                   }}
@@ -586,7 +585,7 @@ export default function CertificateModule({ students }: CertificateModuleProps) 
                             width: isLandscape ? '64px' : '72px',
                             height: isLandscape ? '64px' : '72px',
                             border: `2px solid ${COLORS.gold}`,
-                            boxShadow: `0 2px 8px rgba(200,160,64,0.25)`,
+                            boxShadow: `0 2px 12px ${COLORS.goldGlow}`,
                           }}
                         />
                       ) : (
@@ -595,12 +594,12 @@ export default function CertificateModule({ students }: CertificateModuleProps) 
                           style={{
                             width: isLandscape ? '64px' : '72px',
                             height: isLandscape ? '64px' : '72px',
-                            background: `linear-gradient(135deg, ${COLORS.deepBlue}, #2a4a7a)`,
+                            background: `linear-gradient(135deg, ${COLORS.charcoal}, ${COLORS.charcoalLight})`,
                             border: `2px solid ${COLORS.gold}`,
-                            boxShadow: `0 2px 8px rgba(200,160,64,0.25)`,
+                            boxShadow: `0 2px 12px ${COLORS.goldGlow}`,
                           }}
                         >
-                          <GraduationCap className="text-white" size={32} />
+                          <GraduationCap style={{ color: COLORS.gold }} size={32} />
                         </div>
                       )}
                     </div>
@@ -609,7 +608,7 @@ export default function CertificateModule({ students }: CertificateModuleProps) 
                         fontFamily: "'Reem Kufi', 'Cairo', sans-serif",
                         fontSize: isLandscape ? '18px' : '20px',
                         fontWeight: 700,
-                        color: COLORS.deepBlue,
+                        color: COLORS.gold,
                         letterSpacing: '0.5px',
                         lineHeight: 1.3,
                       }}
@@ -620,7 +619,7 @@ export default function CertificateModule({ students }: CertificateModuleProps) 
                       style={{
                         fontFamily: "'Noto Naskh Arabic', serif",
                         fontSize: '11px',
-                        color: COLORS.goldDark,
+                        color: COLORS.whiteFaint,
                         marginTop: '2px',
                         fontWeight: 500,
                       }}
@@ -631,25 +630,25 @@ export default function CertificateModule({ students }: CertificateModuleProps) 
 
                   {/* ── Ornamental divider ── */}
                   <div className="flex items-center gap-2 my-2">
-                    <div style={{ width: '60px', height: '1px', background: `linear-gradient(to left, ${COLORS.gold}, transparent)` }} />
-                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                      <path d="M10 2 L12 8 L18 10 L12 12 L10 18 L8 12 L2 10 L8 8 Z" fill={COLORS.gold} opacity="0.8" />
-                      <circle cx="10" cy="10" r="1.5" fill={COLORS.goldDark} />
+                    <div style={{ width: '70px', height: '1px', background: `linear-gradient(to left, ${COLORS.gold}, transparent)` }} />
+                    <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+                      <path d="M11 2 L13 9 L20 11 L13 13 L11 20 L9 13 L2 11 L9 9 Z" fill={COLORS.gold} opacity="0.9" />
+                      <circle cx="11" cy="11" r="1.5" fill={COLORS.goldDark} />
                     </svg>
-                    <div style={{ width: '60px', height: '1px', background: `linear-gradient(to right, ${COLORS.gold}, transparent)` }} />
+                    <div style={{ width: '70px', height: '1px', background: `linear-gradient(to right, ${COLORS.gold}, transparent)` }} />
                   </div>
 
                   {/* ── Main heading: Ornate calligraphic title ── */}
                   <h2
                     style={{
                       fontFamily: "'Amiri', 'Noto Naskh Arabic', serif",
-                      fontSize: isLandscape ? '32px' : '36px',
+                      fontSize: isLandscape ? '34px' : '38px',
                       fontWeight: 700,
-                      color: COLORS.deepBlue,
-                      letterSpacing: '3px',
+                      color: COLORS.gold,
+                      letterSpacing: '4px',
                       lineHeight: 1.2,
                       marginBottom: '4px',
-                      textShadow: '0 1px 2px rgba(30,58,95,0.08)',
+                      textShadow: `0 0 20px ${COLORS.goldGlow}`,
                     }}
                   >
                     شـهـادة تـقـديـر وتـكـريـم
@@ -659,8 +658,8 @@ export default function CertificateModule({ students }: CertificateModuleProps) 
                       fontFamily: "'Reem Kufi', sans-serif",
                       fontSize: '10px',
                       color: COLORS.goldDark,
-                      letterSpacing: '4px',
-                      marginBottom: isLandscape ? '16px' : '20px',
+                      letterSpacing: '5px',
+                      marginBottom: isLandscape ? '18px' : '22px',
                       fontWeight: 500,
                     }}
                   >
@@ -672,9 +671,9 @@ export default function CertificateModule({ students }: CertificateModuleProps) 
                     style={{
                       fontFamily: "'Noto Naskh Arabic', serif",
                       fontSize: isLandscape ? '14px' : '15px',
-                      color: COLORS.inkLight,
+                      color: COLORS.whiteDim,
                       lineHeight: 1.8,
-                      marginBottom: '12px',
+                      marginBottom: '14px',
                       maxWidth: '600px',
                     }}
                   >
@@ -684,21 +683,22 @@ export default function CertificateModule({ students }: CertificateModuleProps) 
                   {/* ── Recipient name ── */}
                   <div
                     style={{
-                      marginBottom: isLandscape ? '14px' : '18px',
-                      padding: '8px 40px',
+                      marginBottom: isLandscape ? '16px' : '20px',
+                      padding: '10px 48px',
                       borderTop: `2px solid ${COLORS.gold}`,
                       borderBottom: `2px solid ${COLORS.gold}`,
-                      background: `linear-gradient(135deg, rgba(200,160,64,0.06), rgba(200,160,64,0.02))`,
+                      background: `linear-gradient(180deg, ${COLORS.goldGlow}, transparent, ${COLORS.goldGlow})`,
                     }}
                   >
                     <p
                       style={{
                         fontFamily: "'Amiri', serif",
-                        fontSize: isLandscape ? '28px' : '32px',
+                        fontSize: isLandscape ? '30px' : '34px',
                         fontWeight: 700,
-                        color: COLORS.burgundy,
+                        color: COLORS.goldLight,
                         lineHeight: 1.3,
                         letterSpacing: '1px',
+                        textShadow: `0 0 15px ${COLORS.goldGlow}`,
                       }}
                     >
                       {pronoun} / {selected?.name}
@@ -710,7 +710,7 @@ export default function CertificateModule({ students }: CertificateModuleProps) 
                     style={{
                       fontFamily: "'Noto Naskh Arabic', serif",
                       fontSize: isLandscape ? '14px' : '15px',
-                      color: COLORS.inkLight,
+                      color: COLORS.whiteDim,
                       lineHeight: 1.9,
                       maxWidth: '650px',
                       marginBottom: '8px',
@@ -720,12 +720,12 @@ export default function CertificateModule({ students }: CertificateModuleProps) 
                     {score ? (
                       <>
                         الدرجة النهائية في {examTitle || 'الاختبار'}{' '}
-                        <span style={{ fontWeight: 700, color: COLORS.deepBlue }}>
+                        <span style={{ fontWeight: 700, color: COLORS.gold }}>
                           ({score} / {maxScore})
                         </span>
                       </>
                     ) : (
-                      <span style={{ fontWeight: 700, color: COLORS.deepBlue }}>
+                      <span style={{ fontWeight: 700, color: COLORS.gold }}>
                         {examTitle || 'نتيجة مميزة'}
                       </span>
                     )}
@@ -737,7 +737,7 @@ export default function CertificateModule({ students }: CertificateModuleProps) 
                       style={{
                         fontFamily: "'Noto Naskh Arabic', serif",
                         fontSize: '12px',
-                        color: COLORS.inkLight,
+                        color: COLORS.whiteFaint,
                         marginBottom: '8px',
                       }}
                     >
@@ -751,11 +751,12 @@ export default function CertificateModule({ students }: CertificateModuleProps) 
                     style={{
                       fontFamily: "'Amiri', serif",
                       fontSize: isLandscape ? '15px' : '16px',
-                      color: COLORS.deepBlue,
+                      color: COLORS.gold,
                       lineHeight: 1.8,
                       fontStyle: 'italic',
                       maxWidth: '550px',
                       marginBottom: isLandscape ? '20px' : '24px',
+                      opacity: 0.85,
                     }}
                   >
                     متمنين ل{possessive} دوام التوفيق والنجاح المستمر
@@ -778,25 +779,25 @@ export default function CertificateModule({ students }: CertificateModuleProps) 
 
                     <div
                       className="flex items-end justify-between"
-                      style={{ fontSize: '11px', color: COLORS.inkLight }}
+                      style={{ fontSize: '11px', color: COLORS.whiteDim }}
                     >
                       {/* Right: Teacher signature */}
                       <div className="text-center flex flex-col items-center" style={{ minWidth: '140px' }}>
                         <div
                           style={{
                             width: '120px',
-                            borderBottom: `1px solid ${COLORS.inkLight}`,
+                            borderBottom: `1px solid ${COLORS.goldDark}`,
                             marginBottom: '6px',
                             paddingBottom: '2px',
                             fontFamily: "'Amiri', serif",
                             fontSize: '14px',
-                            color: COLORS.deepBlue,
+                            color: COLORS.goldLight,
                             fontWeight: 700,
                           }}
                         >
                           {settings.teacher_name || 'مستر عمرو خالد'}
                         </div>
-                        <p style={{ fontFamily: "'Noto Naskh Arabic', serif", fontWeight: 600, color: COLORS.ink, fontSize: '11px' }}>
+                        <p style={{ fontFamily: "'Noto Naskh Arabic', serif", fontWeight: 600, color: COLORS.whiteDim, fontSize: '11px' }}>
                           توقيع المدرس
                         </p>
                       </div>
@@ -804,14 +805,14 @@ export default function CertificateModule({ students }: CertificateModuleProps) 
                       {/* Center: Date + City + Serial */}
                       <div className="text-center flex flex-col items-center gap-1">
                         <div className="flex items-center gap-1.5">
-                          <MapPin size={12} style={{ color: COLORS.goldDark }} />
-                          <span style={{ fontFamily: "'Noto Naskh Arabic', serif", fontSize: '11px', color: COLORS.ink, fontWeight: 600 }}>
+                          <MapPin size={12} style={{ color: COLORS.gold }} />
+                          <span style={{ fontFamily: "'Noto Naskh Arabic', serif", fontSize: '11px', color: COLORS.whiteDim, fontWeight: 600 }}>
                             {city || '________'}
                           </span>
                         </div>
                         <div className="flex items-center gap-1.5">
-                          <Calendar size={12} style={{ color: COLORS.goldDark }} />
-                          <span style={{ fontFamily: "'Noto Naskh Arabic', serif", fontSize: '11px', color: COLORS.ink, fontWeight: 600 }}>
+                          <Calendar size={12} style={{ color: COLORS.gold }} />
+                          <span style={{ fontFamily: "'Noto Naskh Arabic', serif", fontSize: '11px', color: COLORS.whiteDim, fontWeight: 600 }}>
                             {certDate}
                           </span>
                         </div>
@@ -823,7 +824,7 @@ export default function CertificateModule({ students }: CertificateModuleProps) 
                             borderRadius: '3px',
                             fontFamily: "'Courier New', monospace",
                             fontSize: '9px',
-                            color: COLORS.goldDark,
+                            color: COLORS.goldLight,
                             fontWeight: 700,
                             letterSpacing: '1px',
                           }}
@@ -837,16 +838,16 @@ export default function CertificateModule({ students }: CertificateModuleProps) 
                         {/* Embossed circular seal */}
                         <div
                           style={{
-                            width: '56px',
-                            height: '56px',
+                            width: '58px',
+                            height: '58px',
                             borderRadius: '50%',
                             border: `2.5px solid ${COLORS.gold}`,
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
                             marginBottom: '4px',
-                            background: `radial-gradient(circle, rgba(200,160,64,0.12) 0%, rgba(200,160,64,0.04) 100%)`,
-                            boxShadow: `0 1px 4px rgba(200,160,64,0.2), inset 0 0 0 1px ${COLORS.goldLight}`,
+                            background: `radial-gradient(circle, ${COLORS.goldGlow} 0%, transparent 100%)`,
+                            boxShadow: `0 2px 8px ${COLORS.goldGlow}, inset 0 0 0 1px ${COLORS.goldDark}`,
                             position: 'relative',
                           }}
                         >
@@ -859,23 +860,23 @@ export default function CertificateModule({ students }: CertificateModuleProps) 
                               borderStyle: 'dashed',
                             }}
                           />
-                          <Award size={24} style={{ color: COLORS.goldDark }} />
+                          <Award size={24} style={{ color: COLORS.gold }} />
                         </div>
                         <div
                           style={{
                             width: '120px',
-                            borderBottom: `1px solid ${COLORS.inkLight}`,
+                            borderBottom: `1px solid ${COLORS.goldDark}`,
                             marginBottom: '6px',
                             paddingBottom: '2px',
                             fontFamily: "'Amiri', serif",
                             fontSize: '13px',
-                            color: COLORS.deepBlue,
+                            color: COLORS.goldLight,
                             fontWeight: 700,
                           }}
                         >
                           {settings.management_name?.replace('تحت إدارة ومتابعة ', '') || 'إدارة المنصة'}
                         </div>
-                        <p style={{ fontFamily: "'Noto Naskh Arabic', serif", fontWeight: 600, color: COLORS.ink, fontSize: '11px' }}>
+                        <p style={{ fontFamily: "'Noto Naskh Arabic', serif", fontWeight: 600, color: COLORS.whiteDim, fontSize: '11px' }}>
                           توقيع مدير المنصة
                         </p>
                       </div>
