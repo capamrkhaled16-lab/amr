@@ -472,3 +472,24 @@ select option:checked {
 .pp-float-btn:active {
   transform: scale(0.95);
 }
+
+/* ── Certificate A4 print styles ── */
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 0;
+  }
+  body * { visibility: hidden; }
+  #certificate-print-area,
+  #certificate-print-area * { visibility: visible; }
+  #certificate-print-area {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 297mm;
+    height: 210mm;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  .no-print { display: none !important; }
+}

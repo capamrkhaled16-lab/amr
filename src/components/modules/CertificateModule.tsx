@@ -228,10 +228,6 @@ export default function CertificateModule({ students }: CertificateModuleProps) 
   }
 
   const isFemale = selected?.gender === 'female';
-  const pronoun = isFemale ? 'الطالبة' : 'الطالب';
-  const possessive = isFemale ? 'ابنتنا' : 'ابننا';
-  const verbScore = isFemale ? 'وحصلت' : 'وحصل';
-  const verbComplete = isFemale ? 'أتمت' : 'أتمّ';
 
   const showCertificate = (selected && issued) || (selected && previewing);
 
@@ -651,7 +647,7 @@ export default function CertificateModule({ students }: CertificateModuleProps) 
                       textShadow: `0 0 20px ${COLORS.goldGlow}`,
                     }}
                   >
-                    شـهـادة تـقـديـر وتـكـريـم
+                    شهادة تقدير
                   </h2>
                   <p
                     style={{
@@ -670,21 +666,21 @@ export default function CertificateModule({ students }: CertificateModuleProps) 
                   <p
                     style={{
                       fontFamily: "'Noto Naskh Arabic', serif",
-                      fontSize: isLandscape ? '14px' : '15px',
+                      fontSize: isLandscape ? '15px' : '16px',
                       color: COLORS.whiteDim,
-                      lineHeight: 1.8,
-                      marginBottom: '14px',
-                      maxWidth: '600px',
+                      lineHeight: 1.9,
+                      marginBottom: '16px',
+                      maxWidth: '650px',
                     }}
                   >
-                    تتشرف إدارة {settings.platform_name} بمنح هذه الشهادة لـ:
+                    تتقدم منصة الخالد التعليمية بخالص التقدير والاعتزاز إلى الطالب
                   </p>
 
                   {/* ── Recipient name ── */}
                   <div
                     style={{
-                      marginBottom: isLandscape ? '16px' : '20px',
-                      padding: '10px 48px',
+                      marginBottom: isLandscape ? '18px' : '22px',
+                      padding: '12px 56px',
                       borderTop: `2px solid ${COLORS.gold}`,
                       borderBottom: `2px solid ${COLORS.gold}`,
                       background: `linear-gradient(180deg, ${COLORS.goldGlow}, transparent, ${COLORS.goldGlow})`,
@@ -693,15 +689,17 @@ export default function CertificateModule({ students }: CertificateModuleProps) 
                     <p
                       style={{
                         fontFamily: "'Amiri', serif",
-                        fontSize: isLandscape ? '30px' : '34px',
+                        fontSize: isLandscape ? '32px' : '36px',
                         fontWeight: 700,
                         color: COLORS.goldLight,
                         lineHeight: 1.3,
                         letterSpacing: '1px',
                         textShadow: `0 0 15px ${COLORS.goldGlow}`,
+                        wordBreak: 'break-word',
+                        overflowWrap: 'anywhere',
                       }}
                     >
-                      {pronoun} / {selected?.name}
+                      {selected?.name ?? ''}
                     </p>
                   </div>
 
@@ -709,26 +707,14 @@ export default function CertificateModule({ students }: CertificateModuleProps) 
                   <p
                     style={{
                       fontFamily: "'Noto Naskh Arabic', serif",
-                      fontSize: isLandscape ? '14px' : '15px',
+                      fontSize: isLandscape ? '15px' : '16px',
                       color: COLORS.whiteDim,
-                      lineHeight: 1.9,
-                      maxWidth: '650px',
-                      marginBottom: '8px',
+                      lineHeight: 2,
+                      maxWidth: '680px',
+                      marginBottom: '10px',
                     }}
                   >
-                    وذلك تقديراً {isFemale ? 'لتفوقها الباهر' : 'لتفوقه الباهر'} وحصول{isFemale ? 'ها' : 'ه'} على{' '}
-                    {score ? (
-                      <>
-                        الدرجة النهائية في {examTitle || 'الاختبار'}{' '}
-                        <span style={{ fontWeight: 700, color: COLORS.gold }}>
-                          ({score} / {maxScore})
-                        </span>
-                      </>
-                    ) : (
-                      <span style={{ fontWeight: 700, color: COLORS.gold }}>
-                        {examTitle || 'نتيجة مميزة'}
-                      </span>
-                    )}
+                    تقديرًا لاجتهاده وتميّزه وحرصه على التعلّم، مع أطيب الأمنيات بدوام النجاح والتفوّق.
                   </p>
 
                   {/* ── Grade info ── */}
@@ -745,22 +731,6 @@ export default function CertificateModule({ students }: CertificateModuleProps) 
                       {gradeInfo.group_name && ` — مجموعة ${gradeInfo.group_name}`}
                     </p>
                   )}
-
-                  {/* ── Closing sentiment ── */}
-                  <p
-                    style={{
-                      fontFamily: "'Amiri', serif",
-                      fontSize: isLandscape ? '15px' : '16px',
-                      color: COLORS.gold,
-                      lineHeight: 1.8,
-                      fontStyle: 'italic',
-                      maxWidth: '550px',
-                      marginBottom: isLandscape ? '20px' : '24px',
-                      opacity: 0.85,
-                    }}
-                  >
-                    متمنين ل{possessive} دوام التوفيق والنجاح المستمر
-                  </p>
 
                   {/* ── Footer: Signatures + Seal + Date ── */}
                   <div
@@ -785,20 +755,20 @@ export default function CertificateModule({ students }: CertificateModuleProps) 
                       <div className="text-center flex flex-col items-center" style={{ minWidth: '140px' }}>
                         <div
                           style={{
-                            width: '120px',
+                            width: '140px',
                             borderBottom: `1px solid ${COLORS.goldDark}`,
                             marginBottom: '6px',
-                            paddingBottom: '2px',
+                            paddingBottom: '4px',
                             fontFamily: "'Amiri', serif",
-                            fontSize: '14px',
+                            fontSize: '15px',
                             color: COLORS.goldLight,
                             fontWeight: 700,
                           }}
                         >
-                          {settings.teacher_name || 'مستر عمرو خالد'}
+                          مستر عمرو خالد
                         </div>
                         <p style={{ fontFamily: "'Noto Naskh Arabic', serif", fontWeight: 600, color: COLORS.whiteDim, fontSize: '11px' }}>
-                          توقيع المدرس
+                          مدرس العلوم
                         </p>
                       </div>
 

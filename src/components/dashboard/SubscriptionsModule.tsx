@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CalendarDays, CircleCheck as CheckCircle2, TriangleAlert as AlertTriangle, Clock, Archive, Plus, Factory as History, TrendingDown, DollarSign, Percent, Printer, Receipt, BookOpen, Send, Eye, MessageCircle, Copy } from 'lucide-react';
 import StudentViewModal from '@/components/ui/StudentViewModal';
@@ -149,22 +149,8 @@ export default function SubscriptionsModule({ groupId, gradeLevelId }: Props) {
     return () => { cancelled = true; };
   }, [lastReceipt, settings.platform_name]);
 
-  // Auto-open WhatsApp with the receipt message shortly after a payment is
-  // recorded, so the user can confirm/send to the parent without an extra tap.
-  const autoWaFiredRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (!lastReceipt || !lastReceipt.studentId) return;
-    const key = `${lastReceipt.receiptNumber}`;
-    if (autoWaFiredRef.current === key) return;
-    autoWaFiredRef.current = key;
-    let cancelled = false;
-    const timer = setTimeout(() => {
-      if (cancelled) return;
-      void sendReceiptWhatsApp(lastReceipt);
-    }, 900);
-    return () => { cancelled = true; clearTimeout(timer); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lastReceipt]);
+  // WhatsApp is opened manually from the receipt modal's "واتساب" button,
+  // after the user reviews the real payment details. No auto-open.
 
   async function handleFullPay(sub: MonthlySubscription) {
     const remaining = sub.amount_due - sub.amount_paid;
