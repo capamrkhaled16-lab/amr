@@ -904,9 +904,10 @@ export default function DashboardPage() {
 
       {/* Sidebar navigation */}
       <aside
-        className={`fixed top-14 right-0 h-[calc(100vh-3.5rem)] w-72 sm:w-64 glass border-l border-white/10 z-50 drawer-transition lg:translate-x-0 ${
+        className={`fixed top-14 right-0 w-72 sm:w-64 glass border-l border-white/10 z-50 drawer-transition lg:translate-x-0 ${
           sidebarOpen ? 'translate-x-0' : 'translate-x-full'
         } ${focusMode ? 'lg:translate-x-full lg:opacity-0 lg:pointer-events-none' : ''}`}
+        style={{ height: 'calc(100dvh - 3.5rem)' }}
       >
         <div className="h-full flex flex-col">
           {/* Mobile close header */}

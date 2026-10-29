@@ -427,9 +427,16 @@ export default function AttendanceModule({ groupId, students, groupName, stageNa
     fetchConsecutiveAbsences();
   }, [groupId, monthKey]);
 
-  function triggerAutoSave() {
+  const pendingSavesRef = useRef(0);
+  function markSaveStart() {
+    pendingSavesRef.current++;
     setAutoSaveStatus('جاري الحفظ...');
-    setTimeout(() => setAutoSaveStatus('تم الحفظ ✓'), 500);
+  }
+  function markSaveEnd(success: boolean) {
+    pendingSavesRef.current = Math.max(0, pendingSavesRef.current - 1);
+    if (pendingSavesRef.current === 0) {
+      setAutoSaveStatus(success ? 'تم الحفظ ✓' : 'تعذّر الحفظ');
+    }
   }
 
   function getStatus(studentId: string): AttendanceStatus {
@@ -484,7 +491,7 @@ export default function AttendanceModule({ groupId, students, groupName, stageNa
       showToast('عدد دقائق التأخير لا يمكن أن يكون سالباً', 'error');
       return false;
     }
-    triggerAutoSave();
+    markSaveStart();
     const existing = records[student.id];
     const prevStatus = existing?.status ?? 'unrecorded';
     // When already 'late' and updating minutes, fall through to the update path instead of toggling off.
@@ -501,6 +508,7 @@ export default function AttendanceModule({ groupId, students, groupName, stageNa
       try {
         await upsertAttendance(student.id, groupId, 'unrecorded', existing.notes ?? null, selectedDate, activeSessionId || null);
         showToastWithAction(`تم إلغاء حالة ${student.name}`, 'تراجع', () => setStatus(student, prevStatus));
+        markSaveEnd(true);
         return true;
       } catch (err) {
         // Restore the record so the user doesn't lose their selection
@@ -514,6 +522,7 @@ export default function AttendanceModule({ groupId, students, groupName, stageNa
         } else {
           showToast(`تعذّر حفظ الحضور: ${msg || 'خطأ غير معروف'}`, 'error');
         }
+        markSaveEnd(false);
         return false;
       }
     }
@@ -535,6 +544,7 @@ export default function AttendanceModule({ groupId, students, groupName, stageNa
       if (prevStatus !== 'unrecorded' && !silent) {
         showToastWithAction(`تم تغيير ${student.name} إلى ${STATUS_META[status]?.label ?? status}`, 'تراجع', () => setStatus(student, prevStatus));
       }
+      markSaveEnd(true);
       return true;
     } catch (err) {
       // Preserve user-entered late_minutes so they can retry without re-typing
@@ -561,6 +571,7 @@ export default function AttendanceModule({ groupId, students, groupName, stageNa
           showToast(`تعذّر حفظ الحضور: ${msg || 'خطأ غير معروف'}`, 'error');
         }
       }
+      markSaveEnd(false);
       return false;
     }
   }
@@ -844,8 +855,18 @@ export default function AttendanceModule({ groupId, students, groupName, stageNa
     }
   }
 
-  function bulkSetStatus(status: AttendanceStatus) {
-    students.filter((s) => selectedIds.has(s.id)).forEach((s) => setStatus(s, status));
+  async function bulkSetStatus(status: AttendanceStatus) {
+    const targets = students.filter((s) => selectedIds.has(s.id));
+    let failed = 0;
+    for (const s of targets) {
+      const ok = await setStatus(s, status, undefined, true, true);
+      if (!ok) failed++;
+    }
+    if (failed > 0) {
+      showToast(`تعذّر حفظ ${failed} من ${targets.length} طالب — تحقق من الاتصال`, 'error');
+    } else {
+      showToast(`تم تحديد حالة ${targets.length} طالب`, 'success');
+    }
   }
 
   function clearSelection() {
@@ -1015,8 +1036,11 @@ export default function AttendanceModule({ groupId, students, groupName, stageNa
           <Button
             size="sm"
             onClick={() => {
-              triggerAutoSave();
-              showToast('تم حفظ الحضور يدوياً', 'success');
+              if (pendingSavesRef.current > 0) {
+                showToast('جاري الحفظ بالفعل — انتظر اكتمال العمليات', 'info');
+              } else {
+                showToast('جميع الحالات محفوظة تلقائياً', 'success');
+              }
             }}
           >
             <Save size={14} /> حفظ
@@ -1262,7 +1286,7 @@ export default function AttendanceModule({ groupId, students, groupName, stageNa
             </button>
             <button
               type="button"
-              onClick={() => students.forEach((s) => setStatus(s, 'present'))}
+              onClick={() => { const targets = [...students]; targets.forEach((s) => void setStatus(s, 'present', undefined, true, true)); }}
               className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-bold bg-emerald-600/15 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-600/25 transition active:scale-95 min-h-[48px]"
             >
               <CheckCheck size={18} />
@@ -1270,7 +1294,7 @@ export default function AttendanceModule({ groupId, students, groupName, stageNa
             </button>
             <button
               type="button"
-              onClick={() => students.forEach((s) => setStatus(s, 'absent'))}
+              onClick={() => { const targets = [...students]; targets.forEach((s) => void setStatus(s, 'absent', undefined, true, true)); }}
               className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-bold bg-red-600/15 border border-red-500/30 text-red-400 hover:bg-red-600/25 transition active:scale-95 min-h-[48px]"
             >
               <XCircle size={18} />

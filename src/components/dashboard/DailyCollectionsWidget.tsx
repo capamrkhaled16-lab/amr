@@ -345,7 +345,7 @@ export default function DailyCollectionsWidget({ isMaster, onBack }: Props) {
   if (embedded) {
     return (
       <>
-      <div className="glass-card rounded-2xl flex flex-col" style={{ maxHeight: 'calc(100vh - 8rem)' }}>
+      <div className="glass-card rounded-2xl flex flex-col" style={{ maxHeight: 'calc(100dvh - 8rem)' }}>
         {/* Header */}
         <div className="flex items-center justify-between p-4 sm:p-5 border-b border-white/[0.06] flex-shrink-0">
           {view === 'detail' ? (

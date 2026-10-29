@@ -41,17 +41,18 @@ export function canonicalRankEntries(entries: HallOfFameEntry[]): RankedEntry[] 
     return a.id.localeCompare(b.id);
   });
 
-  // Standard competition ranking ("1224"): tied scores share the same rank,
-  // and the next distinct score skips the positions occupied by the ties.
-  // e.g. scores [100, 100, 90, 90, 80] → ranks [1, 1, 3, 3, 5].
+  // Dense ranking ("123345"): tied scores share the same rank, and the next
+  // distinct score gets the immediately following rank number (no skipping).
+  // e.g. scores [100, 100, 90, 90, 80] → ranks [1, 1, 2, 2, 3].
+  // As requested: 1, 2, 3, 3, 4, 5.
   const result: RankedEntry[] = [];
+  let currentRank = 0;
   for (let i = 0; i < cleaned.length; i++) {
-    const rank = i + 1;
-    // If this entry ties with the previous one on overall_score, share its rank
     if (i > 0 && toNum(cleaned[i].overall_score) === toNum(cleaned[i - 1].overall_score)) {
-      result.push({ ...cleaned[i], rank: result[i - 1].rank });
+      result.push({ ...cleaned[i], rank: currentRank });
     } else {
-      result.push({ ...cleaned[i], rank });
+      currentRank = i + 1;
+      result.push({ ...cleaned[i], rank: currentRank });
     }
   }
   return result;

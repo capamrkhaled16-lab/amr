@@ -360,6 +360,13 @@ select option:checked {
   -webkit-touch-callout: none;
 }
 
+/* ── Dynamic viewport height for mobile rotation safety ── */
+/* When a phone/tablet rotates, 100vh doesn't update immediately and can
+   cause layout clipping. dvh updates instantly with the actual viewport. */
+@supports (height: 100dvh) {
+  .min-h-screen { min-height: 100dvh; }
+}
+
 /* ─── Parent Portal glassmorphism classes ─── */
 
 .pp-glass {
