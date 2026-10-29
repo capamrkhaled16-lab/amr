@@ -167,9 +167,24 @@ export default function DashboardPage() {
   const { monthKey } = useMonth();
   const navigate = useNavigate();
   const [tab, setTab] = usePersistedState<Tab>('dash_tab', 'home');
-  // Never auto-restore the Archive tab on login/reload — always land on home.
-  // The user can still navigate to Archive manually via the header icon.
-  useEffect(() => { if (tab === 'archive') setTab('home'); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // On login/reload, reset to home if the persisted tab is archive or a tab
+  // the current user lacks permission for — otherwise the content area renders
+  // blank and the mobile header shows the fallback "القائمة" label.
+  useEffect(() => {
+    if (tab === 'archive') { setTab('home'); return; }
+    const allowed = TABS.some((t) => t.id === tab);
+    if (!allowed) { setTab('home'); return; }
+    if (!isMaster) {
+      if (tab === 'assistants' || tab === 'settings') { setTab('home'); return; }
+      if ((tab === 'finances' || tab === 'daily-collections') && !can('can_view_finance')) { setTab('home'); return; }
+      if (tab === 'subscriptions' && !can('can_view_subscriptions')) { setTab('home'); return; }
+      if (tab === 'attendance' && !can('can_view_attendance')) { setTab('home'); return; }
+      if ((tab === 'grades') && !can('can_view_grades')) { setTab('home'); return; }
+      if (tab === 'exams' && !can('can_view_exams')) { setTab('home'); return; }
+      if (tab === 'tracking' && !can('can_view_tracking')) { setTab('home'); return; }
+      if (tab === 'parent' && !can('can_view_parent_links')) { setTab('home'); return; }
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [stages, setStages] = useState<AcademicStage[]>([]);
   const [selectedStage, setSelectedStage] = useState<AcademicStage | null>(null);
   const [gradeLevels, setGradeLevels] = useState<GradeLevel[]>([]);

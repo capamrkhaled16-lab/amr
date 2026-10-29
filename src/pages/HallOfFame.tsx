@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { getArabicMonth, getMonthKey } from "../lib/dates";
+import { canonicalRankEntries, type RankedEntry } from "../lib/leaderboardRank";
 
 interface HallOfFameEntry {
   id: string;
@@ -17,12 +18,14 @@ interface HallOfFameEntry {
 }
 
 export default function HallOfFame() {
-  const [entries, setEntries] = useState<HallOfFameEntry[]>([]);
+  const [entries, setEntries] = useState<RankedEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [monthKey, setMonthKey] = useState(getMonthKey());
 
   useEffect(() => {
     setLoading(true);
+    setLoadError(false);
     supabase
       .from("hall_of_fame")
       .select("*")
@@ -31,8 +34,9 @@ export default function HallOfFame() {
       .then(({ data, error }) => {
         if (error) {
           console.error("[hall_of_fame] load error:", error.message);
+          setLoadError(true);
         }
-        setEntries(data as HallOfFameEntry[] || []);
+        setEntries(canonicalRankEntries(data as HallOfFameEntry[] || []));
         setLoading(false);
       });
   }, [monthKey]);
@@ -55,6 +59,11 @@ export default function HallOfFame() {
         <div className="bg-white rounded-2xl shadow-sm p-8 text-center">
           <div className="inline-block w-8 h-8 border-3 border-primary-200 border-t-primary-600 rounded-full animate-spin" />
         </div>
+      ) : loadError && entries.length === 0 ? (
+        <div className="bg-white rounded-2xl shadow-sm p-8 text-center">
+          <p className="text-gray-500 text-sm mb-3">تعذّر تحميل لوحة الشرف</p>
+          <button onClick={() => setMonthKey(getMonthKey())} className="text-primary-600 text-sm font-bold hover:text-primary-700">إعادة المحاولة</button>
+        </div>
       ) : entries.length === 0 ? (
         <div className="bg-white rounded-2xl shadow-sm p-8 text-center text-gray-400 text-sm">
           لا توجد بيانات متاحة لقاعة المشاهير
@@ -66,8 +75,8 @@ export default function HallOfFame() {
               key={entry.id || i}
               className="bg-white rounded-2xl shadow-sm p-4 flex items-center gap-4 hover:shadow-md transition"
             >
-              <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${medalColor(i)} flex items-center justify-center text-white font-bold text-lg flex-shrink-0`}>
-                {i + 1}
+              <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${medalColor(entry.rank - 1)} flex items-center justify-center text-white font-bold text-lg flex-shrink-0`}>
+                {entry.rank}
               </div>
               <div className="flex-1 min-w-0">
                 <h3 className="font-bold text-gray-800 text-sm truncate">{entry.name}</h3>

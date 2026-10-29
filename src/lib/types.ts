@@ -458,14 +458,16 @@ export interface CarriedOverBalance {
 export interface HallOfFameEntry {
   id: string;
   name: string;
+  group_id: string | null;
   group_name: string | null;
   grade_name: string | null;
   stage_name: string | null;
-  center_avg: number;
-  online_avg: number;
   avg_score: number;
-  exams_taken: number;
   attendance_rate: number;
+  homework_rate: number;
+  behavior_score: number;
+  exams_taken: number;
+  overall_score: number;
 }
 
 // ============ AUDIT LOG ============

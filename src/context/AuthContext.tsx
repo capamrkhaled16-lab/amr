@@ -166,7 +166,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // and a session-expiry check here could clear a teacher's session if they're monitoring on the same device.
   useEffect(() => {
     const handler = () => {
-      if (!document.hidden) return;
+      if (document.hidden) return;
       if (typeof window !== 'undefined' && window.location.pathname.startsWith('/exam-portal')) return;
       if (roleRef.current && isSessionExpired()) {
         clearSessionStorage();

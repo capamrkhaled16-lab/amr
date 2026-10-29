@@ -1857,7 +1857,7 @@ export async function createAuditLog(
 export async function fetchAuditLogs(limit = 100): Promise<(AuditLog & { student?: { name: string; group?: { name: string; grade_level?: { name: string; stage?: { name: string } } } } })[]> {
   const { data } = await supabase
     .from('audit_logs')
-    .select('*, student:students(name, group:groups(name, grade_level:grade_levels(name, stage:stages(name))))')
+    .select('*, student:students(name, group:groups(name, grade_level:grade_levels(name, stage:academic_stages(name))))')
     .order('created_at', { ascending: false })
     .limit(limit);
   return (data as (AuditLog & { student?: { name: string; group?: { name: string; grade_level?: { name: string; stage?: { name: string } } } } })[]) ?? [];
@@ -2300,8 +2300,9 @@ export async function searchStudents(query: string): Promise<(Student & { group_
       grade_name: s.group?.grade_level?.name,
       stage_name: s.group?.grade_level?.stage?.name,
     }));
-  } catch {
-    return [];
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') return [];
+    throw err;
   }
 }
 

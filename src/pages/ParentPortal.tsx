@@ -127,9 +127,11 @@ export default function ParentPortal() {
         fetchHallOfFame(groupId, 100),
       ]);
 
+      const hwStatusArrays = await Promise.all(
+        homework.map((hw) => fetchHomeworkStatuses(hw.id).catch(() => []))
+      );
       const hwStatuses: HomeworkStatus[] = [];
-      for (const hw of homework) {
-        const statuses = await fetchHomeworkStatuses(hw.id);
+      for (const statuses of hwStatusArrays) {
         const studentStatus = statuses.find((s) => s.student_id === student.id);
         if (studentStatus) hwStatuses.push(studentStatus);
       }
