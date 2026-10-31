@@ -429,13 +429,7 @@ export default function HallOfFame({ groupId, refreshKey = 0, onViewStudent }: H
               </button>
             )}
 
-            {/* Score composition */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              <ScoreCard label="متوسط الامتحانات" value={`${Math.round(toNum(selectedEntry.avg_score))}%`} icon={<TrendingUp size={14} />} color="text-blue-400" weight="35%" />
-              <ScoreCard label="نسبة الحضور" value={`${Math.round(toNum(selectedEntry.attendance_rate))}%`} icon={<CalendarCheck size={14} />} color="text-emerald-400" weight="25%" />
-              <ScoreCard label="الواجبات" value={selectedEntry.homework_rate == null ? '—' : `${Math.round(toNum(selectedEntry.homework_rate))}%`} icon={<BookOpen size={14} />} color="text-cyan-400" weight="20%" />
-              <ScoreCard label="السلوك" value={`${Math.round(toNum(selectedEntry.behavior_score))}%`} icon={<Heart size={14} />} color="text-rose-400" weight="20%" />
-            </div>
+            <ScoreContributions entry={selectedEntry} />
 
             {/* Why does the student deserve this rank? */}
             <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="glass-card rounded-2xl p-4 space-y-3 border border-amber-500/20">
@@ -636,15 +630,44 @@ function PodiumCard({ entry, rank, onClick, elevated = false }: { entry: HallOfF
   );
 }
 
-function ScoreCard({ label, value, icon, color, weight }: { label: string; value: string; icon: React.ReactNode; color: string; weight: string }) {
+function ScoreContributions({ entry }: { entry: HallOfFameEntry }) {
+  const parts = [
+    { label: 'الامتحانات', value: toNum(entry.avg_score), weight: 35, color: 'text-blue-400', bar: 'bg-blue-500' },
+    { label: 'الحضور', value: toNum(entry.attendance_rate), weight: 25, color: 'text-emerald-400', bar: 'bg-emerald-500' },
+    { label: 'الواجبات', value: toNum(entry.homework_rate), weight: 20, color: 'text-cyan-400', bar: 'bg-cyan-500' },
+    { label: 'السلوك', value: toNum(entry.behavior_score), weight: 20, color: 'text-rose-400', bar: 'bg-rose-500' },
+  ];
+  const contributions = parts.map((p) => (p.value * p.weight) / 100);
+  const sum = contributions.reduce((s, c) => s + c, 0);
+
   return (
-    <div className="glass-light rounded-xl p-3">
-      <div className={`flex items-center gap-1.5 text-[10px] text-slate-500 mb-1 ${color}`}>
-        {icon}
-        <span>{label}</span>
+    <div className="glass-light rounded-xl p-3 sm:p-4 space-y-3">
+      <div className="space-y-2.5">
+        {parts.map((p, i) => (
+          <div key={p.label} className="space-y-1">
+            <div className="flex items-center justify-between gap-2">
+              <span className={`text-xs font-bold ${p.color}`}>{p.label}</span>
+              <span className="text-[11px] text-slate-400 font-mono tabular-nums" dir="ltr">
+                {p.value.toFixed(1)}% × {p.weight}% = <strong className="text-white">{contributions[i].toFixed(2)}</strong>
+              </span>
+            </div>
+            <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
+              <div className={`h-full rounded-full ${p.bar}`} style={{ width: `${Math.min(100, Math.max(0, p.value))}%` }} />
+            </div>
+          </div>
+        ))}
       </div>
-      <strong className={`text-sm ${color}`}>{value}</strong>
-      <span className="text-[9px] text-slate-600 mr-1">({weight})</span>
+      <div className="flex items-center justify-between border-t border-white/10 pt-3">
+        <span className="text-xs text-slate-300">مجموع المساهمات</span>
+        <span className="text-xs font-bold text-white font-mono tabular-nums" dir="ltr">{sum.toFixed(2)}</span>
+      </div>
+      <div className="flex items-center justify-between">
+        <span className="text-xs text-slate-300">الدرجة النهائية المعتمدة</span>
+        <span className="text-sm font-black text-amber-300 font-mono tabular-nums" dir="ltr">{toNum(entry.overall_score).toFixed(2)} / 100</span>
+      </div>
+      <p className="text-[10px] text-slate-500 leading-relaxed">
+        الدرجة = الامتحانات × 35% + الحضور × 25% + الواجبات × 20% + السلوك × 20%. قد يختلف المجموع عن الدرجة المعتمدة بنحو 0.01 بسبب تقريب نسبة الحضور لرقم عشري واحد.
+      </p>
     </div>
   );
 }

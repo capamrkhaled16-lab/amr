@@ -2055,10 +2055,11 @@ export async function fetchHallOfFame(groupId?: string, limit = 10): Promise<Hal
   return swrFetch(cacheKey, async () => {
   let query = supabase.from('hall_of_fame').select('*');
   if (groupId) query = query.eq('group_id', groupId);
-  const { data } = await query
+  const { data, error } = await query
     .order('overall_score', { ascending: false })
     .order('name', { ascending: true })
     .limit(limit);
+  if (error) throw new Error(error.message);
   return (data as HallOfFameEntry[]) ?? [];
   });
 }
