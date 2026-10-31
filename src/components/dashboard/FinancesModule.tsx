@@ -488,6 +488,24 @@ export default function FinancesModule({ focusStageId, focusGradeId, focusGroupI
       showToast(`تم تسجيل دفع مصروفات شهر ${monthLabel} للطالب ${savedStudent.name} — المبلغ ${formatCurrency(amount)} ج.م — بواسطة ${actorName}`, 'success');
     } catch (err) {
       console.error('[handleAddPayment] Payment save failed:', err);
+      const isNetworkErr = err instanceof Error && (err.message.includes('fetch') || err.message.includes('network') || err.message.includes('Failed'));
+      if (isNetworkErr) {
+        showToast('تعذّر تأكيد الدفعة بسبب ضعف الاتصال — جارٍ التحقق من الحفظ...', 'info');
+        try {
+          await new Promise((r) => setTimeout(r, 1500));
+          const pEpoch = ++paidMapEpochRef.current;
+          const freshMap = selectedGroup ? await fetchGroupMonthlyPaidMap(selectedGroup.id, monthKey) : new Map<string, number>();
+          if (pEpoch === paidMapEpochRef.current) setMonthlyPaidMap(freshMap);
+          const newPaid = freshMap.get(savedStudent.id) ?? 0;
+          if (newPaid >= paidBeforeThisPayment + amount) {
+            showToast(`تم حفظ الدفعة بنجاح رغم انقطاع الاتصال — تحقق من سجل المدفوعات`, 'success');
+            setPayAmount(''); setPayNote(''); setPayDate(new Date().toISOString().slice(0, 10)); setPayStudent(null);
+            loadStudents();
+            if (historyStudent) loadPayments(historyStudent);
+            return;
+          }
+        } catch { /* verification also failed */ }
+      }
       setMonthlyPaidMap((prev) => { const m = new Map(prev); m.set(savedStudent.id, Math.max(0, (m.get(savedStudent.id) ?? 0) - amount)); return m; });
       showToast(`تعذّر تسجيل الدفعة: ${err instanceof Error ? err.message : 'خطأ غير معروف'}`, 'error');
     } finally {
@@ -561,6 +579,23 @@ export default function FinancesModule({ focusStageId, focusGradeId, focusGroupI
       showToast(`تم دفع كامل مصروفات شهر ${monthLabel} للطالب ${student.name} — المبلغ ${formatCurrency(remaining)} ج.م — بواسطة ${actorName}`, 'success');
     } catch (err) {
       console.error('[handleQuickFullPay] Payment save failed:', err);
+      const isNetworkErr = err instanceof Error && (err.message.includes('fetch') || err.message.includes('network') || err.message.includes('Failed'));
+      if (isNetworkErr) {
+        showToast('تعذّر تأكيد الدفعة بسبب ضعف الاتصال — جارٍ التحقق من الحفظ...', 'info');
+        try {
+          await new Promise((r) => setTimeout(r, 1500));
+          const pEpoch = ++paidMapEpochRef.current;
+          const freshMap = selectedGroup ? await fetchGroupMonthlyPaidMap(selectedGroup.id, monthKey) : new Map<string, number>();
+          if (pEpoch === paidMapEpochRef.current) setMonthlyPaidMap(freshMap);
+          const newPaid = freshMap.get(student.id) ?? 0;
+          if (newPaid >= paidBeforeThisPayment + remaining) {
+            showToast(`تم حفظ الدفعة بنجاح رغم انقطاع الاتصال — تحقق من سجل المدفوعات`, 'success');
+            loadStudents();
+            if (historyStudent) loadPayments(historyStudent);
+            return;
+          }
+        } catch { /* verification also failed */ }
+      }
       setMonthlyPaidMap((prev) => { const m = new Map(prev); m.set(student.id, Math.max(0, (m.get(student.id) ?? 0) - remaining)); return m; });
       showToast(`تعذّر تسجيل الدفعة: ${err instanceof Error ? err.message : 'خطأ غير معروف'}`, 'error');
     } finally {

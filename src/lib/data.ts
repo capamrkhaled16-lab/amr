@@ -158,13 +158,15 @@ export async function transferStudent(
     .maybeSingle();
   const fromGroupId = (student as { group_id: string | null } | null)?.group_id ?? null;
   // Only update the student's current group — do NOT rewrite historical attendance/grades/homework
-  await supabase.from('students').update({ group_id: newGroupId }).eq('id', studentId);
-  await supabase.from('group_transfers').insert({
+  const { error: updateError } = await supabase.from('students').update({ group_id: newGroupId }).eq('id', studentId);
+  if (updateError) throw new Error(updateError.message);
+  const { error: insertError } = await supabase.from('group_transfers').insert({
     student_id: studentId,
     from_group_id: fromGroupId,
     to_group_id: newGroupId,
     actor_name: actorName,
   });
+  if (insertError) throw new Error(insertError.message);
   if (fromGroupId) invalidateCache(`students_${fromGroupId}`);
   invalidateCache(`students_${newGroupId}`);
 }

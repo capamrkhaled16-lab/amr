@@ -481,10 +481,17 @@ select option:checked {
 }
 
 /* ── Certificate A4 print styles ── */
+/* The @page size is injected dynamically by handlePrint() based on orientation.
+   These rules ensure the certificate fills exactly one A4 page without overflow. */
 @media print {
   @page {
     size: A4 landscape;
     margin: 0;
+  }
+  html, body {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #0a0a0a !important;
   }
   body * { visibility: hidden; }
   #certificate-print-area,
@@ -493,10 +500,21 @@ select option:checked {
     position: absolute;
     top: 0;
     left: 0;
+    margin: 0 !important;
+    /* Dimensions set by .cert-portrait / default (landscape) */
     width: 297mm;
     height: 210mm;
-    margin: 0 !important;
-    padding: 0 !important;
+    overflow: hidden;
+    page-break-after: avoid;
+    break-after: avoid;
   }
+  #certificate-print-area.cert-portrait {
+    width: 210mm;
+    height: 297mm;
+  }
+  /* Prevent any content after the certificate from spilling onto a second page */
   .no-print { display: none !important; }
+  #certificate-print-area * {
+    box-sizing: border-box !important;
+  }
 }

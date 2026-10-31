@@ -203,7 +203,8 @@ export default function CertificateModule({ students }: CertificateModuleProps) 
     if (area) {
       area.classList.toggle('cert-portrait', portrait);
     }
-    window.print();
+    // Defer print slightly to ensure CSS classes are applied
+    setTimeout(() => window.print(), 50);
   }
 
   const loadIssuedCerts = useCallback(async () => {
@@ -481,11 +482,11 @@ export default function CertificateModule({ students }: CertificateModuleProps) 
               <div
                 id="certificate-print-area"
                 ref={printRef}
-                className="relative overflow-hidden mx-auto"
+                className={`relative overflow-hidden mx-auto ${orientation === 'portrait' ? 'cert-portrait' : ''}`}
                 style={{
                   aspectRatio: isLandscape ? '297 / 210' : '210 / 297',
                   maxWidth: '100%',
-                  width: isLandscape ? '1100px' : '800px',
+                  width: '100%',
                   background: `radial-gradient(ellipse at 50% 30%, ${COLORS.charcoalLight} 0%, ${COLORS.black} 70%)`,
                 }}
               >
@@ -511,7 +512,7 @@ export default function CertificateModule({ students }: CertificateModuleProps) 
                 <div
                   className="absolute pointer-events-none"
                   style={{
-                    inset: '12px',
+                    inset: '30px',
                     border: `3px solid ${COLORS.gold}`,
                     borderRadius: '8px',
                     boxShadow: `inset 0 0 0 1px ${COLORS.goldLight}, inset 0 0 0 5px transparent, inset 0 0 0 6px ${COLORS.goldDark}`,
@@ -521,7 +522,7 @@ export default function CertificateModule({ students }: CertificateModuleProps) 
                 <div
                   className="absolute pointer-events-none"
                   style={{
-                    inset: '20px',
+                    inset: '38px',
                     border: `1px solid ${COLORS.goldDark}`,
                     borderRadius: '3px',
                   }}
@@ -530,7 +531,7 @@ export default function CertificateModule({ students }: CertificateModuleProps) 
                 <div
                   className="absolute pointer-events-none"
                   style={{
-                    inset: '26px',
+                    inset: '44px',
                     border: `0.5px solid ${COLORS.goldLight}`,
                     opacity: 0.4,
                     borderRadius: '2px',
@@ -539,10 +540,10 @@ export default function CertificateModule({ students }: CertificateModuleProps) 
 
                 {/* ── Corner ornaments (Arabesque style) ── */}
                 {[
-                  { pos: 'top-[14px] right-[14px]', rotate: '0deg' },
-                  { pos: 'top-[14px] left-[14px]', rotate: '270deg' },
-                  { pos: 'bottom-[14px] right-[14px]', rotate: '90deg' },
-                  { pos: 'bottom-[14px] left-[14px]', rotate: '180deg' },
+                  { pos: 'top-[30px] right-[30px]', rotate: '0deg' },
+                  { pos: 'top-[30px] left-[30px]', rotate: '270deg' },
+                  { pos: 'bottom-[30px] right-[30px]', rotate: '90deg' },
+                  { pos: 'bottom-[30px] left-[30px]', rotate: '180deg' },
                 ].map((corner, i) => (
                   <div key={i} className={`absolute ${corner.pos} pointer-events-none`} style={{ transform: `rotate(${corner.rotate})` }}>
                     <svg width="56" height="56" viewBox="0 0 56 56" fill="none">

@@ -323,8 +323,24 @@ export default function HallOfFame({ groupId, refreshKey = 0, onViewStudent }: H
             <span className="glass-light px-2 py-0.5 rounded-full flex items-center gap-1"><BookOpen size={10} /> واجبات 20%</span>
             <span className="glass-light px-2 py-0.5 rounded-full flex items-center gap-1"><Heart size={10} /> سلوك 20%</span>
           </div>
+
+          {/* Podium — top 3 students prominently displayed */}
+          {rankedEntries.length >= 3 && (
+            <div className="grid grid-cols-3 gap-2 sm:gap-3 mb-4">
+              {/* 2nd place (left) */}
+              <PodiumCard entry={rankedEntries.find((e) => e.rank === 2) ?? rankedEntries[1]} rank={2} onClick={() => openBreakdown(rankedEntries.find((e) => e.rank === 2) ?? rankedEntries[1])} />
+              {/* 1st place (center, elevated) */}
+              <PodiumCard entry={rankedEntries.find((e) => e.rank === 1) ?? rankedEntries[0]} rank={1} onClick={() => openBreakdown(rankedEntries.find((e) => e.rank === 1) ?? rankedEntries[0])} elevated />
+              {/* 3rd place (right) */}
+              <PodiumCard entry={rankedEntries.find((e) => e.rank === 3) ?? rankedEntries[2]} rank={3} onClick={() => openBreakdown(rankedEntries.find((e) => e.rank === 3) ?? rankedEntries[2])} />
+            </div>
+          )}
+
+          {/* Remaining ranked students */}
           <div className="space-y-2.5">
-            {rankedEntries.map((entry, index) => {
+            {rankedEntries
+              .filter((e) => !(rankedEntries.length >= 3 && e.rank <= 3))
+              .map((entry, index) => {
               const rank = entry.rank;
               return (
                 <motion.button
@@ -588,6 +604,27 @@ export default function HallOfFame({ groupId, refreshKey = 0, onViewStudent }: H
         })()}
       </Modal>
     </>
+  );
+}
+
+function PodiumCard({ entry, rank, onClick, elevated = false }: { entry: HallOfFameEntry; rank: number; onClick: () => void; elevated?: boolean }) {
+  return (
+    <motion.button
+      type="button"
+      onClick={onClick}
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      whileHover={{ y: -3 }}
+      className={`flex flex-col items-center text-center min-w-0 rounded-2xl p-3 sm:p-4 border border-amber-500/25 bg-gradient-to-b from-amber-500/15 to-transparent transition hover:border-amber-400/50 ${elevated ? 'sm:-mt-4' : 'mt-3 sm:mt-6'}`}
+    >
+      <div className={`w-11 h-11 sm:w-14 sm:h-14 rounded-full flex items-center justify-center bg-gradient-to-br ${medalColors[rank - 1]} text-slate-900 font-black text-lg shadow-lg mb-2`}>
+        {rank}
+      </div>
+      <p className="text-xs sm:text-sm font-bold text-white break-words leading-snug line-clamp-2 w-full">{entry.name}</p>
+      <p className="text-[10px] text-amber-300 mt-0.5">{rankLabel(rank)}</p>
+      <p className="text-base sm:text-xl font-black text-amber-300 mt-1.5">{toNum(entry.overall_score).toFixed(1)}</p>
+      <p className="text-[10px] text-slate-400">الإجمالي</p>
+    </motion.button>
   );
 }
 
