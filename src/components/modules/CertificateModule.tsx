@@ -7,7 +7,8 @@ import confetti from 'canvas-confetti';
 import type { Student, AttendanceStatus } from '@/lib/types';
 import { useSettings } from '@/context/SettingsContext';
 import { generateSerialId, formatArabicDate } from '@/lib/format';
-import { createCertificate, fetchCertificates, deleteCertificate, fetchAttendanceBySession, fetchSessions } from '@/lib/data';
+import { createCertificate, fetchCertificates, deleteCertificate, fetchAttendanceBySession, fetchSessions, fetchHallOfFame, fetchStudentsByIds } from '@/lib/data';
+import { canonicalRankEntries, toNum } from '@/lib/leaderboardRank';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import type { Certificate } from '@/lib/types';
 import { supabase } from '@/lib/supabase';
@@ -19,6 +20,7 @@ type CertificateModuleProps = {
 
 type LeaderboardEntry = {
   student: Student;
+  rank: number;
   totalScore: number;
   maxScore: number;
   percentage: number;
@@ -74,42 +76,24 @@ export default function CertificateModule({ students }: CertificateModuleProps) 
   }, [students]);
 
   const loadLeaderboard = useCallback(async () => {
-    if (students.length === 0) return;
-    const { data: cg } = await supabase
-      .from('center_grades')
-      .select('student_id, score')
-      .in('student_id', students.map((s) => s.id));
-    const { data: og } = await supabase
-      .from('online_grades')
-      .select('student_id, score, max_score')
-      .in('student_id', students.map((s) => s.id));
-
-    const scoreMap: Record<string, { total: number; max: number }> = {};
-    for (const g of cg ?? []) {
-      if (!scoreMap[g.student_id]) scoreMap[g.student_id] = { total: 0, max: 0 };
-      scoreMap[g.student_id].total += g.score;
-      scoreMap[g.student_id].max += 100;
+    const rows = await fetchHallOfFame(undefined, 1000);
+    const byGroup = new Map<string, typeof rows>();
+    for (const r of rows) {
+      const key = r.group_id ?? '';
+      byGroup.set(key, [...(byGroup.get(key) ?? []), r]);
     }
-    for (const g of og ?? []) {
-      if (!scoreMap[g.student_id]) scoreMap[g.student_id] = { total: 0, max: 0 };
-      scoreMap[g.student_id].total += g.score;
-      scoreMap[g.student_id].max += g.max_score || 100;
-    }
-
-    const entries: LeaderboardEntry[] = students
-      .map((s) => {
-        const data = scoreMap[s.id] ?? { total: 0, max: 0 };
-        return {
-          student: s,
-          totalScore: data.total,
-          maxScore: data.max,
-          percentage: data.max > 0 ? Math.round((data.total / data.max) * 100) : 0,
-        };
-      })
-      .sort((a, b) => b.percentage - a.percentage);
-
+    const firsts = [...byGroup.values()].flatMap((g) => canonicalRankEntries(g).filter((e) => e.rank === 1));
+    const studentRows = await fetchStudentsByIds(firsts.map((e) => e.id));
+    const byId = new Map(studentRows.map((s) => [s.id, s]));
+    const entries: LeaderboardEntry[] = firsts.flatMap((e) => {
+      const student = byId.get(e.id);
+      if (!student) return [];
+      const overall = toNum(e.overall_score);
+      return [{ student, rank: e.rank, totalScore: Number(overall.toFixed(2)), maxScore: 100, percentage: Math.round(overall) }];
+    });
+    entries.sort((a, b) => b.totalScore - a.totalScore);
     setLeaderboard(entries);
-  }, [students]);
+  }, []);
 
   useEffect(() => {
     if (certMode === 'leaderboard') loadLeaderboard();
@@ -298,10 +282,10 @@ export default function CertificateModule({ students }: CertificateModuleProps) 
             <p className="text-slate-400 text-sm text-center py-4">لا توجد درجات مسجلة بعد.</p>
           ) : (
             <div className="space-y-2">
-              {leaderboard.slice(0, 10).map((entry, i) => (
+              {leaderboard.slice(0, 10).map((entry) => (
                 <button
                   key={entry.student.id}
-                  onClick={() => selectLeader(entry, i + 1)}
+                  onClick={() => selectLeader(entry, entry.rank)}
                   className={`w-full text-right p-3 rounded-xl flex items-center justify-between transition ${
                     selected?.id === entry.student.id
                       ? 'bg-emerald-600/20 border border-emerald-500/40'
@@ -310,12 +294,12 @@ export default function CertificateModule({ students }: CertificateModuleProps) 
                 >
                   <div className="flex items-center gap-3">
                     <span className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
-                      i === 0 ? 'bg-amber-500/20 text-amber-400' :
-                      i === 1 ? 'bg-slate-400/20 text-slate-300' :
-                      i === 2 ? 'bg-orange-700/20 text-orange-400' :
+                      entry.rank === 1 ? 'bg-amber-500/20 text-amber-400' :
+                      entry.rank === 2 ? 'bg-slate-400/20 text-slate-300' :
+                      entry.rank === 3 ? 'bg-orange-700/20 text-orange-400' :
                       'glass-light text-slate-400'
                     }`}>
-                      {i + 1}
+                      {entry.rank}
                     </span>
                     <span className="font-semibold text-white text-sm break-words">{entry.student.name}</span>
                     <AbsenceBadge status={attendanceMap[entry.student.id]} />
