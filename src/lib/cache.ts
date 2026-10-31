@@ -49,12 +49,11 @@ const memoryShim: Storage = {
 };
 
 export function withTimeout<T>(p: Promise<T>, ms: number = FETCH_TIMEOUT): Promise<T> {
-  return Promise.race([
-    p,
-    new Promise<T>((_, reject) =>
-      setTimeout(() => reject(new Error('fetch_timeout')), ms)
-    ),
-  ]);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<T>((_, reject) => {
+    timer = setTimeout(() => reject(new Error('fetch_timeout')), ms);
+  });
+  return Promise.race([p, timeout]).finally(() => clearTimeout(timer));
 }
 
 export function getCached<T>(key: string): T | null {
@@ -203,7 +202,7 @@ export async function swrFetch<T>(
   const promise = fetchWithRetry(fetcher).finally(() => inflight.delete(cacheKey));
   inflight.set(cacheKey, promise);
   const data = await promise;
-  setCached(cacheKey, data, ttl);
+  if (data !== null && data !== undefined) setCached(cacheKey, data, ttl);
   return data;
 }
 

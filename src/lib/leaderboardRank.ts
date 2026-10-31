@@ -44,7 +44,6 @@ export function canonicalRankEntries(entries: HallOfFameEntry[]): RankedEntry[] 
   // Dense ranking ("123345"): tied scores share the same rank, and the next
   // distinct score gets the immediately following rank number (no skipping).
   // e.g. scores [100, 100, 90, 90, 80] → ranks [1, 1, 2, 2, 3].
-  // As requested: 1, 2, 3, 3, 4, 5.
   const result: RankedEntry[] = [];
   let currentRank = 0;
   for (let i = 0; i < cleaned.length; i++) {

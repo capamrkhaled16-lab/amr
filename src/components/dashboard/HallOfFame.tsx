@@ -90,7 +90,7 @@ function buildRankExplanation(
     if (rank === 1) {
       parts.push(`للحفاظ على الصدارة، يُنصح بتحسين: ${improvements.join('، ')}.`);
     } else {
-      parts.push(`للتقدّم إلى مركز أعى، يحتاج إلى تحسين: ${improvements.join('، ')}.`);
+      parts.push(`للتقدّم إلى مركز أعلى، يحتاج إلى تحسين: ${improvements.join('، ')}.`);
     }
   }
 
@@ -160,6 +160,7 @@ export default function HallOfFame({ groupId, refreshKey = 0, onViewStudent }: H
   const [selectedEntry, setSelectedEntry] = useState<HallOfFameEntry | null>(null);
   const [breakdown, setBreakdown] = useState<BreakdownData | null>(null);
   const [breakdownLoading, setBreakdownLoading] = useState(false);
+  const [breakdownError, setBreakdownError] = useState(false);
   const reqIdRef = useRef(0);
 
   const load = useCallback(async (showLoading = false) => {
@@ -204,7 +205,7 @@ export default function HallOfFame({ groupId, refreshKey = 0, onViewStudent }: H
       .on('postgres_changes', { event: '*', schema: 'public', table: 'exam_submissions' }, refresh)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'students' }, refresh)
       .subscribe();
-    const fallbackRefresh = window.setInterval(() => void load(), 15000);
+    const fallbackRefresh = window.setInterval(() => { if (!document.hidden) void load(); }, 15000);
 
     const offAttendance = eventBus.on('attendance:changed', () => refresh());
     const offGrades = eventBus.on('grades:changed', () => refresh());
@@ -242,12 +243,14 @@ export default function HallOfFame({ groupId, refreshKey = 0, onViewStudent }: H
     }
     setSelectedEntry(entry);
     setBreakdown(null);
+    setBreakdownError(false);
     setBreakdownLoading(true);
     try {
       const data = await fetchRankBreakdown(entry.id, entry.group_id);
       setBreakdown(data);
     } catch {
       setBreakdown(null);
+      setBreakdownError(true);
     } finally {
       setBreakdownLoading(false);
     }
@@ -430,7 +433,7 @@ export default function HallOfFame({ groupId, refreshKey = 0, onViewStudent }: H
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               <ScoreCard label="متوسط الامتحانات" value={`${Math.round(toNum(selectedEntry.avg_score))}%`} icon={<TrendingUp size={14} />} color="text-blue-400" weight="35%" />
               <ScoreCard label="نسبة الحضور" value={`${Math.round(toNum(selectedEntry.attendance_rate))}%`} icon={<CalendarCheck size={14} />} color="text-emerald-400" weight="25%" />
-              <ScoreCard label="الواجبات" value={selectedEntry.homework_rate == null ? '—' : `${Math.round(toNum(selectedEntry.homework_rate))}%`} icon={<BookOpen size={14} />} color="text-violet-400" weight="20%" />
+              <ScoreCard label="الواجبات" value={selectedEntry.homework_rate == null ? '—' : `${Math.round(toNum(selectedEntry.homework_rate))}%`} icon={<BookOpen size={14} />} color="text-cyan-400" weight="20%" />
               <ScoreCard label="السلوك" value={`${Math.round(toNum(selectedEntry.behavior_score))}%`} icon={<Heart size={14} />} color="text-rose-400" weight="20%" />
             </div>
 
@@ -472,6 +475,11 @@ export default function HallOfFame({ groupId, refreshKey = 0, onViewStudent }: H
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="animate-spin text-amber-400" size={28} />
                 <span className="text-sm text-slate-400 mr-3">جارٍ تحميل التفاصيل…</span>
+              </div>
+            ) : breakdownError ? (
+              <div className="flex items-center gap-2 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20">
+                <AlertTriangle size={18} className="text-amber-400 flex-shrink-0" />
+                <p className="text-xs text-amber-200 font-medium">تعذّر تحميل تفاصيل الترتيب. أغلق النافذة وأعد المحاولة.</p>
               </div>
             ) : breakdown ? (
               <AnimatePresence>

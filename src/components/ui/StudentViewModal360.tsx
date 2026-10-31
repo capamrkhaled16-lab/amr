@@ -90,10 +90,8 @@ export function StudentViewModal360({ open, student, onClose }: Props) {
           .from('attendance')
           .select('id, student_id, group_id, session_id, status, notes, attendance_date, recorded_at')
           .eq('student_id', studentId)
-          .gte('attendance_date', mStart)
-          .lt('attendance_date', mEnd)
           .order('attendance_date', { ascending: false })
-          .limit(15),
+          .limit(100),
         supabase
           .from('center_grades')
           .select('id, center_exam_id, student_id, score, updated_at, is_locked, locked_at, locked_by')
@@ -413,12 +411,12 @@ export function StudentViewModal360({ open, student, onClose }: Props) {
                     </div>
                   </div>
 
-                  {/* Recent attendance */}
+                  {/* Attendance history across all groups */}
                   {data.attendance.length > 0 && (
                     <div>
-                      <SectionTitle icon={<Calendar size={13} />} label="آخر الحضور" />
+                      <SectionTitle icon={<Calendar size={13} />} label="سجل الحضور" />
                       <div className="space-y-1.5">
-                        {data.attendance.slice(0, 5).map((a) => (
+                        {data.attendance.slice(0, 20).map((a) => (
                           <div key={a.id} className="flex items-center justify-between text-xs">
                             <span className="text-slate-400">{formatArabicDate(a.attendance_date)}</span>
                             <span className={`font-bold ${ATTENDANCE_COLORS[a.status] ?? 'text-slate-400'}`}>

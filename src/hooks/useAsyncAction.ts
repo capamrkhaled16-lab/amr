@@ -13,8 +13,8 @@ export type SaveState = 'idle' | 'saving' | 'saved' | 'verified' | 'error';
  *   'verified' → server confirmed the write
  *   'error'    → business-logic error (validation, locked record)
  *
- * Network errors are NOT surfaced as 'error' — those are handled silently
- * by the optimistic write queue. Only real business-logic errors reach the UI.
+ * Network failures are surfaced as 'error' with a message asking the user to verify
+ * before retrying, so a save is never reported as successful unless it was confirmed.
  */
 export function useAsyncAction<TArgs extends unknown[], TResult>(
   fn: (...args: TArgs) => Promise<TResult>
@@ -39,14 +39,8 @@ export function useAsyncAction<TArgs extends unknown[], TResult>(
       const msg = err instanceof Error ? err.message : 'حدث خطأ غير متوقع';
       // Only surface business-logic errors, not transient network failures
       const isBusinessError = !isTransientNetworkError(msg);
-      if (isBusinessError) {
-        setError(msg);
-        setSaveState('error');
-      } else {
-        // Network error — optimistic UI already updated, treat as saved
-        setSaveState('saved');
-        savedTimer.current = setTimeout(() => setSaveState('idle'), 2000);
-      }
+      setError(isBusinessError ? msg : 'تعذّر تأكيد الحفظ بسبب ضعف الاتصال. تحقق من السجل قبل إعادة المحاولة.');
+      setSaveState('error');
       console.error('[useAsyncAction]', err);
       return null;
     } finally {

@@ -101,6 +101,12 @@ export async function safeWrite<T>(
         throw lastError;
       }
 
+      // The write may already have committed; retrying could duplicate it.
+      if (msg === 'write_timeout') {
+        guard?.complete(false);
+        throw new Error('انتهت مهلة الحفظ ولم يتأكد النظام من نجاح العملية. تحقق من السجل قبل إعادة المحاولة.');
+      }
+
       if (attempt < MAX_RETRIES && isTransient(msg)) {
         await sleep(BASE_DELAY * (attempt + 1));
         continue;
