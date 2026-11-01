@@ -2376,7 +2376,7 @@ export async function fetchSessionsForGroup(groupId: string): Promise<Session[]>
 }
 
 export type PreArchiveIssue = {
-  type: 'invalid_score' | 'missing_attendance' | 'duplicate_rank' | 'broken_relation' | 'orphan_grade' | 'negative_fees' | 'missing_homework_status' | 'corrupted_homework_status' | 'payment_without_subscription';
+  type: 'invalid_score' | 'missing_attendance' | 'duplicate_rank' | 'broken_relation' | 'orphan_grade' | 'negative_fees' | 'duplicate_payment';
   severity: 'error' | 'warning';
   group_name: string;
   student_name?: string;
@@ -2642,6 +2642,110 @@ export async function preArchiveValidation(): Promise<{ ok: boolean; issues: Pre
 
   const errors = issues.filter((i) => i.severity === 'error');
   return { ok: errors.length === 0, issues };
+}
+
+type PagedQuery<T> = PromiseLike<{ data: T[] | null; error: { message: string } | null }>;
+
+async function fetchEveryRow<T>(loadPage: (from: number, to: number) => PagedQuery<T>): Promise<T[]> {
+  const rows: T[] = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await loadPage(from, from + 999);
+    if (error) throw new Error(error.message);
+    const page = data ?? [];
+    rows.push(...page);
+    if (page.length < 1000) return rows;
+  }
+}
+
+export async function scanHistoricalIssues(): Promise<PreArchiveIssue[]> {
+  const groups = await fetchEveryRow<{ id: string; name: string }>((from, to) =>
+    supabase.from('groups').select('id, name').order('id').range(from, to));
+  const students = await fetchEveryRow<{ id: string; name: string; group_id: string | null; status: string }>((from, to) =>
+    supabase.from('students').select('id, name, group_id, status').eq('is_deleted', false).order('id').range(from, to));
+  const exams = await fetchEveryRow<{ id: string; title: string; max_score: number; group_id: string }>((from, to) =>
+    supabase.from('center_exams').select('id, title, max_score, group_id').order('id').range(from, to));
+  const grades = await fetchEveryRow<{ id: string; student_id: string; center_exam_id: string; score: number }>((from, to) =>
+    supabase.from('center_grades').select('id, student_id, center_exam_id, score').eq('is_deleted', false).order('id').range(from, to));
+  const payments = await fetchEveryRow<{ id: string; student_id: string; amount: number; payment_date: string; month_key: string; is_historical_payment: boolean }>((from, to) =>
+    supabase.from('payments').select('id, student_id, amount, payment_date, month_key, is_historical_payment').eq('is_deleted', false).gt('amount', 0).order('id').range(from, to));
+  const subscriptions = await fetchEveryRow<{ student_id: string; month_key: string }>((from, to) =>
+    supabase.from('monthly_subscriptions').select('student_id, month_key').order('student_id').order('month_key').range(from, to));
+
+  const groupName = new Map(groups.map((g) => [g.id, g.name]));
+  const studentById = new Map(students.map((s) => [s.id, s]));
+  const activeStudentIds = new Set(students.filter((s) => s.status === 'active').map((s) => s.id));
+  const examById = new Map(exams.map((e) => [e.id, e]));
+  const subscriptionKeys = new Set(subscriptions.map((s) => `${s.student_id}|${s.month_key}`));
+  const paymentCounts = new Map<string, number>();
+  const paymentKey = (p: { student_id: string; month_key: string; amount: number; payment_date: string }) =>
+    `${p.student_id}|${p.month_key}|${p.amount}|${p.payment_date}`;
+  for (const p of payments) paymentCounts.set(paymentKey(p), (paymentCounts.get(paymentKey(p)) ?? 0) + 1);
+
+  const issues: PreArchiveIssue[] = [];
+
+  for (const g of grades) {
+    const exam = examById.get(g.center_exam_id);
+    const student = studentById.get(g.student_id);
+    if (exam && g.score > exam.max_score) {
+      issues.push({
+        type: 'invalid_score',
+        severity: 'error',
+        group_name: groupName.get(exam.group_id) ?? 'غير محدد',
+        student_name: student?.name ?? 'طالب غير معروف',
+        student_id: g.student_id,
+        record_id: g.id,
+        exam_id: g.center_exam_id,
+        max_score: exam.max_score,
+        group_id: exam.group_id,
+        detail: `الدرجة (${g.score}) أكبر من الحد الأقصى للامتحان "${exam.title}" (${exam.max_score})`,
+      });
+    }
+    if (!activeStudentIds.has(g.student_id)) {
+      issues.push({
+        type: 'orphan_grade',
+        severity: 'warning',
+        group_name: groupName.get(exam?.group_id ?? '') ?? 'غير محدد',
+        student_name: student?.name,
+        student_id: g.student_id,
+        record_id: g.id,
+        exam_id: g.center_exam_id,
+        group_id: exam?.group_id,
+        detail: `درجة (${g.score}) مرتبطة بطالب غير نشط أو محذوف في امتحان "${exam?.title ?? 'غير معروف'}"`,
+      });
+    }
+  }
+
+  for (const p of payments) {
+    const student = studentById.get(p.student_id);
+    const groupLabel = groupName.get(student?.group_id ?? '') ?? 'غير محدد';
+    const sameCount = paymentCounts.get(paymentKey(p)) ?? 0;
+    if (sameCount > 1) {
+      issues.push({
+        type: 'duplicate_payment',
+        severity: 'warning',
+        group_name: groupLabel,
+        student_name: student?.name ?? 'طالب غير معروف',
+        student_id: p.student_id,
+        record_id: p.id,
+        group_id: student?.group_id ?? undefined,
+        detail: `دفعة ${p.amount} ج.م بتاريخ ${p.payment_date} لشهر ${p.month_key} — يوجد ${sameCount} دفعات متطابقة لنفس الطالب. لم يتم حذف أي دفعة.`,
+      });
+    }
+    if (!p.is_historical_payment && !subscriptionKeys.has(`${p.student_id}|${p.month_key}`)) {
+      issues.push({
+        type: 'broken_relation',
+        severity: 'warning',
+        group_name: groupLabel,
+        student_name: student?.name ?? 'طالب غير معروف',
+        student_id: p.student_id,
+        record_id: p.id,
+        group_id: student?.group_id ?? undefined,
+        detail: `دفعة ${p.amount} ج.م بتاريخ ${p.payment_date} لشهر ${p.month_key} بدون اشتراك شهري مسجل لنفس الطالب والشهر`,
+      });
+    }
+  }
+
+  return issues;
 }
 
 export async function backfillAttendanceForNewStudent(

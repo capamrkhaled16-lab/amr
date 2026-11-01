@@ -49,7 +49,7 @@ import { formatCurrency, formatArabicDate, normalizePhoneForWhatsApp, openWhatsA
 import { printDocument } from '@/lib/export';
 import { PDFButton } from '@/components/ui/PDFButton';
 import { exportStudentListPDF, exportMonthlyPaymentSummaryPDF, exportPaidStudentsPDF, exportUnpaidStudentsPDF } from '@/lib/pdfExport';
-import { triggerAutoArchive, createHistoricalPayment, fetchArchiveRuns, rollbackArchive, preArchiveValidation, resolvePaymentStatusFromDB, type PreArchiveIssue } from '@/lib/data';
+import { triggerAutoArchive, createHistoricalPayment, fetchArchiveRuns, rollbackArchive, preArchiveValidation, resolvePaymentStatusFromDB, scanHistoricalIssues, type PreArchiveIssue } from '@/lib/data';
 import SmartGradeCompletion from '@/components/dashboard/SmartGradeCompletion';
 import DailyCollectionsWidget from '@/components/dashboard/DailyCollectionsWidget';
 import AccountingCheckpoint from '@/components/dashboard/AccountingCheckpoint';
@@ -312,6 +312,7 @@ const ISSUE_LABELS: Record<string, string> = {
   broken_relation: 'علاقة مكسورة',
   orphan_grade: 'درجة بدون طالب',
   negative_fees: 'مبالغ مالية غير متوازنة',
+  duplicate_payment: 'دفعة مكررة',
 };
 
 const EDITABLE_ISSUE_TYPES = new Set(['invalid_score', 'orphan_grade', 'negative_fees']);
@@ -517,6 +518,8 @@ export default function ArchiveOverview({
   const [reviewSaving, setReviewSaving] = useState(false);
   const [reviewError, setReviewError] = useState<string | null>(null);
   const [reviewOutcome, setReviewOutcome] = useState<'resolved' | 'unresolved' | null>(null);
+  const [validationScope, setValidationScope] = useState<'pre_archive' | 'historical'>('pre_archive');
+  const [issueProgress, setIssueProgress] = useState<{ total: number; resolved: number } | null>(null);
   const whatsappSentRef = useRef<Set<string>>(new Set());
 
   function closeValidationModal() {
@@ -524,6 +527,7 @@ export default function ArchiveOverview({
     setPendingArchiveMonth(null);
     closeIssueReview();
     setIssueFilter('all');
+    setIssueProgress(null);
   }
 
   function closeIssueReview() {
@@ -592,10 +596,11 @@ export default function ArchiveOverview({
       const verified = after !== null && (issue.type === 'orphan_grade' ? after.deleted === true : after.value === parsed.value);
       if (!after || !verified) throw new Error('لم يتم التحقق من الحفظ، لم تُحسب المشكلة كمحلولة');
       setReviewSnapshot(after);
-      const result = await preArchiveValidation();
-      setValidationIssues(result.issues);
-      const stillPresent = result.issues.some((i) => issueKey(i) === issueKey(issue));
+      const issues = validationScope === 'historical' ? await scanHistoricalIssues() : (await preArchiveValidation()).issues;
+      setValidationIssues(issues);
+      const stillPresent = issues.some((i) => issueKey(i) === issueKey(issue));
       setReviewOutcome(stillPresent ? 'unresolved' : 'resolved');
+      if (!stillPresent) setIssueProgress((p) => (p ? { ...p, resolved: p.resolved + 1 } : p));
       invalidateByPrefix('archive_');
     } catch (e) {
       setReviewError(`فشل الحفظ: ${(e as Error).message}`);
@@ -940,6 +945,8 @@ export default function ArchiveOverview({
 
   async function createArchiveNow(monthKey: string) {
     setArchiveMessage(null);
+    setValidationScope('pre_archive');
+    setIssueProgress(null);
     setValidating(true);
     setPendingArchiveMonth(monthKey);
     try {
@@ -954,6 +961,22 @@ export default function ArchiveOverview({
     } catch {
       setValidating(false);
       setArchiveMessage({ type: 'error', text: 'تعذّر التحقق من البيانات قبل الأرشفة. تأكد من الاتصال وحاول مجدداً.' });
+    }
+  }
+
+  async function openHistoricalScan() {
+    setValidationScope('historical');
+    setPendingArchiveMonth(null);
+    setIssueFilter('all');
+    setValidating(true);
+    try {
+      const issues = await scanHistoricalIssues();
+      setIssueProgress({ total: issues.length, resolved: 0 });
+      setValidationIssues(issues);
+    } catch (e) {
+      setArchiveMessage({ type: 'error', text: `تعذّر فحص السجلات السابقة: ${(e as Error).message}` });
+    } finally {
+      setValidating(false);
     }
   }
 
@@ -1672,6 +1695,10 @@ export default function ArchiveOverview({
             <Button size="sm" variant="secondary" onClick={() => void loadArchives()} disabled={loading}>
               <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
               تحديث
+            </Button>
+            <Button size="sm" variant="secondary" onClick={() => void openHistoricalScan()}>
+              <Search size={14} />
+              فحص السجلات السابقة
             </Button>
             {isMaster && (
               <Button size="sm" onClick={() => createArchiveNow(curMonth)}>
@@ -3677,7 +3704,7 @@ export default function ArchiveOverview({
       <Modal
         open={!!validationIssues}
         onClose={closeValidationModal}
-        title="تنبيه: مشاكل في البيانات قبل الأرشفة"
+        title={validationScope === 'historical' ? 'فحص السجلات السابقة' : 'تنبيه: مشاكل في البيانات قبل الأرشفة'}
       >
         {validationIssues && (() => {
           const errors = validationIssues.filter((i) => i.severity === 'error');
@@ -3724,6 +3751,8 @@ export default function ArchiveOverview({
                 <div className="glass-light rounded-xl p-3 border border-white/5 space-y-1">
                   <p className="text-[10px] text-slate-400">{ISSUE_LABELS[reviewIssue.type] ?? reviewIssue.type}</p>
                   <p className="text-xs text-white font-semibold">{reviewIssue.group_name}</p>
+                  {reviewIssue.student_id && <p className="text-[10px] text-slate-400 tabular-nums">معرّف الطالب: {reviewIssue.student_id}</p>}
+                  {reviewIssue.record_id && <p className="text-[10px] text-slate-400 tabular-nums">معرّف السجل: {reviewIssue.record_id}</p>}
                   {reviewIssue.student_name && <p className="text-[11px] text-slate-300">الطالب: {reviewIssue.student_name}</p>}
                   <p className="text-[11px] text-slate-300 leading-relaxed pt-1">{reviewIssue.detail}</p>
                 </div>
@@ -3898,6 +3927,12 @@ export default function ArchiveOverview({
                 </p>
               </div>
 
+              {issueProgress && (
+                <p className="text-[11px] text-slate-300 font-semibold">
+                  تم إصلاح {issueProgress.resolved} من {issueProgress.total} — المتبقي {validationIssues.length}
+                </p>
+              )}
+
               <div className="flex items-center gap-1.5">
                 {filterTabs.map((tab) => (
                   <button key={tab.key} onClick={() => setIssueFilter(tab.key)} className={filterButtonClass(issueFilter === tab.key)}>
@@ -3918,7 +3953,7 @@ export default function ArchiveOverview({
                 <Button variant="secondary" onClick={closeValidationModal}>
                   إغلاق وإصلاح الأخطاء
                 </Button>
-                {errors.length === 0 && (
+                {validationScope === 'pre_archive' && errors.length === 0 && (
                   <Button onClick={() => void proceedArchiveDespiteWarnings()}>
                     متابعة الأرشفة
                   </Button>
