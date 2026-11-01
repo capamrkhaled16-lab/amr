@@ -2381,6 +2381,11 @@ export type PreArchiveIssue = {
   group_name: string;
   student_name?: string;
   detail: string;
+  record_id?: string;
+  student_id?: string;
+  exam_id?: string;
+  max_score?: number;
+  group_id?: string;
 };
 
 export async function preArchiveValidation(): Promise<{ ok: boolean; issues: PreArchiveIssue[] }> {
@@ -2413,6 +2418,8 @@ export async function preArchiveValidation(): Promise<{ ok: boolean; issues: Pre
         severity: 'warning',
         group_name: groupNameMap.get(s.group_id ?? '') ?? 'غير محدد',
         student_name: s.name,
+        student_id: s.id,
+        group_id: s.group_id ?? undefined,
         detail: `المبلغ المدفوع (${s.paid_fees} ج.م) أكبر من المصاريف الكلية (${s.total_fees} ج.م)`,
       });
     }
@@ -2446,6 +2453,11 @@ export async function preArchiveValidation(): Promise<{ ok: boolean; issues: Pre
         severity: 'error',
         group_name: groupNameMap.get(exam.group_id) ?? 'غير محدد',
         student_name: s?.name ?? 'طالب محذوف',
+        student_id: g.student_id,
+        record_id: g.id,
+        exam_id: g.center_exam_id,
+        max_score: exam.max_score,
+        group_id: exam.group_id,
         detail: `الدرجة (${g.score}) أكبر من الحد الأقصى للامتحان "${exam.title}" (${exam.max_score})`,
       });
     }
@@ -2456,6 +2468,10 @@ export async function preArchiveValidation(): Promise<{ ok: boolean; issues: Pre
         type: 'orphan_grade',
         severity: 'warning',
         group_name: groupNameMap.get(exam?.group_id ?? '') ?? 'غير محدد',
+        record_id: g.id,
+        student_id: g.student_id,
+        exam_id: g.center_exam_id,
+        group_id: exam?.group_id,
         detail: `درجة مرتبطة بطالب غير نشأ أو محذوف في امتحان "${exam?.title ?? 'غير معروف'}"`,
       });
     }
@@ -2531,6 +2547,7 @@ export async function preArchiveValidation(): Promise<{ ok: boolean; issues: Pre
         type: 'duplicate_rank',
         severity: 'error',
         group_name: groupNameMap.get(gid) ?? 'غير محدد',
+        group_id: gid,
         detail: `تكرار في ترتيب لوحة الشرف — هناك ${count} طلاب بنفس المركز في نفس المجموعة`,
       });
     }
@@ -2614,6 +2631,9 @@ export async function preArchiveValidation(): Promise<{ ok: boolean; issues: Pre
         severity: 'warning',
         group_name: groupNameMap.get(s?.group_id ?? '') ?? 'غير محدد',
         student_name: s?.name ?? 'طالب محذوف',
+        student_id: p.student_id,
+        record_id: p.id,
+        group_id: s?.group_id ?? undefined,
         detail: `دفعة ${p.amount} ج.م بدون اشتراك شهري مسجل لهذا الشهر`,
       });
     }
@@ -3136,15 +3156,20 @@ export async function ensureMonthlySubscriptions(
   if (missing.length > 0 && baseAmount > 0) {
     const { data: studentRows } = await supabase
       .from('students')
-      .select('id, discount_amount')
+      .select('id, is_exempt, discount_mode, discount_amount, discount_percent')
       .in('id', missing);
-    const discountMap = new Map<string, number>();
-    for (const r of (studentRows ?? []) as { id: string; discount_amount: number | null }[]) {
-      discountMap.set(r.id, r.discount_amount ?? 0);
+    const feeMap = new Map<string, number>();
+    for (const r of (studentRows ?? []) as { id: string; is_exempt: boolean; discount_mode: string | null; discount_amount: number | null; discount_percent: number | null }) {
+      const studentLike = {
+        is_exempt: r.is_exempt,
+        discount_mode: r.discount_mode as Student['discount_mode'],
+        discount_amount: r.discount_amount ?? 0,
+        discount_percent: r.discount_percent ?? 0,
+      };
+      feeMap.set(r.id, computeEffectiveFees(studentLike, baseAmount));
     }
     const rows = missing.map((sid) => {
-      const discount = discountMap.get(sid) ?? 0;
-      const adjustedAmount = Math.max(0, baseAmount - discount);
+      const adjustedAmount = feeMap.get(sid) ?? baseAmount;
       return {
         student_id: sid,
         month: monthLabel,
@@ -3152,6 +3177,7 @@ export async function ensureMonthlySubscriptions(
         amount_due: adjustedAmount,
         amount_paid: 0,
         status: 'unpaid' as SubscriptionStatus,
+        is_exempt: feeMap.get(sid) === 0,
         is_archived: false,
       };
     });

@@ -308,7 +308,7 @@ function PortalContent({
 
   const presentCount = monthFilteredAttendance.filter((a) => a.status === 'present').length;
   const absentCount = monthFilteredAttendance.filter((a) => a.status === 'absent').length;
-  const excusedCount = monthFilteredAttendance.filter((a) => a.status === 'excused' || a.status === 'excused_absence').length;
+  const excusedCount = monthFilteredAttendance.filter((a) => ['excused', 'excused_absence'].includes(a.status)).length;
   const lateCount = monthFilteredAttendance.filter((a) => a.status === 'late').length;
   const totalAttendance = monthFilteredAttendance.length;
   const attendanceRate = totalAttendance > 0 ? Math.round((presentCount / totalAttendance) * 100) : 0;
@@ -415,7 +415,7 @@ function PortalContent({
 
       {/* Sticky header */}
       <header className="sticky top-0 z-30 glass border-b border-white/[0.06]">
-        <div className="max-w-2xl mx-auto px-4 py-3">
+        <div className="max-w-2xl md:max-w-4xl lg:max-w-5xl mx-auto px-4 py-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/20 overflow-hidden">
@@ -457,7 +457,7 @@ function PortalContent({
       </header>
 
       {/* Vertical scroll content */}
-      <main className="relative max-w-2xl mx-auto px-4 py-5 space-y-5 pb-32">
+      <main className="relative max-w-2xl md:max-w-4xl lg:max-w-5xl mx-auto px-4 py-5 space-y-5 pb-32">
         {/* Profile header */}
         <ProfileHeader student={student} rank={data.rank} totalInGroup={data.totalStudentsInGroup} />
 
@@ -540,6 +540,9 @@ function PortalContent({
             <Wallet className="w-3.5 h-3.5 text-emerald-400" />
             الملخص المالي
           </div>
+          <p className="text-[10px] text-slate-400 mb-3 leading-relaxed">
+            نسبة التحصيل = المبلغ المدفوع ÷ المستحق لهذا الشهر × 100، وتحسب من سجل المدفوعات المسجل لهذا الشهر فقط.
+          </p>
           {isExempt ? (
             <div className="bg-emerald-500/10 rounded-xl p-4 text-center border border-emerald-500/15">
               <p className="text-sm font-bold text-emerald-400">معفى من الرسوم</p>
