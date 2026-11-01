@@ -2396,24 +2396,27 @@ export async function preArchiveValidation(monthKey?: string): Promise<{ ok: boo
   const issues: PreArchiveIssue[] = [];
 
   // 1. Fetch all groups with their grade/stage names
-  const { data: groupsData } = await supabase
+  const { data: groupsData, error: groupsErr } = await supabase
     .from('groups')
     .select('id, name, grade_level:grade_levels(name, stage:academic_stages(name))');
+  if (groupsErr) throw new Error(groupsErr.message);
   const groups = (groupsData ?? []) as { id: string; name: string; grade_level: { name: string; stage: { name: string } } | null }[];
   const groupNameMap = new Map(groups.map((g) => [g.id, g.name]));
 
   // 2. Fetch all active students
-  const { data: studentsData } = await supabase
+  const { data: studentsData, error: studentsErr } = await supabase
     .from('students')
     .select('id, name, group_id, total_fees, paid_fees, is_exempt')
     .eq('is_deleted', false)
     .eq('status', 'active');
+  if (studentsErr) throw new Error(studentsErr.message);
   const students = (studentsData ?? []) as { id: string; name: string; group_id: string | null; total_fees: number; paid_fees: number; is_exempt: boolean }[];
   const studentMap = new Map(students.map((s) => [s.id, s]));
 
-  // 3. Check for negative fees (paid > total)
+  // 3. Check for negative fees (paid > total). paid_fees is live state, so it only belongs to the current month.
+  const isLiveMonth = targetYear === now.getFullYear() && targetMonth === now.getMonth() + 1;
   for (const s of students) {
-    if (!s.is_exempt && s.total_fees > 0 && s.paid_fees > s.total_fees) {
+    if (isLiveMonth && !s.is_exempt && s.total_fees > 0 && s.paid_fees > s.total_fees) {
       issues.push({
         type: 'negative_fees',
         severity: 'warning',
@@ -2427,21 +2430,25 @@ export async function preArchiveValidation(monthKey?: string): Promise<{ ok: boo
   }
 
   // 4. Fetch all center exams for this month
-  const { data: examsData } = await supabase
+  const { data: examsData, error: examsErr } = await supabase
     .from('center_exams')
     .select('id, title, max_score, pass_score, group_id')
     .gte('created_at', mStart)
     .lt('created_at', mEnd);
+  if (examsErr) throw new Error(examsErr.message);
   const exams = (examsData ?? []) as { id: string; title: string; max_score: number; pass_score: number; group_id: string }[];
   const examMap = new Map(exams.map((e) => [e.id, e]));
 
   // 5. Fetch all center grades for this month
-  const { data: gradesData } = await supabase
-    .from('center_grades')
-    .select('id, student_id, center_exam_id, score, is_deleted')
-    .eq('is_deleted', false)
-    .gte('updated_at', mStart)
-    .lt('updated_at', mEnd);
+  const examIds = exams.map((e) => e.id);
+  const { data: gradesData, error: gradesErr } = examIds.length === 0
+    ? { data: [], error: null }
+    : await supabase
+        .from('center_grades')
+        .select('id, student_id, center_exam_id, score, is_deleted')
+        .eq('is_deleted', false)
+        .in('center_exam_id', examIds);
+  if (gradesErr) throw new Error(gradesErr.message);
   const grades = (gradesData ?? []) as { id: string; student_id: string; center_exam_id: string; score: number; is_deleted: boolean }[];
 
   // 6. Check for invalid scores (score > max_score)
@@ -2608,19 +2615,21 @@ export async function preArchiveValidation(monthKey?: string): Promise<{ ok: boo
 
   // 11. Check payments without matching monthly_subscriptions
   const currentMk = `${targetYear}-${String(targetMonth).padStart(2, '0')}`;
-  const { data: paymentsData } = await supabase
+  const { data: paymentsData, error: paymentsErr } = await supabase
     .from('payments')
     .select('id, student_id, amount, month_key')
     .eq('month_key', currentMk)
     .eq('is_deleted', false)
     .eq('is_historical_payment', false)
     .gt('amount', 0);
+  if (paymentsErr) throw new Error(paymentsErr.message);
   const payments = (paymentsData ?? []) as { id: string; student_id: string; amount: number; month_key: string }[];
 
-  const { data: subsData } = await supabase
+  const { data: subsData, error: subsErr } = await supabase
     .from('monthly_subscriptions')
     .select('student_id, amount_due, amount_paid')
     .eq('month_key', currentMk);
+  if (subsErr) throw new Error(subsErr.message);
   const subs = (subsData ?? []) as { student_id: string; amount_due: number; amount_paid: number }[];
   const subsByStudent = new Map(subs.map((s) => [s.student_id, s]));
 
