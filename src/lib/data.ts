@@ -1518,20 +1518,22 @@ export async function createPayment(
   // duplicates that fall outside the 2-minute idempotency window (e.g. a
   // second full payment 20 minutes later). Partial/installment payments that
   // don't exceed the remaining balance are still allowed.
-  const { data: existingFees } = await supabase
-    .from('students')
-    .select('total_fees, is_exempt')
-    .eq('id', studentId)
-    .maybeSingle();
-  const feeRow = existingFees as { total_fees: number; is_exempt: boolean } | null;
-  if (feeRow && !feeRow.is_exempt && feeRow.total_fees > 0) {
-    const { data: monthPayments } = await supabase
+  const [{ data: existingFees }, { data: monthPayments }] = await Promise.all([
+    supabase
+      .from('students')
+      .select('total_fees, is_exempt')
+      .eq('id', studentId)
+      .maybeSingle(),
+    supabase
       .from('payments')
       .select('amount')
       .eq('student_id', studentId)
       .eq('month_key', monthKey)
       .eq('is_deleted', false)
-      .eq('is_historical_payment', false);
+      .eq('is_historical_payment', false),
+  ]);
+  const feeRow = existingFees as { total_fees: number; is_exempt: boolean } | null;
+  if (feeRow && !feeRow.is_exempt && feeRow.total_fees > 0) {
     const alreadyPaid = (monthPayments ?? []).reduce((s, p) => s + Number((p as { amount: number }).amount ?? 0), 0);
     if (alreadyPaid + amount > Number(feeRow.total_fees)) {
       guard.complete(false);
@@ -1539,19 +1541,42 @@ export async function createPayment(
     }
   }
 
-  const { data: result, error: insError } = await supabase.from('payments').insert({
-    student_id: studentId,
-    amount,
-    note,
-    payment_date: paymentDate,
-    recorded_by: recordedBy,
-    recorded_at: isoNow,
-    receipt_number: receiptNumber,
-    month_key: monthKey,
-    idempotency_key: idempotencyKey,
-  })
-  .select()
-  .single();
+  let inserted;
+  try {
+    inserted = await withTimeout(
+      supabase.from('payments').insert({
+        student_id: studentId,
+        amount,
+        note,
+        payment_date: paymentDate,
+        recorded_by: recordedBy,
+        recorded_at: isoNow,
+        receipt_number: receiptNumber,
+        month_key: monthKey,
+        idempotency_key: idempotencyKey,
+      })
+      .select()
+      .single(),
+      15_000
+    );
+  } catch {
+    // Timed out or connection dropped: the insert may still have committed.
+    // The idempotency key is stable, so look it up before reporting failure.
+    const { data: saved } = await supabase
+      .from('payments')
+      .select('*')
+      .eq('idempotency_key', idempotencyKey)
+      .maybeSingle();
+    if (!saved) {
+      guard.complete(false);
+      throw new Error('انتهت مهلة الاتصال قبل تأكيد حفظ الدفعة. لم تُسجَّل الدفعة — يمكنك إعادة المحاولة.');
+    }
+    guard.complete(true);
+    emitPaymentsChanged(undefined, studentId);
+    return saved as Payment;
+  }
+
+  const { data: result, error: insError } = inserted;
   if (insError) {
     if (insError.code === '23505') {
       // Duplicate within 2-minute idempotency window — return the existing
@@ -1564,40 +1589,26 @@ export async function createPayment(
       guard.complete(true);
       return (existing as Payment | null) ?? null;
     }
+    guard.complete(false);
     throw new Error(insError.message);
   }
   const insertedPayment = result as Payment | null;
 
-  // DATABASE-FIRST VERIFICATION: re-read the payment by its ID to confirm
-  // it was actually persisted. If the record can't be found, the insert
-  // silently failed — return null so the caller knows not to send a receipt.
-  if (insertedPayment) {
-    const { data: verified, error: verifyErr } = await supabase
-      .from('payments')
-      .select('id, receipt_number, payment_date, recorded_at, amount, student_id, month_key')
-      .eq('id', insertedPayment.id)
-      .maybeSingle();
-    if (verifyErr || !verified) {
-      console.error('[createPayment] Post-insert verification failed:', verifyErr?.message ?? 'record not found');
-      guard.complete(false);
-      return null;
-    }
-  }
-
-  // paid_fees and monthly_subscriptions.amount_paid are now auto-recalculated
-  // by a database trigger (trigger_recalc_paid_fees) on every payment
-  // insert/update/delete. No manual recalculation needed here.
   const monthLabel = ARABIC_MONTHS[parseInt(monthKey.split('-')[1], 10) - 1] ?? monthKey;
-  const { data: payStudent } = await supabase
-    .from('students')
-    .select('name')
-    .eq('id', studentId)
-    .maybeSingle();
-  const studentName = (payStudent as { name?: string } | null)?.name ?? '';
-  const auditNote = `دفعة شهر ${monthLabel} — ${studentName} — ${formatCurrency(amount)} ج.م${note ? ` — ${note}` : ''}`;
-  await createAuditLog(recordedBy, actorRole, 'payment_create', studentId, amount, auditNote);
   guard.complete(true);
   emitPaymentsChanged(undefined, studentId);
+
+  void (async () => {
+    const { data: payStudent } = await supabase
+      .from('students')
+      .select('name')
+      .eq('id', studentId)
+      .maybeSingle();
+    const studentName = (payStudent as { name?: string } | null)?.name ?? '';
+    const auditNote = `دفعة شهر ${monthLabel} — ${studentName} — ${formatCurrency(amount)} ج.م${note ? ` — ${note}` : ''}`;
+    await createAuditLog(recordedBy, actorRole, 'payment_create', studentId, amount, auditNote);
+  })().catch((err) => console.error('[createPayment] audit log failed:', err));
+
   return insertedPayment;
 }
 

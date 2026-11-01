@@ -146,7 +146,6 @@ export default function FinancesModule({ focusStageId, focusGradeId, focusGroupI
   const paidMapEpochRef = useRef(0);
   const paymentsEpochRef = useRef(0);
   const receiptCardRef = useRef<HTMLDivElement>(null);
-  const confirmSentRef = useRef<Set<string>>(new Set());
 
   const canManageExemptions = isMaster || (assistant?.can_manage_exemptions ?? false);
 
@@ -491,24 +490,6 @@ export default function FinancesModule({ focusStageId, focusGradeId, focusGroupI
       showToast(`تم تسجيل دفع مصروفات شهر ${monthLabel} للطالب ${savedStudent.name} — المبلغ ${formatCurrency(amount)} ج.م — بواسطة ${actorName}`, 'success');
     } catch (err) {
       console.error('[handleAddPayment] Payment save failed:', err);
-      const isNetworkErr = err instanceof Error && (err.message.includes('fetch') || err.message.includes('network') || err.message.includes('Failed'));
-      if (isNetworkErr) {
-        showToast('تعذّر تأكيد الدفعة بسبب ضعف الاتصال — جارٍ التحقق من الحفظ...', 'info');
-        try {
-          await new Promise((r) => setTimeout(r, 1500));
-          const pEpoch = ++paidMapEpochRef.current;
-          const freshMap = selectedGroup ? await fetchGroupMonthlyPaidMap(selectedGroup.id, monthKey) : new Map<string, number>();
-          if (pEpoch === paidMapEpochRef.current) setMonthlyPaidMap(freshMap);
-          const newPaid = freshMap.get(savedStudent.id) ?? 0;
-          if (newPaid >= paidBeforeThisPayment + amount) {
-            showToast(`تم حفظ الدفعة بنجاح رغم انقطاع الاتصال — تحقق من سجل المدفوعات`, 'success');
-            setPayAmount(''); setPayNote(''); setPayDate(new Date().toISOString().slice(0, 10)); setPayStudent(null);
-            loadStudents();
-            if (historyStudent) loadPayments(historyStudent);
-            return;
-          }
-        } catch { /* verification also failed */ }
-      }
       setMonthlyPaidMap((prev) => { const m = new Map(prev); m.set(savedStudent.id, Math.max(0, (m.get(savedStudent.id) ?? 0) - amount)); return m; });
       showToast(`تعذّر تسجيل الدفعة: ${err instanceof Error ? err.message : 'خطأ غير معروف'}`, 'error');
     } finally {
@@ -1004,9 +985,6 @@ export default function FinancesModule({ focusStageId, focusGradeId, focusGroupI
     totalPaidAtPayment?: number;
   }) {
     if (!r.studentId) return;
-    const dedupKey = `${r.studentId}-${r.monthKey ?? monthKey}-${r.paymentId ?? ''}`;
-    if (confirmSentRef.current.has(dedupKey)) return;
-    confirmSentRef.current.add(dedupKey);
 
     sendReceiptWhatsAppText({
       receiptNumber: r.receiptNumber ?? '',
@@ -1622,6 +1600,7 @@ export default function FinancesModule({ focusStageId, focusGradeId, focusGroupI
                     {isMaster && <p className="text-[9px] text-slate-600 mt-0.5 font-mono" dir="ltr">ID: {p.id.slice(0, 8)}</p>}
                   </div>
                   <div className="flex items-center gap-1 flex-shrink-0">
+                    {historyStudent && <button onClick={() => sendPaymentConfirmationWhatsApp({ studentId: historyStudent.id, studentName: historyStudent.name, monthKey: p.month_key ?? monthKey, paymentId: p.id, receiptNumber: p.receipt_number ?? '', paymentDate: p.payment_date ?? undefined, recordedAt: p.recorded_at, amount: p.amount })} className="p-1.5 rounded-lg hover:bg-emerald-500/10 text-slate-400 hover:text-emerald-400 transition" title="إرسال إيصال واتساب لهذه الدفعة"><MessageCircle size={14} /></button>}
                     {isMaster && <button onClick={() => { setEditPaymentTarget(p); setEditPayAmount(String(p.amount ?? 0)); setEditPayNote(p.note ?? ''); setEditPayDate(p.payment_date ?? ''); setEditPayMonth(p.month_key ?? ''); }} className="p-1.5 rounded-lg hover:bg-amber-500/10 text-slate-400 hover:text-amber-400 transition" title="تعديل هذه الدفعة"><Pencil size={14} /></button>}
                     <button onClick={() => setDeletePaymentTarget(p)} className="p-1.5 rounded-lg hover:bg-red-500/10 text-slate-400 hover:text-red-400 transition" title="حذف هذه الحركة"><Trash2 size={14} /></button>
                   </div>
