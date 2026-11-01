@@ -318,6 +318,8 @@ const EDITABLE_ISSUE_TYPES = new Set(['invalid_score', 'orphan_grade', 'negative
 
 type IssueSnapshot = { value: number | null; total: number | null; deleted: boolean | null };
 
+type ReviewStudent = { name: string; total_fees: number; paid_fees: number; is_exempt: boolean };
+
 function issueKey(issue: PreArchiveIssue): string {
   return [issue.type, issue.record_id ?? '', issue.student_id ?? '', issue.exam_id ?? '', issue.group_id ?? ''].join('|');
 }
@@ -508,6 +510,7 @@ export default function ArchiveOverview({
   const [issueFilter, setIssueFilter] = useState<'all' | 'error' | 'warning'>('all');
   const [reviewIssue, setReviewIssue] = useState<PreArchiveIssue | null>(null);
   const [reviewSnapshot, setReviewSnapshot] = useState<IssueSnapshot | null>(null);
+  const [reviewStudent, setReviewStudent] = useState<ReviewStudent | null>(null);
   const [reviewLoading, setReviewLoading] = useState(false);
   const [reviewInput, setReviewInput] = useState('');
   const [reviewConfirming, setReviewConfirming] = useState(false);
@@ -526,6 +529,7 @@ export default function ArchiveOverview({
   function closeIssueReview() {
     setReviewIssue(null);
     setReviewSnapshot(null);
+    setReviewStudent(null);
     setReviewInput('');
     setReviewConfirming(false);
     setReviewError(null);
@@ -535,12 +539,22 @@ export default function ArchiveOverview({
   async function openIssueReview(issue: PreArchiveIssue) {
     closeIssueReview();
     setReviewIssue(issue);
-    if (!EDITABLE_ISSUE_TYPES.has(issue.type)) return;
     setReviewLoading(true);
     try {
-      const snapshot = await loadIssueSnapshot(issue);
-      setReviewSnapshot(snapshot);
-      if (snapshot && issue.type !== 'orphan_grade') setReviewInput(snapshot.value != null ? String(snapshot.value) : '');
+      if (issue.student_id) {
+        const { data, error } = await supabase
+          .from('students')
+          .select('name, total_fees, paid_fees, is_exempt')
+          .eq('id', issue.student_id)
+          .maybeSingle();
+        if (error) throw new Error(error.message);
+        setReviewStudent((data as ReviewStudent | null) ?? null);
+      }
+      if (EDITABLE_ISSUE_TYPES.has(issue.type)) {
+        const snapshot = await loadIssueSnapshot(issue);
+        setReviewSnapshot(snapshot);
+        if (snapshot && issue.type !== 'orphan_grade') setReviewInput(snapshot.value != null ? String(snapshot.value) : '');
+      }
     } catch (e) {
       setReviewError(`تعذّر تحميل السجل: ${(e as Error).message}`);
     } finally {
@@ -3713,6 +3727,17 @@ export default function ArchiveOverview({
                   {reviewIssue.student_name && <p className="text-[11px] text-slate-300">الطالب: {reviewIssue.student_name}</p>}
                   <p className="text-[11px] text-slate-300 leading-relaxed pt-1">{reviewIssue.detail}</p>
                 </div>
+
+                {reviewStudent && (
+                  <div className="glass-light rounded-xl p-3 border border-white/5 space-y-1">
+                    <p className="text-[10px] text-slate-400">السجل الحالي للطالب في قاعدة البيانات</p>
+                    <p className="text-xs text-white font-semibold">{reviewStudent.name}</p>
+                    <p className="text-[11px] text-slate-300 tabular-nums">
+                      المصاريف الكلية: {reviewStudent.total_fees} ج.م • المدفوع: {reviewStudent.paid_fees} ج.م
+                      {reviewStudent.is_exempt && ' • معفى'}
+                    </p>
+                  </div>
+                )}
 
                 {reviewOutcome && (
                   <div className={`flex items-center gap-2 p-3 rounded-xl border ${reviewOutcome === 'resolved' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300' : 'bg-amber-500/10 border-amber-500/20 text-amber-300'}`}>
