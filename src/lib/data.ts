@@ -2388,10 +2388,11 @@ export type PreArchiveIssue = {
   group_id?: string;
 };
 
-export async function preArchiveValidation(): Promise<{ ok: boolean; issues: PreArchiveIssue[] }> {
+export async function preArchiveValidation(monthKey?: string): Promise<{ ok: boolean; issues: PreArchiveIssue[] }> {
   const now = new Date();
-  const mStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-  const mEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString();
+  const [targetYear, targetMonth] = monthKey ? monthKey.split('-').map(Number) : [now.getFullYear(), now.getMonth() + 1];
+  const mStart = new Date(targetYear, targetMonth - 1, 1).toISOString();
+  const mEnd = new Date(targetYear, targetMonth, 1).toISOString();
   const issues: PreArchiveIssue[] = [];
 
   // 1. Fetch all groups with their grade/stage names
@@ -2606,7 +2607,7 @@ export async function preArchiveValidation(): Promise<{ ok: boolean; issues: Pre
   }
 
   // 11. Check payments without matching monthly_subscriptions
-  const currentMk = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const currentMk = `${targetYear}-${String(targetMonth).padStart(2, '0')}`;
   const { data: paymentsData } = await supabase
     .from('payments')
     .select('id, student_id, amount, month_key')

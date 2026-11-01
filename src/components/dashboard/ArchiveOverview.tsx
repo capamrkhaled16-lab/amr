@@ -325,6 +325,10 @@ function issueKey(issue: PreArchiveIssue): string {
   return [issue.type, issue.record_id ?? '', issue.student_id ?? '', issue.exam_id ?? '', issue.group_id ?? ''].join('|');
 }
 
+function orderIssues(list: PreArchiveIssue[]): PreArchiveIssue[] {
+  return [...list.filter((i) => i.severity === 'error'), ...list.filter((i) => i.severity === 'warning')];
+}
+
 async function loadIssueSnapshot(issue: PreArchiveIssue): Promise<IssueSnapshot | null> {
   if ((issue.type === 'invalid_score' || issue.type === 'orphan_grade') && issue.record_id) {
     const { data, error } = await supabase
@@ -518,7 +522,10 @@ export default function ArchiveOverview({
   const [reviewSaving, setReviewSaving] = useState(false);
   const [reviewError, setReviewError] = useState<string | null>(null);
   const [reviewOutcome, setReviewOutcome] = useState<'resolved' | 'unresolved' | null>(null);
-  const [validationScope, setValidationScope] = useState<'pre_archive' | 'historical'>('pre_archive');
+  const [validationScope, setValidationScope] = useState<'pre_archive' | 'historical' | 'current_repair'>('pre_archive');
+  const [validationMonth, setValidationMonth] = useState<string | null>(null);
+  const [currentRepairCount, setCurrentRepairCount] = useState<number | null>(null);
+  const [skippedKeys, setSkippedKeys] = useState<Set<string>>(new Set());
   const [issueProgress, setIssueProgress] = useState<{ total: number; resolved: number } | null>(null);
   const whatsappSentRef = useRef<Set<string>>(new Set());
 
@@ -538,6 +545,21 @@ export default function ArchiveOverview({
     setReviewConfirming(false);
     setReviewError(null);
     setReviewOutcome(null);
+  }
+
+  function confirmDiscardEdits(): boolean {
+    if (!reviewIssue || !reviewSnapshot || reviewIssue.type === 'orphan_grade') return true;
+    const saved = reviewSnapshot.value != null ? String(reviewSnapshot.value) : '';
+    return reviewInput === saved || window.confirm('لديك تعديل غير محفوظ. هل تريد تجاهله والانتقال؟');
+  }
+
+  function skipToNextIssue(issue: PreArchiveIssue) {
+    if (!confirmDiscardEdits()) return;
+    const ordered = orderIssues(validationIssues ?? []);
+    const next = ordered[ordered.findIndex((i) => issueKey(i) === issueKey(issue)) + 1];
+    if (!next) return;
+    setSkippedKeys((prev) => new Set(prev).add(issueKey(issue)));
+    void openIssueReview(next);
   }
 
   async function openIssueReview(issue: PreArchiveIssue) {
@@ -596,11 +618,21 @@ export default function ArchiveOverview({
       const verified = after !== null && (issue.type === 'orphan_grade' ? after.deleted === true : after.value === parsed.value);
       if (!after || !verified) throw new Error('لم يتم التحقق من الحفظ، لم تُحسب المشكلة كمحلولة');
       setReviewSnapshot(after);
-      const issues = validationScope === 'historical' ? await scanHistoricalIssues() : (await preArchiveValidation()).issues;
+      const scopeMonth = validationMonth ?? curMonth;
+      const issues = validationScope === 'historical' ? await scanHistoricalIssues() : (await preArchiveValidation(scopeMonth)).issues;
+      const position = orderIssues(validationIssues ?? []).findIndex((i) => issueKey(i) === issueKey(issue));
       setValidationIssues(issues);
+      if (validationScope !== 'historical' && scopeMonth === curMonth) setCurrentRepairCount(issues.length);
       const stillPresent = issues.some((i) => issueKey(i) === issueKey(issue));
       setReviewOutcome(stillPresent ? 'unresolved' : 'resolved');
-      if (!stillPresent) setIssueProgress((p) => (p ? { ...p, resolved: p.resolved + 1 } : p));
+      if (!stillPresent) {
+        setIssueProgress((p) => (p ? { ...p, resolved: p.resolved + 1 } : p));
+        const nextIssue = orderIssues(issues)[position] ?? null;
+        if (nextIssue) {
+          showToast('تم حفظ الإصلاح والتحقق منه', 'success');
+          void openIssueReview(nextIssue);
+        }
+      }
       invalidateByPrefix('archive_');
     } catch (e) {
       setReviewError(`فشل الحفظ: ${(e as Error).message}`);
@@ -943,14 +975,24 @@ export default function ArchiveOverview({
   const hasCurrent = archives.some((a) => a.archive_month === curMonth);
   const hasPrev = archives.some((a) => a.archive_month === prevMonth);
 
+  useEffect(() => {
+    let cancelled = false;
+    preArchiveValidation(curMonth)
+      .then((r) => { if (!cancelled) setCurrentRepairCount(r.issues.length); })
+      .catch(() => { if (!cancelled) setCurrentRepairCount(-1); });
+    return () => { cancelled = true; };
+  }, [curMonth]);
+
   async function createArchiveNow(monthKey: string) {
     setArchiveMessage(null);
     setValidationScope('pre_archive');
+    setValidationMonth(monthKey);
+    setSkippedKeys(new Set());
     setIssueProgress(null);
     setValidating(true);
     setPendingArchiveMonth(monthKey);
     try {
-      const validationResult = await preArchiveValidation();
+      const validationResult = await preArchiveValidation(monthKey);
       if (!validationResult.ok) {
         setValidationIssues(validationResult.issues);
         setValidating(false);
@@ -961,6 +1003,25 @@ export default function ArchiveOverview({
     } catch {
       setValidating(false);
       setArchiveMessage({ type: 'error', text: 'تعذّر التحقق من البيانات قبل الأرشفة. تأكد من الاتصال وحاول مجدداً.' });
+    }
+  }
+
+  async function openCurrentMonthRepair() {
+    setValidationScope('current_repair');
+    setValidationMonth(curMonth);
+    setPendingArchiveMonth(null);
+    setIssueFilter('all');
+    setSkippedKeys(new Set());
+    setValidating(true);
+    try {
+      const { issues } = await preArchiveValidation(curMonth);
+      setIssueProgress({ total: issues.length, resolved: 0 });
+      setCurrentRepairCount(issues.length);
+      setValidationIssues(issues);
+    } catch (e) {
+      setArchiveMessage({ type: 'error', text: `تعذّر تحميل مشكلات الشهر الحالي: ${(e as Error).message}` });
+    } finally {
+      setValidating(false);
     }
   }
 
@@ -1741,6 +1802,22 @@ export default function ArchiveOverview({
           <StatusPill label="مفتوح" count={archives.filter((a) => a.status === 'open').length} color="text-sky-400" bg="bg-sky-500/10" icon={Clock} />
           <StatusPill label="لم يُؤرشف" count={!hasPrev ? 1 : archives.filter((a) => a.status === 'pending').length} color="text-amber-400" bg="bg-amber-500/10" icon={AlertTriangle} />
         </div>
+      </div>
+
+      <div className="glass-card rounded-2xl p-4 sm:p-6 flex items-center justify-between gap-4 flex-wrap">
+        <div>
+          <h3 className="text-sm font-bold text-white">حل مشكلات أرشيف الشهر الحالي</h3>
+          <p className="text-xs text-slate-400 mt-1">
+            {currentRepairCount === null
+              ? 'جاري فحص المشكلات...'
+              : currentRepairCount < 0
+              ? 'تعذّر تحميل عدد المشكلات'
+              : `${currentRepairCount} مشكلة غير محلولة في شهر ${curMonth}`}
+          </p>
+        </div>
+        <Button size="sm" onClick={() => void openCurrentMonthRepair()} disabled={validating}>
+          ابدأ الإصلاح
+        </Button>
       </div>
 
       {/* Accounting checkpoint — teacher only, organizational only */}
@@ -3704,7 +3781,7 @@ export default function ArchiveOverview({
       <Modal
         open={!!validationIssues}
         onClose={closeValidationModal}
-        title={validationScope === 'historical' ? 'فحص السجلات السابقة' : 'تنبيه: مشاكل في البيانات قبل الأرشفة'}
+        title={validationScope === 'historical' ? 'فحص السجلات السابقة' : validationScope === 'current_repair' ? 'حل مشكلات أرشيف الشهر الحالي' : 'تنبيه: مشاكل في البيانات قبل الأرشفة'}
       >
         {validationIssues && (() => {
           const errors = validationIssues.filter((i) => i.severity === 'error');
@@ -3715,7 +3792,7 @@ export default function ArchiveOverview({
           const filterButtonClass = (active: boolean) => `text-[11px] font-bold px-3 py-1.5 rounded-lg transition ${active ? 'bg-white/10 text-white' : 'text-slate-400 hover:text-white hover:bg-white/5'}`;
 
           if (reviewIssue) {
-            const editable = EDITABLE_ISSUE_TYPES.has(reviewIssue.type);
+            const editable = validationScope !== 'historical' && EDITABLE_ISSUE_TYPES.has(reviewIssue.type);
             const isOrphan = reviewIssue.type === 'orphan_grade';
             const canNavigate = reviewIndex !== -1 && !reviewLoading && !reviewSaving;
             const nextValue = reviewSnapshot && reviewInput.trim() !== '' ? reviewInput : null;
@@ -3728,7 +3805,7 @@ export default function ArchiveOverview({
                   <div className="flex items-center gap-1.5">
                     <button
                       disabled={!canNavigate || reviewIndex <= 0}
-                      onClick={() => void openIssueReview(orderedIssues[reviewIndex - 1])}
+                      onClick={() => { if (confirmDiscardEdits()) void openIssueReview(orderedIssues[reviewIndex - 1]); }}
                       className="p-1.5 rounded-lg text-slate-300 hover:bg-white/5 disabled:opacity-30 transition"
                       aria-label="المشكلة السابقة"
                     >
@@ -3739,7 +3816,7 @@ export default function ArchiveOverview({
                     </span>
                     <button
                       disabled={!canNavigate || reviewIndex >= orderedIssues.length - 1}
-                      onClick={() => void openIssueReview(orderedIssues[reviewIndex + 1])}
+                      onClick={() => { if (confirmDiscardEdits()) void openIssueReview(orderedIssues[reviewIndex + 1]); }}
                       className="p-1.5 rounded-lg text-slate-300 hover:bg-white/5 disabled:opacity-30 transition"
                       aria-label="المشكلة التالية"
                     >
@@ -3782,7 +3859,7 @@ export default function ArchiveOverview({
                 {!editable && (
                   <div className="glass-light rounded-xl p-3 border border-amber-500/10">
                     <p className="text-[11px] text-slate-300 leading-relaxed">
-                      هذا النوع يتطلب مراجعة يدوية. لا يتم تعديل أي بيانات تلقائياً لهذه المشكلة.
+                      {validationScope === 'historical' ? 'فحص السجلات السابقة للعرض فقط. لا يمكن تعديل أي سجل من هذه الشاشة.' : 'هذا النوع يتطلب مراجعة يدوية. لا يتم تعديل أي بيانات تلقائياً لهذه المشكلة.'}
                     </p>
                   </div>
                 )}
@@ -3821,6 +3898,8 @@ export default function ArchiveOverview({
                           type="number"
                           inputMode="decimal"
                           value={reviewInput}
+                          autoFocus
+                          onKeyDown={(e) => { if (e.key === 'Enter' && !reviewSaving && !reviewLoading) previewIssueFix(); }}
                           onChange={(e) => { setReviewInput(e.target.value); setReviewError(null); }}
                           className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white tabular-nums focus:outline-none focus:border-white/30"
                         />
@@ -3852,6 +3931,15 @@ export default function ArchiveOverview({
 
                 {editable && reviewSnapshot && (
                   <div className="flex gap-2 justify-end pt-1">
+                    {orderedIssues[reviewIndex + 1] && !reviewConfirming && (
+                      <button
+                        onClick={() => skipToNextIssue(reviewIssue)}
+                        disabled={reviewSaving}
+                        className="text-[11px] font-bold text-slate-300 hover:text-white bg-white/5 hover:bg-white/10 px-3 py-1.5 rounded-lg transition disabled:opacity-40"
+                      >
+                        تخطي والانتقال للتالية
+                      </button>
+                    )}
                     {reviewConfirming ? (
                       <>
                         <button
@@ -3929,7 +4017,7 @@ export default function ArchiveOverview({
 
               {issueProgress && (
                 <p className="text-[11px] text-slate-300 font-semibold">
-                  تم إصلاح {issueProgress.resolved} من {issueProgress.total} — المتبقي {validationIssues.length}
+                  تم إصلاح {issueProgress.resolved} من {issueProgress.total} — تم تخطي {[...skippedKeys].filter((k) => validationIssues.some((i) => issueKey(i) === k)).length} — المتبقي {validationIssues.length}
                 </p>
               )}
 
