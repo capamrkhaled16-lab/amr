@@ -2522,6 +2522,7 @@ export async function preArchiveValidation(): Promise<{ ok: boolean; issues: Pre
           type: 'missing_attendance',
           severity: 'warning',
           group_name: groupNameMap.get(gid) ?? 'غير محدد',
+          group_id: gid,
           detail: `${missingCount} طالب بدون سجل حضور في إحدى حصص هذا الشهر`,
         });
       }

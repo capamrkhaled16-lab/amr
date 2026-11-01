@@ -35,6 +35,7 @@ import {
   Printer,
   Award,
   CalendarRange,
+  Loader2,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
@@ -426,7 +427,58 @@ export default function ArchiveOverview({
   const [archiveEditSaving, setArchiveEditSaving] = useState(false);
   const [honorBoardOpen, setHonorBoardOpen] = useState(false);
   const [historicalSubmitting, setHistoricalSubmitting] = useState(false);
+  const [selectedIssue, setSelectedIssue] = useState<PreArchiveIssue | null>(null);
+  const [issueCorrecting, setIssueCorrecting] = useState(false);
+  const [issueResolved, setIssueResolved] = useState<Set<string>>(new Set());
   const whatsappSentRef = useRef<Set<string>>(new Set());
+
+  async function correctIssue(issue: PreArchiveIssue) {
+    if (issueCorrecting) return;
+    setIssueCorrecting(true);
+    try {
+      if (issue.type === 'invalid_score' && issue.record_id && issue.max_score != null) {
+        const { error } = await supabase
+          .from('center_grades')
+          .update({ score: issue.max_score })
+          .eq('id', issue.record_id);
+        if (error) throw new Error(error.message);
+        setIssueResolved((prev) => new Set(prev).add(issue.record_id!));
+        showToast(`تم تصحيح الدرجة إلى الحد الأقصى (${issue.max_score})`, 'success');
+      } else if (issue.type === 'orphan_grade' && issue.record_id) {
+        const { error } = await supabase
+          .from('center_grades')
+          .update({ is_deleted: true })
+          .eq('id', issue.record_id);
+        if (error) throw new Error(error.message);
+        setIssueResolved((prev) => new Set(prev).add(issue.record_id!));
+        showToast('تم وضع علامة على الدرجة كمحذوفة', 'success');
+      } else if (issue.type === 'negative_fees' && issue.student_id) {
+        const { data: student } = await supabase
+          .from('students')
+          .select('paid_fees, total_fees')
+          .eq('id', issue.student_id)
+          .maybeSingle();
+        if (student) {
+          const row = student as { paid_fees: number; total_fees: number };
+          const correctedPaid = Math.min(row.paid_fees, row.total_fees);
+          const { error } = await supabase
+            .from('students')
+            .update({ paid_fees: correctedPaid })
+            .eq('id', issue.student_id);
+          if (error) throw new Error(error.message);
+          setIssueResolved((prev) => new Set(prev).add(issue.student_id!));
+          showToast(`تم تصحيح المبلغ المدفوع إلى ${correctedPaid} ج.م`, 'success');
+        }
+      } else {
+        showToast('لا يتوفر إصلاح تلقائي لهذا النوع من المشاكل', 'info');
+      }
+    } catch (e) {
+      showToast(`فشل الإصلاح: ${(e as Error).message}`, 'error');
+    } finally {
+      setIssueCorrecting(false);
+      setSelectedIssue(null);
+    }
+  }
 
   function startArchiveEdit(student: ArchivedStudent, row: ArchiveRow) {
     const studentPayments = getPaymentsForStudent(row, student.id);
@@ -3499,7 +3551,7 @@ export default function ArchiveOverview({
       {/* Pre-Archive Validation Issues Modal */}
       <Modal
         open={!!validationIssues}
-        onClose={() => { setValidationIssues(null); setPendingArchiveMonth(null); }}
+        onClose={() => { setValidationIssues(null); setPendingArchiveMonth(null); setSelectedIssue(null); }}
         title="تنبيه: مشاكل في البيانات قبل الأرشفة"
       >
         {validationIssues && (() => {
@@ -3513,6 +3565,68 @@ export default function ArchiveOverview({
             orphan_grade: 'درجة بدون طالب',
             negative_fees: 'مبالغ مالية غير متوازنة',
           };
+          const CORRECTABLE = new Set(['invalid_score', 'orphan_grade', 'negative_fees']);
+          const isResolved = (issue: PreArchiveIssue) =>
+            !!issue.record_id && issueResolved.has(issue.record_id) ||
+            !!issue.student_id && !issue.record_id && issueResolved.has(issue.student_id);
+          const renderIssue = (issue: PreArchiveIssue, idx: number, isError: boolean) => {
+            const resolved = isResolved(issue);
+            const canCorrect = CORRECTABLE.has(issue.type) && !resolved;
+            const isExpanded = selectedIssue === issue;
+            const borderColor = isError ? (resolved ? 'border-emerald-500/20' : 'border-red-500/10') : (resolved ? 'border-emerald-500/20' : 'border-amber-500/10');
+            return (
+              <div key={idx} className={`glass-light rounded-xl p-3 border ${borderColor} ${resolved ? 'opacity-60' : ''}`}>
+                <button
+                  onClick={() => setSelectedIssue(isExpanded ? null : issue)}
+                  className="w-full text-right"
+                >
+                  <div className="flex items-start gap-2">
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 ${resolved ? 'bg-emerald-500/10 text-emerald-400' : isError ? 'bg-red-500/10 text-red-400' : 'bg-amber-500/10 text-amber-400'}`}>
+                      {resolved ? 'تم الإصلاح' : ISSUE_LABELS[issue.type] ?? issue.type}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs text-white font-semibold">{issue.group_name}</p>
+                      {issue.student_name && <p className="text-[11px] text-slate-400 mt-0.5">الطالب: {issue.student_name}</p>}
+                      <p className="text-[11px] text-slate-300 mt-1">{issue.detail}</p>
+                    </div>
+                    {canCorrect && <ChevronDown size={14} className={`text-slate-400 shrink-0 mt-1 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />}
+                  </div>
+                </button>
+                {isExpanded && canCorrect && (
+                  <div className="mt-3 pt-3 border-t border-white/5 space-y-2">
+                    <p className="text-[10px] text-slate-400 leading-relaxed">
+                      {issue.type === 'invalid_score' && `سيتم تعديل الدرجة إلى الحد الأقصى للامتحان (${issue.max_score}). هذا آمن ولا يؤثر على باقي الدرجات.`}
+                      {issue.type === 'orphan_grade' && 'سيتم وضع علامة على الدرجة كمحذوفة (soft delete). يمكن التراجع لاحقاً.'}
+                      {issue.type === 'negative_fees' && 'سيتم تصحيح المبلغ المدفوع ليصبح مساوياً للمصاريف الكلية فقط، دون تجاوز.'}
+                    </p>
+                    <div className="flex gap-2 justify-end">
+                      <button
+                        onClick={() => setSelectedIssue(null)}
+                        className="text-[11px] font-bold text-slate-400 hover:text-white px-3 py-1.5 rounded-lg transition"
+                      >
+                        إلغاء
+                      </button>
+                      <button
+                        onClick={() => void correctIssue(issue)}
+                        disabled={issueCorrecting}
+                        className="text-[11px] font-bold text-emerald-400 hover:text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 px-3 py-1.5 rounded-lg transition disabled:opacity-50 flex items-center gap-1.5"
+                      >
+                        {issueCorrecting ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle2 size={12} />}
+                        تأكيد الإصلاح
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {isExpanded && !canCorrect && !resolved && (
+                  <div className="mt-3 pt-3 border-t border-white/5">
+                    <p className="text-[10px] text-slate-400 leading-relaxed">
+                      هذا النوع يتطلب مراجعة يدوية. لا يتوفر إصلاح تلقائي آمن له.
+                    </p>
+                  </div>
+                )}
+              </div>
+            );
+          };
           return (
             <div className="space-y-4">
               <div className="flex items-center gap-3 p-3 rounded-xl bg-red-500/10 border border-red-500/20">
@@ -3520,7 +3634,7 @@ export default function ArchiveOverview({
                 <p className="text-xs text-red-300">
                   تم اكتشاف <span className="font-bold">{errors.length}</span> خطأ يمنع الأرشفة
                   {warnings.length > 0 && <> و <span className="font-bold">{warnings.length}</span> تنبيه يحتاج مراجعة</>}.
-                  برجاء إصلاح الأخطاء أولاً لضمان نقل بيانات سليمة 100%.
+                  اضغط على أي مشكلة لعرض تفاصيلها وإصلاحها.
                 </p>
               </div>
 
@@ -3529,21 +3643,8 @@ export default function ArchiveOverview({
                   <p className="text-xs font-bold text-red-400 flex items-center gap-1.5">
                     <X size={14} /> أخطاء يجب إصلاحها ({errors.length})
                   </p>
-                  <div className="space-y-2 max-h-48 overflow-y-auto">
-                    {errors.map((issue, idx) => (
-                      <div key={idx} className="glass-light rounded-xl p-3 border border-red-500/10">
-                        <div className="flex items-start gap-2">
-                          <span className="text-[10px] font-bold text-red-400 bg-red-500/10 px-2 py-0.5 rounded-full flex-shrink-0">
-                            {ISSUE_LABELS[issue.type] ?? issue.type}
-                          </span>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-xs text-white font-semibold">{issue.group_name}</p>
-                            {issue.student_name && <p className="text-[11px] text-slate-400 mt-0.5">الطالب: {issue.student_name}</p>}
-                            <p className="text-[11px] text-slate-300 mt-1">{issue.detail}</p>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
+                  <div className="space-y-2 max-h-60 overflow-y-auto">
+                    {errors.map((issue, idx) => renderIssue(issue, idx, true))}
                   </div>
                 </div>
               )}
@@ -3553,27 +3654,14 @@ export default function ArchiveOverview({
                   <p className="text-xs font-bold text-amber-400 flex items-center gap-1.5">
                     <AlertTriangle size={14} /> تنبيهات للمراجعة ({warnings.length})
                   </p>
-                  <div className="space-y-2 max-h-36 overflow-y-auto">
-                    {warnings.map((issue, idx) => (
-                      <div key={idx} className="glass-light rounded-xl p-3 border border-amber-500/10">
-                        <div className="flex items-start gap-2">
-                          <span className="text-[10px] font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full flex-shrink-0">
-                            {ISSUE_LABELS[issue.type] ?? issue.type}
-                          </span>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-xs text-white font-semibold">{issue.group_name}</p>
-                            {issue.student_name && <p className="text-[11px] text-slate-400 mt-0.5">الطالب: {issue.student_name}</p>}
-                            <p className="text-[11px] text-slate-300 mt-1">{issue.detail}</p>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
+                  <div className="space-y-2 max-h-48 overflow-y-auto">
+                    {warnings.map((issue, idx) => renderIssue(issue, idx, false))}
                   </div>
                 </div>
               )}
 
               <div className="flex gap-3 justify-end pt-2">
-                <Button variant="secondary" onClick={() => { setValidationIssues(null); setPendingArchiveMonth(null); }}>
+                <Button variant="secondary" onClick={() => { setValidationIssues(null); setPendingArchiveMonth(null); setSelectedIssue(null); }}>
                   إغلاق وإصلاح الأخطاء
                 </Button>
                 {errors.length === 0 && warnings.length > 0 && (
