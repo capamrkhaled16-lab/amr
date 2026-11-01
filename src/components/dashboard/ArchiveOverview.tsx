@@ -36,6 +36,8 @@ import {
   Award,
   CalendarRange,
   Loader2,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
@@ -303,6 +305,82 @@ const STATUS_META: Record<ArchiveStatus, { label: string; color: string; bg: str
 
 const inputCls = 'w-full glass-light rounded-xl py-2.5 px-4 text-white placeholder-slate-500 border border-white/10 focus:border-emerald-500/50 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition text-sm';
 
+const ISSUE_LABELS: Record<string, string> = {
+  invalid_score: 'درجة غير صحيحة',
+  missing_attendance: 'حضور ناقص',
+  duplicate_rank: 'تكرار في الترتيب',
+  broken_relation: 'علاقة مكسورة',
+  orphan_grade: 'درجة بدون طالب',
+  negative_fees: 'مبالغ مالية غير متوازنة',
+};
+
+const EDITABLE_ISSUE_TYPES = new Set(['invalid_score', 'orphan_grade', 'negative_fees']);
+
+type IssueSnapshot = { value: number | null; total: number | null; deleted: boolean | null };
+
+function issueKey(issue: PreArchiveIssue): string {
+  return [issue.type, issue.record_id ?? '', issue.student_id ?? '', issue.exam_id ?? '', issue.group_id ?? ''].join('|');
+}
+
+async function loadIssueSnapshot(issue: PreArchiveIssue): Promise<IssueSnapshot | null> {
+  if ((issue.type === 'invalid_score' || issue.type === 'orphan_grade') && issue.record_id) {
+    const { data, error } = await supabase
+      .from('center_grades')
+      .select('score, is_deleted')
+      .eq('id', issue.record_id)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!data) return null;
+    const row = data as { score: number | null; is_deleted: boolean | null };
+    return { value: row.score, total: issue.max_score ?? null, deleted: row.is_deleted ?? false };
+  }
+  if (issue.type === 'negative_fees' && issue.student_id) {
+    const { data, error } = await supabase
+      .from('students')
+      .select('paid_fees, total_fees')
+      .eq('id', issue.student_id)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!data) return null;
+    const row = data as { paid_fees: number | null; total_fees: number | null };
+    return { value: row.paid_fees, total: row.total_fees, deleted: null };
+  }
+  return null;
+}
+
+function parseIssueInput(issue: PreArchiveIssue, snapshot: IssueSnapshot, raw: string): { value: number } | { error: string } {
+  const trimmed = raw.trim();
+  const value = Number(trimmed);
+  if (trimmed === '' || !Number.isFinite(value)) return { error: 'أدخل رقماً صحيحاً' };
+  if (value < 0) return { error: 'لا يمكن أن تكون القيمة سالبة' };
+  if (issue.type === 'invalid_score' && issue.max_score != null && value > issue.max_score) {
+    return { error: `لا يمكن أن تتجاوز الدرجة الحد الأقصى (${issue.max_score})` };
+  }
+  if (issue.type === 'negative_fees' && snapshot.total != null && value > snapshot.total) {
+    return { error: `لا يمكن أن يتجاوز المدفوع المصاريف الكلية (${snapshot.total})` };
+  }
+  return { value };
+}
+
+async function writeIssueFix(issue: PreArchiveIssue, value: number | null): Promise<void> {
+  if (issue.type === 'invalid_score' && issue.record_id && value !== null) {
+    const { error } = await supabase.from('center_grades').update({ score: value }).eq('id', issue.record_id);
+    if (error) throw new Error(error.message);
+    return;
+  }
+  if (issue.type === 'orphan_grade' && issue.record_id) {
+    const { error } = await supabase.from('center_grades').update({ is_deleted: true }).eq('id', issue.record_id);
+    if (error) throw new Error(error.message);
+    return;
+  }
+  if (issue.type === 'negative_fees' && issue.student_id && value !== null) {
+    const { error } = await supabase.from('students').update({ paid_fees: value }).eq('id', issue.student_id);
+    if (error) throw new Error(error.message);
+    return;
+  }
+  throw new Error('هذا النوع يتطلب مراجعة يدوية');
+}
+
 export default function ArchiveOverview({
   allGroups,
 }: {
@@ -427,56 +505,89 @@ export default function ArchiveOverview({
   const [archiveEditSaving, setArchiveEditSaving] = useState(false);
   const [honorBoardOpen, setHonorBoardOpen] = useState(false);
   const [historicalSubmitting, setHistoricalSubmitting] = useState(false);
-  const [selectedIssue, setSelectedIssue] = useState<PreArchiveIssue | null>(null);
-  const [issueCorrecting, setIssueCorrecting] = useState(false);
-  const [issueResolved, setIssueResolved] = useState<Set<string>>(new Set());
+  const [issueFilter, setIssueFilter] = useState<'all' | 'error' | 'warning'>('all');
+  const [reviewIssue, setReviewIssue] = useState<PreArchiveIssue | null>(null);
+  const [reviewSnapshot, setReviewSnapshot] = useState<IssueSnapshot | null>(null);
+  const [reviewLoading, setReviewLoading] = useState(false);
+  const [reviewInput, setReviewInput] = useState('');
+  const [reviewConfirming, setReviewConfirming] = useState(false);
+  const [reviewSaving, setReviewSaving] = useState(false);
+  const [reviewError, setReviewError] = useState<string | null>(null);
+  const [reviewOutcome, setReviewOutcome] = useState<'resolved' | 'unresolved' | null>(null);
   const whatsappSentRef = useRef<Set<string>>(new Set());
 
-  async function correctIssue(issue: PreArchiveIssue) {
-    if (issueCorrecting) return;
-    setIssueCorrecting(true);
+  function closeValidationModal() {
+    setValidationIssues(null);
+    setPendingArchiveMonth(null);
+    closeIssueReview();
+    setIssueFilter('all');
+  }
+
+  function closeIssueReview() {
+    setReviewIssue(null);
+    setReviewSnapshot(null);
+    setReviewInput('');
+    setReviewConfirming(false);
+    setReviewError(null);
+    setReviewOutcome(null);
+  }
+
+  async function openIssueReview(issue: PreArchiveIssue) {
+    closeIssueReview();
+    setReviewIssue(issue);
+    if (!EDITABLE_ISSUE_TYPES.has(issue.type)) return;
+    setReviewLoading(true);
     try {
-      if (issue.type === 'invalid_score' && issue.record_id && issue.max_score != null) {
-        const { error } = await supabase
-          .from('center_grades')
-          .update({ score: issue.max_score })
-          .eq('id', issue.record_id);
-        if (error) throw new Error(error.message);
-        setIssueResolved((prev) => new Set(prev).add(issue.record_id!));
-        showToast(`تم تصحيح الدرجة إلى الحد الأقصى (${issue.max_score})`, 'success');
-      } else if (issue.type === 'orphan_grade' && issue.record_id) {
-        const { error } = await supabase
-          .from('center_grades')
-          .update({ is_deleted: true })
-          .eq('id', issue.record_id);
-        if (error) throw new Error(error.message);
-        setIssueResolved((prev) => new Set(prev).add(issue.record_id!));
-        showToast('تم وضع علامة على الدرجة كمحذوفة', 'success');
-      } else if (issue.type === 'negative_fees' && issue.student_id) {
-        const { data: student } = await supabase
-          .from('students')
-          .select('paid_fees, total_fees')
-          .eq('id', issue.student_id)
-          .maybeSingle();
-        if (student) {
-          const row = student as { paid_fees: number; total_fees: number };
-          const correctedPaid = Math.min(row.paid_fees, row.total_fees);
-          const { error } = await supabase
-            .from('students')
-            .update({ paid_fees: correctedPaid })
-            .eq('id', issue.student_id);
-          if (error) throw new Error(error.message);
-          setIssueResolved((prev) => new Set(prev).add(issue.student_id!));
-          showToast(`تم تصحيح المبلغ المدفوع إلى ${correctedPaid} ج.م`, 'success');
-        }
-      } else {
-        showToast('لا يتوفر إصلاح تلقائي لهذا النوع من المشاكل', 'info');
-      }
+      const snapshot = await loadIssueSnapshot(issue);
+      setReviewSnapshot(snapshot);
+      if (snapshot && issue.type !== 'orphan_grade') setReviewInput(snapshot.value != null ? String(snapshot.value) : '');
     } catch (e) {
-      showToast(`فشل الإصلاح: ${(e as Error).message}`, 'error');
+      setReviewError(`تعذّر تحميل السجل: ${(e as Error).message}`);
     } finally {
-      setIssueCorrecting(false);
-      setSelectedIssue(null);
+      setReviewLoading(false);
+    }
+  }
+
+  function previewIssueFix() {
+    if (!reviewIssue || !reviewSnapshot) return;
+    if (reviewIssue.type !== 'orphan_grade') {
+      const parsed = parseIssueInput(reviewIssue, reviewSnapshot, reviewInput);
+      if ('error' in parsed) {
+        setReviewError(parsed.error);
+        return;
+      }
+    }
+    setReviewError(null);
+    setReviewConfirming(true);
+  }
+
+  async function confirmIssueFix() {
+    if (!reviewIssue || !reviewSnapshot || reviewSaving) return;
+    const issue = reviewIssue;
+    const parsed = issue.type === 'orphan_grade' ? { value: null } : parseIssueInput(issue, reviewSnapshot, reviewInput);
+    if ('error' in parsed) {
+      setReviewError(parsed.error);
+      setReviewConfirming(false);
+      return;
+    }
+    setReviewSaving(true);
+    setReviewError(null);
+    try {
+      await writeIssueFix(issue, parsed.value);
+      const after = await loadIssueSnapshot(issue);
+      const verified = after !== null && (issue.type === 'orphan_grade' ? after.deleted === true : after.value === parsed.value);
+      if (!after || !verified) throw new Error('لم يتم التحقق من الحفظ، لم تُحسب المشكلة كمحلولة');
+      setReviewSnapshot(after);
+      const result = await preArchiveValidation();
+      setValidationIssues(result.issues);
+      const stillPresent = result.issues.some((i) => issueKey(i) === issueKey(issue));
+      setReviewOutcome(stillPresent ? 'unresolved' : 'resolved');
+      invalidateByPrefix('archive_');
+    } catch (e) {
+      setReviewError(`فشل الحفظ: ${(e as Error).message}`);
+    } finally {
+      setReviewSaving(false);
+      setReviewConfirming(false);
     }
   }
 
@@ -3551,79 +3662,203 @@ export default function ArchiveOverview({
       {/* Pre-Archive Validation Issues Modal */}
       <Modal
         open={!!validationIssues}
-        onClose={() => { setValidationIssues(null); setPendingArchiveMonth(null); setSelectedIssue(null); }}
+        onClose={closeValidationModal}
         title="تنبيه: مشاكل في البيانات قبل الأرشفة"
       >
         {validationIssues && (() => {
           const errors = validationIssues.filter((i) => i.severity === 'error');
           const warnings = validationIssues.filter((i) => i.severity === 'warning');
-          const ISSUE_LABELS: Record<string, string> = {
-            invalid_score: 'درجة غير صحيحة',
-            missing_attendance: 'حضور ناقص',
-            duplicate_rank: 'تكرار في الترتيب',
-            broken_relation: 'علاقة مكسورة',
-            orphan_grade: 'درجة بدون طالب',
-            negative_fees: 'مبالغ مالية غير متوازنة',
-          };
-          const CORRECTABLE = new Set(['invalid_score', 'orphan_grade', 'negative_fees']);
-          const isResolved = (issue: PreArchiveIssue) =>
-            !!issue.record_id && issueResolved.has(issue.record_id) ||
-            !!issue.student_id && !issue.record_id && issueResolved.has(issue.student_id);
-          const renderIssue = (issue: PreArchiveIssue, idx: number, isError: boolean) => {
-            const resolved = isResolved(issue);
-            const canCorrect = CORRECTABLE.has(issue.type) && !resolved;
-            const isExpanded = selectedIssue === issue;
-            const borderColor = isError ? (resolved ? 'border-emerald-500/20' : 'border-red-500/10') : (resolved ? 'border-emerald-500/20' : 'border-amber-500/10');
+          const orderedIssues = [...errors, ...warnings];
+          const visibleIssues = issueFilter === 'error' ? errors : issueFilter === 'warning' ? warnings : orderedIssues;
+          const reviewIndex = reviewIssue ? orderedIssues.findIndex((i) => issueKey(i) === issueKey(reviewIssue)) : -1;
+          const filterButtonClass = (active: boolean) => `text-[11px] font-bold px-3 py-1.5 rounded-lg transition ${active ? 'bg-white/10 text-white' : 'text-slate-400 hover:text-white hover:bg-white/5'}`;
+
+          if (reviewIssue) {
+            const editable = EDITABLE_ISSUE_TYPES.has(reviewIssue.type);
+            const isOrphan = reviewIssue.type === 'orphan_grade';
+            const canNavigate = reviewIndex !== -1 && !reviewLoading && !reviewSaving;
+            const nextValue = reviewSnapshot && reviewInput.trim() !== '' ? reviewInput : null;
             return (
-              <div key={idx} className={`glass-light rounded-xl p-3 border ${borderColor} ${resolved ? 'opacity-60' : ''}`}>
-                <button
-                  onClick={() => setSelectedIssue(isExpanded ? null : issue)}
-                  className="w-full text-right"
-                >
-                  <div className="flex items-start gap-2">
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 ${resolved ? 'bg-emerald-500/10 text-emerald-400' : isError ? 'bg-red-500/10 text-red-400' : 'bg-amber-500/10 text-amber-400'}`}>
-                      {resolved ? 'تم الإصلاح' : ISSUE_LABELS[issue.type] ?? issue.type}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between gap-2">
+                  <button onClick={closeIssueReview} className="text-[11px] font-bold text-slate-400 hover:text-white px-2 py-1.5 rounded-lg transition">
+                    العودة إلى القائمة
+                  </button>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      disabled={!canNavigate || reviewIndex <= 0}
+                      onClick={() => void openIssueReview(orderedIssues[reviewIndex - 1])}
+                      className="p-1.5 rounded-lg text-slate-300 hover:bg-white/5 disabled:opacity-30 transition"
+                      aria-label="المشكلة السابقة"
+                    >
+                      <ChevronRight size={14} />
+                    </button>
+                    <span className="text-[11px] text-slate-400 tabular-nums">
+                      {reviewIndex !== -1 ? `${reviewIndex + 1} من ${orderedIssues.length}` : 'تم حلها'}
                     </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-xs text-white font-semibold">{issue.group_name}</p>
-                      {issue.student_name && <p className="text-[11px] text-slate-400 mt-0.5">الطالب: {issue.student_name}</p>}
-                      <p className="text-[11px] text-slate-300 mt-1">{issue.detail}</p>
-                    </div>
-                    {canCorrect && <ChevronDown size={14} className={`text-slate-400 shrink-0 mt-1 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />}
+                    <button
+                      disabled={!canNavigate || reviewIndex >= orderedIssues.length - 1}
+                      onClick={() => void openIssueReview(orderedIssues[reviewIndex + 1])}
+                      className="p-1.5 rounded-lg text-slate-300 hover:bg-white/5 disabled:opacity-30 transition"
+                      aria-label="المشكلة التالية"
+                    >
+                      <ChevronLeft size={14} />
+                    </button>
                   </div>
-                </button>
-                {isExpanded && canCorrect && (
-                  <div className="mt-3 pt-3 border-t border-white/5 space-y-2">
-                    <p className="text-[10px] text-slate-400 leading-relaxed">
-                      {issue.type === 'invalid_score' && `سيتم تعديل الدرجة إلى الحد الأقصى للامتحان (${issue.max_score}). هذا آمن ولا يؤثر على باقي الدرجات.`}
-                      {issue.type === 'orphan_grade' && 'سيتم وضع علامة على الدرجة كمحذوفة (soft delete). يمكن التراجع لاحقاً.'}
-                      {issue.type === 'negative_fees' && 'سيتم تصحيح المبلغ المدفوع ليصبح مساوياً للمصاريف الكلية فقط، دون تجاوز.'}
-                    </p>
-                    <div className="flex gap-2 justify-end">
-                      <button
-                        onClick={() => setSelectedIssue(null)}
-                        className="text-[11px] font-bold text-slate-400 hover:text-white px-3 py-1.5 rounded-lg transition"
-                      >
-                        إلغاء
-                      </button>
-                      <button
-                        onClick={() => void correctIssue(issue)}
-                        disabled={issueCorrecting}
-                        className="text-[11px] font-bold text-emerald-400 hover:text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 px-3 py-1.5 rounded-lg transition disabled:opacity-50 flex items-center gap-1.5"
-                      >
-                        {issueCorrecting ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle2 size={12} />}
-                        تأكيد الإصلاح
-                      </button>
-                    </div>
-                  </div>
-                )}
-                {isExpanded && !canCorrect && !resolved && (
-                  <div className="mt-3 pt-3 border-t border-white/5">
-                    <p className="text-[10px] text-slate-400 leading-relaxed">
-                      هذا النوع يتطلب مراجعة يدوية. لا يتوفر إصلاح تلقائي آمن له.
+                </div>
+
+                <div className="glass-light rounded-xl p-3 border border-white/5 space-y-1">
+                  <p className="text-[10px] text-slate-400">{ISSUE_LABELS[reviewIssue.type] ?? reviewIssue.type}</p>
+                  <p className="text-xs text-white font-semibold">{reviewIssue.group_name}</p>
+                  {reviewIssue.student_name && <p className="text-[11px] text-slate-300">الطالب: {reviewIssue.student_name}</p>}
+                  <p className="text-[11px] text-slate-300 leading-relaxed pt-1">{reviewIssue.detail}</p>
+                </div>
+
+                {reviewOutcome && (
+                  <div className={`flex items-center gap-2 p-3 rounded-xl border ${reviewOutcome === 'resolved' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300' : 'bg-amber-500/10 border-amber-500/20 text-amber-300'}`}>
+                    {reviewOutcome === 'resolved' ? <CheckCircle2 size={16} /> : <AlertTriangle size={16} />}
+                    <p className="text-xs font-semibold">
+                      {reviewOutcome === 'resolved'
+                        ? 'تم حفظ التعديل والتحقق منه، والمشكلة لم تعد ظاهرة في الفحص.'
+                        : 'تم حفظ التعديل والتحقق منه، لكن المشكلة ما زالت ظاهرة في الفحص.'}
                     </p>
                   </div>
                 )}
+
+                {!editable && (
+                  <div className="glass-light rounded-xl p-3 border border-amber-500/10">
+                    <p className="text-[11px] text-slate-300 leading-relaxed">
+                      هذا النوع يتطلب مراجعة يدوية. لا يتم تعديل أي بيانات تلقائياً لهذه المشكلة.
+                    </p>
+                  </div>
+                )}
+
+                {editable && reviewLoading && (
+                  <div className="flex items-center gap-2 text-xs text-slate-400 py-4 justify-center">
+                    <Loader2 size={14} className="animate-spin" /> جاري تحميل السجل الحالي...
+                  </div>
+                )}
+
+                {editable && !reviewLoading && !reviewSnapshot && (
+                  <div className="glass-light rounded-xl p-3 border border-red-500/10">
+                    <p className="text-[11px] text-red-300">لم يتم العثور على السجل الحالي. قد يكون قد حُذف أو تغيّر.</p>
+                  </div>
+                )}
+
+                {editable && !reviewLoading && reviewSnapshot && (
+                  <div className="space-y-3">
+                    <div className="glass-light rounded-xl p-3 border border-white/5 space-y-1">
+                      <p className="text-[10px] text-slate-400">القيمة الحالية المحفوظة</p>
+                      <p className="text-sm text-white font-bold tabular-nums">
+                        {isOrphan ? (reviewSnapshot.deleted ? 'محذوفة بالفعل' : 'نشطة') : (reviewSnapshot.value ?? 'غير محددة')}
+                      </p>
+                      {reviewIssue.type === 'invalid_score' && reviewSnapshot.total != null && (
+                        <p className="text-[10px] text-slate-400">الحد الأقصى للامتحان: {reviewSnapshot.total}</p>
+                      )}
+                      {reviewIssue.type === 'negative_fees' && reviewSnapshot.total != null && (
+                        <p className="text-[10px] text-slate-400">المصاريف الكلية: {reviewSnapshot.total}</p>
+                      )}
+                    </div>
+
+                    {!isOrphan && !reviewConfirming && (
+                      <label className="block space-y-1.5">
+                        <span className="text-[11px] text-slate-300">القيمة الجديدة</span>
+                        <input
+                          type="number"
+                          inputMode="decimal"
+                          value={reviewInput}
+                          onChange={(e) => { setReviewInput(e.target.value); setReviewError(null); }}
+                          className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white tabular-nums focus:outline-none focus:border-white/30"
+                        />
+                      </label>
+                    )}
+
+                    {isOrphan && !reviewConfirming && (
+                      <p className="text-[11px] text-slate-300 leading-relaxed">
+                        سيتم وضع علامة على هذه الدرجة كمحذوفة دون حذف السجل نهائياً.
+                      </p>
+                    )}
+
+                    {reviewConfirming && (
+                      <div className="glass-light rounded-xl p-3 border border-amber-500/20">
+                        <p className="text-xs text-amber-300 font-semibold">تأكيد الحفظ</p>
+                        <p className="text-[11px] text-slate-300 mt-1 leading-relaxed">
+                          {isOrphan
+                            ? 'سيتم وضع علامة على الدرجة كمحذوفة. هل تريد المتابعة؟'
+                            : `سيتم تغيير القيمة من ${reviewSnapshot.value ?? 'غير محددة'} إلى ${nextValue ?? ''}. هل تريد المتابعة؟`}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {reviewError && (
+                  <p className="text-[11px] text-red-300">{reviewError}</p>
+                )}
+
+                {editable && reviewSnapshot && (
+                  <div className="flex gap-2 justify-end pt-1">
+                    {reviewConfirming ? (
+                      <>
+                        <button
+                          onClick={() => setReviewConfirming(false)}
+                          disabled={reviewSaving}
+                          className="text-[11px] font-bold text-slate-400 hover:text-white px-3 py-1.5 rounded-lg transition disabled:opacity-50"
+                        >
+                          رجوع
+                        </button>
+                        <button
+                          onClick={() => void confirmIssueFix()}
+                          disabled={reviewSaving}
+                          className="text-[11px] font-bold text-emerald-400 hover:text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 px-3 py-1.5 rounded-lg transition disabled:opacity-50 flex items-center gap-1.5"
+                        >
+                          {reviewSaving ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle2 size={12} />}
+                          تأكيد وحفظ
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        onClick={previewIssueFix}
+                        disabled={reviewSaving || reviewOutcome === 'resolved'}
+                        className="text-[11px] font-bold text-sky-300 hover:text-sky-200 bg-sky-500/10 hover:bg-sky-500/20 px-3 py-1.5 rounded-lg transition disabled:opacity-40"
+                      >
+                        {isOrphan ? 'وضع علامة محذوفة' : 'مراجعة التعديل'}
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          }
+
+          const filterTabs: { key: 'all' | 'error' | 'warning'; label: string; count: number }[] = [
+            { key: 'all', label: 'الكل', count: orderedIssues.length },
+            { key: 'error', label: 'أخطاء', count: errors.length },
+            { key: 'warning', label: 'تنبيهات', count: warnings.length },
+          ];
+          const renderIssueRow = (issue: PreArchiveIssue, idx: number) => {
+            const isError = issue.severity === 'error';
+            const editable = EDITABLE_ISSUE_TYPES.has(issue.type);
+            return (
+              <div key={`${issueKey(issue)}-${idx}`} className={`glass-light rounded-xl p-3 border ${isError ? 'border-red-500/10' : 'border-amber-500/10'}`}>
+                <div className="flex items-start gap-2">
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 ${isError ? 'bg-red-500/10 text-red-400' : 'bg-amber-500/10 text-amber-400'}`}>
+                    {ISSUE_LABELS[issue.type] ?? issue.type}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs text-white font-semibold">{issue.group_name}</p>
+                    {issue.student_name && <p className="text-[11px] text-slate-400 mt-0.5">الطالب: {issue.student_name}</p>}
+                    <p className="text-[11px] text-slate-300 mt-1 leading-relaxed">{issue.detail}</p>
+                  </div>
+                </div>
+                <div className="mt-2 flex justify-end">
+                  <button
+                    onClick={() => void openIssueReview(issue)}
+                    className="text-[11px] font-bold text-sky-300 hover:text-sky-200 bg-sky-500/10 hover:bg-sky-500/20 px-3 py-1.5 rounded-lg transition"
+                  >
+                    {editable ? 'مراجعة وإصلاح' : 'عرض التفاصيل'}
+                  </button>
+                </div>
               </div>
             );
           };
@@ -3638,35 +3873,29 @@ export default function ArchiveOverview({
                 </p>
               </div>
 
-              {errors.length > 0 && (
-                <div className="space-y-2">
-                  <p className="text-xs font-bold text-red-400 flex items-center gap-1.5">
-                    <X size={14} /> أخطاء يجب إصلاحها ({errors.length})
-                  </p>
-                  <div className="space-y-2 max-h-60 overflow-y-auto">
-                    {errors.map((issue, idx) => renderIssue(issue, idx, true))}
-                  </div>
-                </div>
+              <div className="flex items-center gap-1.5">
+                {filterTabs.map((tab) => (
+                  <button key={tab.key} onClick={() => setIssueFilter(tab.key)} className={filterButtonClass(issueFilter === tab.key)}>
+                    {tab.label} ({tab.count})
+                  </button>
+                ))}
+              </div>
+
+              {visibleIssues.length === 0 && (
+                <p className="text-xs text-emerald-300 text-center py-3">لا توجد مشاكل في هذا التصنيف.</p>
               )}
 
-              {warnings.length > 0 && (
-                <div className="space-y-2">
-                  <p className="text-xs font-bold text-amber-400 flex items-center gap-1.5">
-                    <AlertTriangle size={14} /> تنبيهات للمراجعة ({warnings.length})
-                  </p>
-                  <div className="space-y-2 max-h-48 overflow-y-auto">
-                    {warnings.map((issue, idx) => renderIssue(issue, idx, false))}
-                  </div>
-                </div>
-              )}
+              <div className="space-y-2 max-h-80 overflow-y-auto">
+                {visibleIssues.map((issue, idx) => renderIssueRow(issue, idx))}
+              </div>
 
               <div className="flex gap-3 justify-end pt-2">
-                <Button variant="secondary" onClick={() => { setValidationIssues(null); setPendingArchiveMonth(null); setSelectedIssue(null); }}>
+                <Button variant="secondary" onClick={closeValidationModal}>
                   إغلاق وإصلاح الأخطاء
                 </Button>
-                {errors.length === 0 && warnings.length > 0 && (
+                {errors.length === 0 && (
                   <Button onClick={() => void proceedArchiveDespiteWarnings()}>
-                    متابعة الأرشفة رغم التنبيهات
+                    متابعة الأرشفة
                   </Button>
                 )}
               </div>
