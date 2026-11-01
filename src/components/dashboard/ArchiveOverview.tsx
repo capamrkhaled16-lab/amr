@@ -3908,6 +3908,24 @@ export default function ArchiveOverview({
                   </div>
                 )}
 
+                {editable && !reviewSaving && !reviewSnapshot && reviewError && (
+                  <button
+                    onClick={() => void openIssueReview(reviewIssue)}
+                    className="text-[11px] font-bold text-red-200 bg-red-500/10 hover:bg-red-500/20 px-3 py-1.5 rounded-lg transition"
+                  >
+                    إعادة تحميل هذه المشكلة
+                  </button>
+                )}
+
+                {editable && !reviewSaving && reviewSnapshot && reviewError && (
+                  <button
+                    onClick={() => void confirmIssueFix()}
+                    className="text-[11px] font-bold text-red-200 bg-red-500/10 hover:bg-red-500/20 px-3 py-1.5 rounded-lg transition"
+                  >
+                    إعادة المحاولة
+                  </button>
+                )}
+
                 {editable && !reviewLoading && !reviewSnapshot && (
                   <div className="glass-light rounded-xl p-3 border border-red-500/10">
                     <p className="text-[11px] text-red-300">لم يتم العثور على السجل الحالي. قد يكون قد حُذف أو تغيّر.</p>
