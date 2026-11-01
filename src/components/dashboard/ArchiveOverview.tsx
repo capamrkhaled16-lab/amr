@@ -38,6 +38,7 @@ import {
   Loader2,
   ChevronLeft,
   ChevronRight,
+  SkipForward,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
@@ -49,7 +50,7 @@ import { formatCurrency, formatArabicDate, normalizePhoneForWhatsApp, openWhatsA
 import { printDocument } from '@/lib/export';
 import { PDFButton } from '@/components/ui/PDFButton';
 import { exportStudentListPDF, exportMonthlyPaymentSummaryPDF, exportPaidStudentsPDF, exportUnpaidStudentsPDF } from '@/lib/pdfExport';
-import { triggerAutoArchive, createHistoricalPayment, fetchArchiveRuns, rollbackArchive, preArchiveValidation, resolvePaymentStatusFromDB, scanHistoricalIssues, type PreArchiveIssue } from '@/lib/data';
+import { triggerAutoArchive, createHistoricalPayment, fetchArchiveRuns, rollbackArchive, preArchiveValidation, resolvePaymentStatusFromDB, scanHistoricalIssues, skipIssueByUser, fetchIgnoredIssues, restoreIgnoredIssue, type PreArchiveIssue, type ArchiveIssueIgnore } from '@/lib/data';
 import SmartGradeCompletion from '@/components/dashboard/SmartGradeCompletion';
 import DailyCollectionsWidget from '@/components/dashboard/DailyCollectionsWidget';
 import AccountingCheckpoint from '@/components/dashboard/AccountingCheckpoint';
@@ -60,6 +61,7 @@ import { useToast } from '@/components/ui/Toast';
 import ErrorBoundary from '@/components/ui/ErrorBoundary';
 import { getCached, setCached, isCacheFresh, invalidateByPrefix } from '@/lib/cache';
 import { emitPaymentsChanged } from '@/lib/eventBus';
+import { NOTIFICATION_NAVIGATE_EVENT, type NotificationActionTarget } from '@/context/NotificationContext';
 import type { Group, ArchiveRun, CarriedOverBalance } from '@/lib/types';
 
 type ArchiveStatus = 'open' | 'archived' | 'pending';
@@ -535,7 +537,10 @@ export default function ArchiveOverview({
   const [currentRepairCount, setCurrentRepairCount] = useState<number | null>(null);
   const [repairMonthPick, setRepairMonthPick] = useState<string | null>(null);
   const [skippedKeys, setSkippedKeys] = useState<Set<string>>(new Set());
+  const [ignoredIssues, setIgnoredIssues] = useState<ArchiveIssueIgnore[]>([]);
+  const [skipConfirming, setSkipConfirming] = useState(false);
   const [issueProgress, setIssueProgress] = useState<{ total: number; resolved: number } | null>(null);
+  const archivingRef = useRef(false);
   const whatsappSentRef = useRef<Set<string>>(new Set());
   const savingRef = useRef(false);
   const draftsRef = useRef<Map<string, string>>(new Map());
@@ -570,12 +575,55 @@ export default function ArchiveOverview({
     else draftsRef.current.set(key, reviewInput);
   }
 
-  function skipToNextIssue(issue: PreArchiveIssue) {
-    const ordered = orderIssues(validationIssues ?? []);
-    const next = ordered[ordered.findIndex((i) => issueKey(i) === issueKey(issue)) + 1];
-    if (!next) return;
-    setSkippedKeys((prev) => new Set(prev).add(issueKey(issue)));
-    void openIssueReview(next);
+  async function skipAndResolveIssue(issue: PreArchiveIssue) {
+    if (!window.confirm('هل تريد تخطي هذه المشكلة واعتبارها منتهية؟ سيتم تسجيلها كمتخطاة بقرارك ولن تظهر مرة أخرى في قائمة الإصلاح. يمكنك استعادتها لاحقاً من قسم «المشكلات التي تم تجاوزها».')) return;
+    const scopeMonth = validationMonth ?? repairMonth;
+    setSkipConfirming(true);
+    try {
+      await skipIssueByUser({
+        issue_key: issueKey(issue),
+        issue_type: issue.type,
+        student_id: issue.student_id,
+        group_id: issue.group_id,
+        month_key: scopeMonth,
+      });
+      setSkippedKeys((prev) => new Set(prev).add(issueKey(issue)));
+      const position = orderIssues(validationIssues ?? []).findIndex((i) => issueKey(i) === issueKey(issue));
+      const remaining = (validationIssues ?? []).filter((i) => issueKey(i) !== issueKey(issue));
+      setValidationIssues(remaining);
+      if (validationScope === 'current_repair') setCurrentRepairCount(remaining.length);
+      setIssueProgress((p) => (p ? { ...p, resolved: p.resolved + 1 } : p));
+      void loadIgnoredIssues(scopeMonth);
+      showToast('تم تجاوز المشكلة', 'info');
+      const next = orderIssues(remaining)[position] ?? null;
+      if (next) {
+        await openIssueReview(next, { stash: false });
+      } else {
+        closeIssueReview();
+        showToast('تمت مراجعة جميع المشكلات في هذا الشهر', 'success');
+      }
+    } catch (e) {
+      setReviewError(`تعذّر تسجيل التخطي: ${(e as Error).message}`);
+    } finally {
+      setSkipConfirming(false);
+    }
+  }
+
+  async function loadIgnoredIssues(monthKey?: string) {
+    try {
+      const list = await fetchIgnoredIssues(monthKey);
+      setIgnoredIssues(list);
+    } catch { /* non-critical */ }
+  }
+
+  async function restoreIgnored(ignoreId: string) {
+    try {
+      await restoreIgnoredIssue(ignoreId);
+      setIgnoredIssues((prev) => prev.filter((i) => i.id !== ignoreId));
+      showToast('تمت استعادة المشكلة إلى قائمة الإصلاح', 'success');
+    } catch (e) {
+      setArchiveMessage({ type: 'error', text: `تعذّر الاستعادة: ${(e as Error).message}` });
+    }
   }
 
   async function openIssueReview(issue: PreArchiveIssue, { stash = true }: { stash?: boolean } = {}) {
@@ -1043,6 +1091,7 @@ export default function ArchiveOverview({
       setIssueProgress({ total: issues.length, resolved: 0 });
       setCurrentRepairCount(issues.length);
       setValidationIssues(issues);
+      void loadIgnoredIssues(curMonth);
     } catch (e) {
       setArchiveMessage({ type: 'error', text: `تعذّر تحميل مشكلات الشهر الحالي: ${(e as Error).message}` });
     } finally {
@@ -1067,9 +1116,11 @@ export default function ArchiveOverview({
   }
 
   async function executeArchive(monthKey: string) {
+    if (archivingRef.current) return;
+    archivingRef.current = true;
     setArchiveMessage(null);
     try {
-      const result = await triggerAutoArchive();
+      const result = await triggerAutoArchive(monthKey);
       if (result.success) {
         if (result.skipped) {
           setArchiveMessage({ type: 'info', text: `تمت أرشفة شهر ${formatMonthLabel(result.month ?? monthKey)} مسبقاً — لا حاجة للتكرار.` });
@@ -1077,13 +1128,22 @@ export default function ArchiveOverview({
           setArchiveMessage({ type: 'success', text: `تمت أرشفة شهر ${formatMonthLabel(result.month ?? monthKey)} بنجاح.` });
         }
         invalidateByPrefix('archive_');
-        loadArchives();
+        await loadArchives();
       } else {
-        setArchiveMessage({ type: 'error', text: `تعذّرت الأرشفة التلقائية: ${result.error ?? 'خطأ غير معروف'}. يمكن إعادة المحاولة.` });
+        const err = result.error ?? 'خطأ غير معروف';
+        const isNetwork = /fetch|network|timeout|load failed/i.test(err);
+        setArchiveMessage({ type: 'error', text: isNetwork
+          ? `تعذّر الاتصال بخدمة الأرشفة أثناء شهر ${formatMonthLabel(monthKey)}: ${err}. لم يتم إنشاء أي أرشيف. يمكنك إعادة المحاولة.`
+          : `تعذّرت الأرشفة التلقائية لشهر ${formatMonthLabel(monthKey)}: ${err}. يمكن إعادة المحاولة.` });
       }
     } catch (err) {
-      setArchiveMessage({ type: 'error', text: 'حدث خطأ أثناء الاتصال بخدمة الأرشفة.' });
+      const msg = String((err as Error).message ?? err);
+      setArchiveMessage({ type: 'error', text: /fetch|network|timeout|load failed/i.test(msg)
+        ? `تعذّر الاتصال بخدمة الأرشفة: ${msg}. لم يتم إنشاء أي أرشيف. اضغط الزر مرة أخرى لإعادة المحاولة.`
+        : `حدث خطأ أثناء الأرشفة: ${msg}.` });
       console.error('Archive trigger failed:', err);
+    } finally {
+      archivingRef.current = false;
     }
   }
 
@@ -3999,11 +4059,12 @@ export default function ArchiveOverview({
                   <div className="flex gap-2 justify-end pt-1">
                     {orderedIssues[reviewIndex + 1] && !reviewConfirming && (
                       <button
-                        onClick={() => skipToNextIssue(reviewIssue)}
-                        disabled={reviewSaving}
-                        className="text-[11px] font-bold text-slate-300 hover:text-white bg-white/5 hover:bg-white/10 px-3 py-1.5 rounded-lg transition disabled:opacity-40"
+                        onClick={() => void skipAndResolveIssue(reviewIssue)}
+                        disabled={reviewSaving || skipConfirming}
+                        className="text-[11px] font-bold text-amber-300 hover:text-amber-200 bg-amber-500/10 hover:bg-amber-500/20 px-3 py-1.5 rounded-lg transition disabled:opacity-40 flex items-center gap-1.5"
                       >
-                        تخطي والانتقال للتالية
+                        {skipConfirming ? <Loader2 size={12} className="animate-spin" /> : <SkipForward size={12} />}
+                        تخطي واعتبارها منتهية
                       </button>
                     )}
                     {reviewConfirming ? (
@@ -4048,6 +4109,7 @@ export default function ArchiveOverview({
           const renderIssueRow = (issue: PreArchiveIssue, idx: number) => {
             const isError = issue.severity === 'error';
             const editable = EDITABLE_ISSUE_TYPES.has(issue.type);
+            const isAttendance = issue.type === 'missing_attendance';
             return (
               <div key={`${issueKey(issue)}-${idx}`} className={`glass-light rounded-xl p-3 border ${isError ? 'border-red-500/10' : 'border-amber-500/10'}`}>
                 <div className="flex items-start gap-2">
@@ -4060,7 +4122,25 @@ export default function ArchiveOverview({
                     <p className="text-[11px] text-slate-300 mt-1 leading-relaxed">{issue.detail}</p>
                   </div>
                 </div>
-                <div className="mt-2 flex justify-end">
+                <div className="mt-2 flex justify-end gap-2">
+                  {isAttendance && issue.student_id && issue.group_id && (
+                    <button
+                      onClick={() => {
+                        const detail: NotificationActionTarget = {
+                          tab: 'attendance',
+                          groupId: issue.group_id!,
+                          groupName: issue.group_name ?? '',
+                          studentId: issue.student_id!,
+                          monthKey: validationMonth ?? repairMonth,
+                        };
+                        window.dispatchEvent(new CustomEvent(NOTIFICATION_NAVIGATE_EVENT, { detail }));
+                        closeValidationModal();
+                      }}
+                      className="text-[11px] font-bold text-emerald-300 hover:text-emerald-200 bg-emerald-500/10 hover:bg-emerald-500/20 px-3 py-1.5 rounded-lg transition"
+                    >
+                      فتح سجل الحضور
+                    </button>
+                  )}
                   <button
                     onClick={() => void openIssueReview(issue)}
                     className="text-[11px] font-bold text-sky-300 hover:text-sky-200 bg-sky-500/10 hover:bg-sky-500/20 px-3 py-1.5 rounded-lg transition"
@@ -4118,6 +4198,31 @@ export default function ArchiveOverview({
           );
         })()}
       </Modal>
+
+      {ignoredIssues.length > 0 && (
+        <div className="glass-card rounded-2xl p-4 sm:p-6 mt-4">
+          <h3 className="text-sm font-bold text-white mb-3">المشكلات التي تم تجاوزها</h3>
+          <div className="space-y-2 max-h-60 overflow-y-auto">
+            {ignoredIssues.map((ig) => (
+              <div key={ig.id} className="glass-light rounded-xl p-3 border border-amber-500/10 flex items-start gap-2">
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 bg-amber-500/10 text-amber-400">
+                  {ISSUE_LABELS[ig.issue_type] ?? ig.issue_type}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[11px] text-slate-300">{ig.reason}</p>
+                  <p className="text-[10px] text-slate-500 mt-0.5">الشهر: {ig.month_key}</p>
+                </div>
+                <button
+                  onClick={() => void restoreIgnored(ig.id)}
+                  className="text-[11px] font-bold text-sky-300 hover:text-sky-200 bg-sky-500/10 hover:bg-sky-500/20 px-2.5 py-1 rounded-lg transition flex-shrink-0"
+                >
+                  استعادة
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Honor Board Modal — top 10 students for selected group + month */}
       <Modal

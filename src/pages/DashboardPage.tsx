@@ -164,7 +164,7 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
 
 export default function DashboardPage() {
   const { role, logout, isMaster, can, assistant } = useAuth();
-  const { monthKey } = useMonth();
+  const { monthKey, setMonthKey } = useMonth();
   const navigate = useNavigate();
   const [tab, setTab] = usePersistedState<Tab>('dash_tab', 'home');
   // On login/reload, reset to home if the persisted tab is archive or a tab
@@ -693,6 +693,7 @@ export default function DashboardPage() {
     function handleNotifNav(e: Event) {
       const detail = (e as CustomEvent<NotificationActionTarget>).detail;
       if (!detail) return;
+      if (detail.monthKey) setMonthKey(detail.monthKey);
       const group = allGroups.find((g) => g.id === detail.groupId);
       if (group) {
         const grade = gradeLevels.find((gl) => gl.id === group.grade_level_id);
@@ -709,7 +710,7 @@ export default function DashboardPage() {
     }
     window.addEventListener(NOTIFICATION_NAVIGATE_EVENT, handleNotifNav);
     return () => window.removeEventListener(NOTIFICATION_NAVIGATE_EVENT, handleNotifNav);
-  }, [allGroups, gradeLevels, stages, setTab]);
+  }, [allGroups, gradeLevels, stages, setTab, setMonthKey]);
 
   // Tabs that require a group selection
   const groupRequired: Tab[] = ['attendance', 'session-calendar', 'grades', 'certificates', 'tracking', 'subscriptions'];

@@ -25,6 +25,7 @@ export type NotificationActionTarget = {
   examId?: string;
   homeworkId?: string;
   category?: NotificationCategory;
+  monthKey?: string;
 };
 
 export type AppNotification = {

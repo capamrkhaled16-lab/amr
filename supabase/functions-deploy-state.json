@@ -1,0 +1,13 @@
+{
+  "projectId": "69477907",
+  "functions": {
+    "auto-archive": {
+      "hasChanged": false,
+      "hash": "ea33cd513a2eabc3df237d092abd8ff131d4c4158c5bbd3a03ca8da4007bbcca"
+    },
+    "exam-ai-generate": {
+      "hasChanged": false,
+      "hash": "f86034c64bcc7cb68ba5c6462a278f05992a60e9fe7caff271bf6cbb2be15840"
+    }
+  }
+}

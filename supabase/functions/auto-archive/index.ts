@@ -73,7 +73,8 @@ Deno.serve(async (req: Request) => {
   }
 
   const now = new Date();
-  const archiveMonth = previousMonthKey(now);
+  const body = await req.json().catch(() => ({})) as { month?: string };
+  const archiveMonth = body.month && /^\d{4}-\d{2}$/.test(body.month) ? body.month : previousMonthKey(now);
   const newMonth = monthKey(now);
 
   let supabase: ReturnType<typeof createClient> | null = null;
@@ -432,9 +433,9 @@ Deno.serve(async (req: Request) => {
       .map((e: { id: string }) => e.id);
 
     if (oldExamIds.length > 0) {
-      const { error: delGradesErr } = await supabase.from("center_grades").in("center_exam_id", oldExamIds).delete();
+      const { error: delGradesErr } = await supabase.from("center_grades").delete().in("center_exam_id", oldExamIds);
       if (delGradesErr) deleteErrors.push(`center_grades: ${delGradesErr.message}`);
-      const { error: delExamsErr } = await supabase.from("center_exams").in("id", oldExamIds).delete();
+      const { error: delExamsErr } = await supabase.from("center_exams").delete().in("id", oldExamIds);
       if (delExamsErr) deleteErrors.push(`center_exams: ${delExamsErr.message}`);
     }
 
@@ -451,9 +452,9 @@ Deno.serve(async (req: Request) => {
       .map((h: { id: string }) => h.id);
 
     if (oldHomeworkIds.length > 0) {
-      const { error: delHwStatusErr } = await supabase.from("homework_status").in("homework_id", oldHomeworkIds).delete();
+      const { error: delHwStatusErr } = await supabase.from("homework_status").delete().in("homework_id", oldHomeworkIds);
       if (delHwStatusErr) deleteErrors.push(`homework_status: ${delHwStatusErr.message}`);
-      const { error: delHwErr } = await supabase.from("homework").in("id", oldHomeworkIds).delete();
+      const { error: delHwErr } = await supabase.from("homework").delete().in("id", oldHomeworkIds);
       if (delHwErr) deleteErrors.push(`homework: ${delHwErr.message}`);
     }
 

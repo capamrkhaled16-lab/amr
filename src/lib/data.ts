@@ -2515,23 +2515,25 @@ export async function preArchiveValidation(monthKey?: string): Promise<{ ok: boo
     if (a.session_id) attSet.add(`${a.student_id}:${a.session_id}`);
   }
 
-  // Check each group's sessions against its students
+  // Check each group's sessions against its students — produce per-student issues
   for (const [gid, sessionIds] of sessionsByGroup) {
     const groupStudents = students.filter((s) => s.group_id === gid);
-    for (const sessId of sessionIds) {
-      let missingCount = 0;
-      for (const s of groupStudents) {
+    for (const s of groupStudents) {
+      let missingSessions = 0;
+      for (const sessId of sessionIds) {
         if (!attSet.has(`${s.id}:${sessId}`)) {
-          missingCount++;
+          missingSessions++;
         }
       }
-      if (missingCount > 0 && groupStudents.length > 0) {
+      if (missingSessions > 0 && sessionIds.length > 0) {
         issues.push({
           type: 'missing_attendance',
           severity: 'warning',
           group_name: groupNameMap.get(gid) ?? 'غير محدد',
+          student_name: s.name,
+          student_id: s.id,
           group_id: gid,
-          detail: `${missingCount} طالب بدون سجل حضور في إحدى حصص هذا الشهر`,
+          detail: `لا يوجد سجل حضور لهذا الطالب في ${missingSessions} من ${sessionIds.length} حصة في هذا الشهر`,
         });
       }
     }
@@ -3532,7 +3534,7 @@ export async function fetchArchiveRuns(): Promise<ArchiveRun[]> {
   return (data as ArchiveRun[]) ?? [];
 }
 
-export async function triggerAutoArchive(): Promise<{ success: boolean; skipped?: boolean; month?: string; error?: string; records?: Record<string, number> }> {
+export async function triggerAutoArchive(monthKey?: string): Promise<{ success: boolean; skipped?: boolean; month?: string; error?: string; records?: Record<string, number> }> {
   const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/auto-archive`;
   const apiKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
   try {
@@ -3542,7 +3544,7 @@ export async function triggerAutoArchive(): Promise<{ success: boolean; skipped?
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`,
       },
-      body: '{}',
+      body: JSON.stringify(monthKey ? { month: monthKey } : {}),
     });
     const json = await res.json().catch(() => ({ success: false, error: `HTTP ${res.status}` }));
     if (!res.ok || !json.success) {
@@ -3608,6 +3610,62 @@ export async function fetchKnownRegressions(monthKey: string): Promise<string[]>
     .eq('month_key', monthKey)
     .neq('fix_status', 'regression_fixed');
   return (data ?? []).map((r: { error_signature: string }) => r.error_signature);
+}
+
+// ============ ARCHIVE ISSUE IGNORES (skip history) ============
+
+export type ArchiveIssueIgnore = {
+  id: string;
+  issue_key: string;
+  issue_type: string;
+  student_id: string | null;
+  group_id: string | null;
+  month_key: string;
+  reason: string;
+  status: string;
+  created_at: string;
+  restored_at: string | null;
+};
+
+export async function fetchIgnoredIssues(monthKey?: string): Promise<ArchiveIssueIgnore[]> {
+  let query = supabase
+    .from('archive_issue_ignores')
+    .select('*')
+    .eq('status', 'skipped_by_user')
+    .order('created_at', { ascending: false });
+  if (monthKey) query = query.eq('month_key', monthKey);
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+  return (data as ArchiveIssueIgnore[]) ?? [];
+}
+
+export async function skipIssueByUser(entry: {
+  issue_key: string;
+  issue_type: string;
+  student_id?: string;
+  group_id?: string;
+  month_key: string;
+  reason?: string;
+}): Promise<void> {
+  const { error } = await supabase.from('archive_issue_ignores').upsert({
+    issue_key: entry.issue_key,
+    issue_type: entry.issue_type,
+    student_id: entry.student_id ?? null,
+    group_id: entry.group_id ?? null,
+    month_key: entry.month_key,
+    reason: entry.reason ?? 'تم التجاوز بقرار المستخدم',
+    status: 'skipped_by_user',
+    restored_at: null,
+  }, { onConflict: 'issue_key,month_key' });
+  if (error) throw new Error(error.message);
+}
+
+export async function restoreIgnoredIssue(ignoreId: string): Promise<void> {
+  const { error } = await supabase
+    .from('archive_issue_ignores')
+    .update({ status: 'restored', restored_at: new Date().toISOString() })
+    .eq('id', ignoreId);
+  if (error) throw new Error(error.message);
 }
 
 // ============ ZERO-OVERWRITE GUARD ============
