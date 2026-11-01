@@ -16,6 +16,7 @@ import {
   currentMonthKey,
 } from '@/lib/data';
 import { canonicalRankEntries } from '@/lib/leaderboardRank';
+import { useSettings } from '@/context/SettingsContext';
 import { getMonthLabel, formatArabicDate, formatCurrency, getGradeRating, sanitizeToken } from '@/lib/format';
 import { supabase } from '@/lib/supabase';
 import type {
@@ -64,7 +65,7 @@ import { exportParentPortalPDF } from '@/lib/pdfExport';
 type LoadState = 'loading' | 'success' | 'error' | 'notfound';
 
 interface ParentData {
-  student: Student & { group_name?: string; grade_name?: string; stage_name?: string };
+  student: Student & { group_name?: string; group_schedule?: string | null; grade_name?: string; stage_name?: string };
   attendance: (AttendanceRecord & { sessions?: { id: string; title: string } | null })[];
   centerGrades: CenterGrade[];
   centerExams: CenterExam[];
@@ -136,14 +137,14 @@ export default function ParentPortal() {
         if (studentStatus) hwStatuses.push(studentStatus);
       }
 
-      let groupData: { name?: string; grade_level?: { name?: string; stage?: { name?: string } } } | null = null;
+      let groupData: { name?: string; schedule?: string | null; grade_level?: { name?: string; stage?: { name?: string } } } | null = null;
       try {
         const { data: gd } = await supabase
           .from('groups')
-          .select('name, grade_level:grade_levels(name, stage:academic_stages(name))')
+          .select('name, schedule, grade_level:grade_levels(name, stage:academic_stages(name))')
           .eq('id', groupId)
           .maybeSingle();
-        groupData = gd as { name?: string; grade_level?: { name?: string; stage?: { name?: string } } } | null;
+        groupData = gd as { name?: string; schedule?: string | null; grade_level?: { name?: string; stage?: { name?: string } } } | null;
       } catch { /* ignore */ }
 
       const ranked = canonicalRankEntries(hofEntries ?? []);
@@ -152,6 +153,7 @@ export default function ParentPortal() {
       const enrichedStudent = {
         ...student,
         group_name: groupData?.name,
+        group_schedule: groupData?.schedule ?? null,
         grade_name: groupData?.grade_level?.name,
         stage_name: groupData?.grade_level?.stage?.name,
       };
@@ -244,7 +246,7 @@ function PortalContent({
   loadingMonth: boolean;
 }) {
   const { student } = data;
-  const phone = student.parent_phone ?? student.phone ?? '';
+  const { settings } = useSettings();
 
   const availableMonths = useMemo(() => {
     const months = new Set<string>();
@@ -279,14 +281,16 @@ function PortalContent({
     const allGrades: { score: number; max: number }[] = [];
     for (const cg of data.centerGrades) {
       const exam = data.centerExams.find((e) => e.id === cg.center_exam_id);
-      if (exam && exam.max_score > 0) allGrades.push({ score: cg.score, max: exam.max_score });
+      if (exam && exam.max_score > 0 && exam.exam_date?.slice(0, 7) === selectedMonth) allGrades.push({ score: cg.score, max: exam.max_score });
     }
     for (const og of data.onlineGrades) {
-      if (og.max_score > 0) allGrades.push({ score: og.score, max: og.max_score });
+      const exam = data.onlineExams.find((e) => e.id === og.exam_id);
+      const when = exam?.open_at ?? exam?.created_at;
+      if (og.max_score > 0 && when?.slice(0, 7) === selectedMonth) allGrades.push({ score: og.score, max: og.max_score });
     }
     if (allGrades.length === 0) return null;
     return Math.round(allGrades.reduce((acc, g) => acc + (g.score / g.max) * 100, 0) / allGrades.length);
-  }, [data.centerGrades, data.centerExams, data.onlineGrades]);
+  }, [data.centerGrades, data.centerExams, data.onlineGrades, data.onlineExams, selectedMonth]);
 
   const feesDue = monthSubscription?.amount_due ?? 0;
   const feesPaid = monthFilteredPayments.reduce((sum, p) => sum + (p.amount ?? 0), 0);
@@ -337,10 +341,6 @@ function PortalContent({
     return 'كل خطوة تبني المستقبل — واصلوا المثابرة';
   }, [attendanceRate, examAvg, hwRate, feesRemaining, feesDue]);
 
-  const whatsappUrl = phone
-    ? `https://wa.me/${phone.replace(/[^0-9]/g, '')}`
-    : '#';
-
   return (
     <div className="min-h-screen bg-black text-white" dir="rtl" lang="ar">
       {/* Ambient glow background */}
@@ -355,11 +355,11 @@ function PortalContent({
         <div className="max-w-2xl mx-auto px-4 py-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/20">
-                <GraduationCap className="w-5 h-5 text-white" />
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/20 overflow-hidden">
+                {settings.logo_url ? <img src={settings.logo_url} alt="شعار المنصة" className="w-full h-full object-cover" /> : <GraduationCap className="w-5 h-5 text-white" />}
               </div>
               <div>
-                <h1 className="text-sm font-bold text-white">منصة الخالد التعليمية</h1>
+                <h1 className="text-sm font-bold text-white">{settings.platform_name}</h1>
                 <p className="text-[10px] text-slate-400">بوابة ولي الأمر</p>
               </div>
             </div>
@@ -562,18 +562,13 @@ function PortalContent({
         <BehaviorSection records={monthFilteredBehavior} />
       </main>
 
-      {/* WhatsApp floating button */}
-      {phone && (
-        <a
-          href={whatsappUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="pp-float-btn"
-          aria-label="تواصل عبر واتساب"
-        >
-          <MessageCircle className="w-6 h-6 text-white" />
-        </a>
-      )}
+      {/* Teacher contact: only uses a real saved number. None is stored in settings yet. */}
+      <div className="fixed bottom-5 left-4 right-4 max-w-2xl mx-auto z-30 pointer-events-none">
+        <div className="pointer-events-auto flex items-center justify-center gap-2 rounded-2xl bg-white/[0.04] border border-white/[0.08] px-4 py-3 text-xs text-slate-400">
+          <MessageCircle className="w-4 h-4" />
+          <span>رقم المعلم غير مسجل بعد للتواصل عبر واتساب</span>
+        </div>
+      </div>
     </div>
   );
 }
@@ -601,6 +596,8 @@ function ProfileHeader({ student, rank, totalInGroup }: { student: ParentData['s
             {student.stage_name && <span className="pp-badge border-white/10 text-slate-300 bg-white/[0.04]">{student.stage_name}</span>}
             {student.grade_name && <span className="pp-badge border-emerald-500/20 text-emerald-400 bg-emerald-500/10">{student.grade_name}</span>}
             {student.group_name && <span className="pp-badge border-sky-500/20 text-sky-400 bg-sky-500/10">{student.group_name}</span>}
+            {student.group_schedule && <span className="pp-badge border-white/10 text-slate-300 bg-white/[0.04]">{student.group_schedule}</span>}
+            <span className={`pp-badge ${student.status === 'active' ? 'border-emerald-500/20 text-emerald-400 bg-emerald-500/10' : 'border-white/10 text-slate-400 bg-white/[0.04]'}`}>{student.status === 'active' ? 'نشط' : 'غير نشط'}</span>
           </div>
           {rank !== null && totalInGroup > 0 && (
             <div className="flex items-center gap-1.5 mt-2">
