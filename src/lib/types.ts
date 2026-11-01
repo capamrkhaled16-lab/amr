@@ -179,6 +179,7 @@ export interface Settings {
   management_name: string;
   teacher_name: string;
   logo_url: string | null;
+  teacher_photo_url: string | null;
 }
 
 // ============ EXAM TYPES ============

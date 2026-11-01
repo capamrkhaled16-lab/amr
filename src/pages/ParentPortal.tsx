@@ -61,11 +61,14 @@ import {
 } from 'lucide-react';
 import { PDFButton } from '@/components/ui/PDFButton';
 import { exportParentPortalPDF } from '@/lib/pdfExport';
+import { computeMonthStats, previousMonthKey } from '@/lib/parentPortalStats';
+import { MonthComparison, MonthlyTrendChart, CalcNote } from '@/components/parent-portal/ParentInsights';
 
 type LoadState = 'loading' | 'success' | 'error' | 'notfound';
 
 interface ParentData {
   student: Student & { group_name?: string; group_schedule?: string | null; grade_name?: string; stage_name?: string };
+  monthKey: string;
   attendance: (AttendanceRecord & { sessions?: { id: string; title: string } | null })[];
   centerGrades: CenterGrade[];
   centerExams: CenterExam[];
@@ -91,6 +94,7 @@ export default function ParentPortal() {
   const [data, setData] = useState<ParentData | null>(null);
   const [selectedMonth, setSelectedMonth] = useState(initialMonth || currentMonthKey());
   const [loadingMonth, setLoadingMonth] = useState(false);
+  const [entered, setEntered] = useState(false);
   const reqIdRef = useRef(0);
 
   const loadData = useCallback(async (token: string, monthKey: string) => {
@@ -115,7 +119,7 @@ export default function ParentPortal() {
         return;
       }
 
-      const [attendance, centerGrades, centerExams, onlineGrades, onlineExams, payments, subscriptions, homework, behavior, hofEntries] = await Promise.all([
+      const [attendance, centerGrades, centerExams, onlineGrades, onlineExams, payments, subscriptions, homework, prevHomework, behavior, hofEntries] = await Promise.all([
         fetchAttendanceForStudent(student.id),
         fetchCenterGradesByStudent(student.id),
         fetchCenterExamsByStudent(student.id),
@@ -124,12 +128,13 @@ export default function ParentPortal() {
         fetchPayments(student.id, monthKey),
         fetchStudentMonthlySubscriptions(student.id),
         fetchHomework(groupId, true, monthKey),
+        fetchHomework(groupId, true, previousMonthKey(monthKey)),
         fetchBehaviorEvals(student.id),
         fetchHallOfFame(groupId, 100),
       ]);
 
       const hwStatusArrays = await Promise.all(
-        homework.map((hw) => fetchHomeworkStatuses(hw.id).catch(() => []))
+        [...homework, ...prevHomework].map((hw) => fetchHomeworkStatuses(hw.id).catch(() => []))
       );
       const hwStatuses: HomeworkStatus[] = [];
       for (const statuses of hwStatusArrays) {
@@ -161,6 +166,7 @@ export default function ParentPortal() {
       if (reqId === reqIdRef.current) {
         setData({
           student: enrichedStudent,
+          monthKey,
           attendance: attendance ?? [],
           centerGrades: centerGrades ?? [],
           centerExams: centerExams ?? [],
@@ -168,7 +174,7 @@ export default function ParentPortal() {
           onlineExams: onlineExams ?? [],
           payments: payments ?? [],
           subscriptions: subscriptions ?? [],
-          homework: homework ?? [],
+          homework: [...(homework ?? []), ...(prevHomework ?? [])],
           homeworkStatuses: hwStatuses ?? [],
           behavior: behavior ?? [],
           rank: studentRank,
@@ -200,7 +206,41 @@ export default function ParentPortal() {
   if (state === 'error') return <FullScreenError icon={<AlertCircle className="w-12 h-12 text-red-400" />} message={errorMsg} />;
   if (!data) return null;
 
+  if (!entered) return <WelcomeScreen studentName={data.student.name} onEnter={() => setEntered(true)} />;
   return <PortalContent data={data} selectedMonth={selectedMonth} onMonthChange={setSelectedMonth} loadingMonth={loadingMonth} />;
+}
+
+/* ─── Welcome screen ─── */
+
+function WelcomeScreen({ studentName, onEnter }: { studentName: string; onEnter: () => void }) {
+  const { settings } = useSettings();
+  return (
+    <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center px-6 py-10" dir="rtl" lang="ar">
+      <div className="flex flex-col items-center gap-6 max-w-md w-full text-center">
+        <div className="w-20 h-20 rounded-2xl bg-white/[0.04] border border-white/[0.08] flex items-center justify-center overflow-hidden">
+          {settings.logo_url ? <img src={settings.logo_url} alt="شعار المنصة" className="w-full h-full object-cover" /> : <GraduationCap className="w-9 h-9 text-amber-400" />}
+        </div>
+        <div className="space-y-2">
+          <h1 className="text-2xl font-black leading-tight">مرحباً بكم في منصة الخالد التعليمية</h1>
+          <p className="text-sm text-slate-400 leading-relaxed">نتابع معكم رحلة أبنائنا التعليمية خطوة بخطوة</p>
+        </div>
+        {settings.teacher_photo_url ? (
+          <img src={settings.teacher_photo_url} alt={settings.teacher_name} className="w-28 h-28 rounded-full object-cover border border-amber-400/40" />
+        ) : null}
+        <div className="text-xs text-slate-400">
+          <p>تقرير الطالب</p>
+          <p className="text-base font-bold text-white mt-1">{studentName}</p>
+        </div>
+        <button
+          type="button"
+          onClick={onEnter}
+          className="w-full sm:w-auto px-8 py-3 rounded-xl bg-emerald-500 text-black font-bold hover:bg-emerald-400 active:scale-[0.98] transition-all"
+        >
+          عرض تقرير الطالب
+        </button>
+      </div>
+    </div>
+  );
 }
 
 /* ─── Full-screen states ─── */
@@ -341,6 +381,29 @@ function PortalContent({
     return 'كل خطوة تبني المستقبل — واصلوا المثابرة';
   }, [attendanceRate, examAvg, hwRate, feesRemaining, feesDue]);
 
+  const recordsForStats = useMemo(() => ({
+    attendance: data.attendance,
+    centerGrades: data.centerGrades,
+    centerExams: data.centerExams,
+    onlineGrades: data.onlineGrades,
+    onlineExams: data.onlineExams,
+    behavior: data.behavior,
+    homework: data.homework,
+    homeworkStatuses: data.homeworkStatuses,
+  }), [data]);
+  const prevKey = previousMonthKey(selectedMonth);
+  const currentStats = useMemo(() => computeMonthStats(recordsForStats, selectedMonth), [recordsForStats, selectedMonth]);
+  const previousStats = useMemo(() => computeMonthStats(recordsForStats, prevKey), [recordsForStats, prevKey]);
+  const trendPoints = useMemo(() => {
+    const keys = Array.from(new Set([...availableMonths, selectedMonth, prevKey])).sort().slice(-6);
+    return keys.map((k) => {
+      const s = computeMonthStats(recordsForStats, k);
+      return { monthKey: k, attendance: s.attendance.rate, exams: s.exams.average };
+    });
+  }, [recordsForStats, availableMonths, selectedMonth, prevKey]);
+
+  if (data.monthKey !== selectedMonth) return <FullScreenLoader label="جاري تحميل بيانات الشهر..." />;
+
   return (
     <div className="min-h-screen bg-black text-white" dir="rtl" lang="ar">
       {/* Ambient glow background */}
@@ -408,7 +471,7 @@ function PortalContent({
         <div className="pp-glass p-5">
           <div className="pp-section-title">
             <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-            نظرة عامة
+            المستوى العام للطالب
           </div>
           <div className="flex justify-around items-start gap-2">
             <AnimatedRing value={attendanceRate} label="الحضور" sublabel={`${presentCount} من ${totalAttendance}`} color="#10b981" />
@@ -416,6 +479,10 @@ function PortalContent({
             <AnimatedRing value={examAvg ?? 0} label="المستوى" sublabel={examAvg === null ? 'لا توجد درجات' : `${examAvg}%`} color="#f59e0b" dimmed={examAvg === null} />
           </div>
         </div>
+
+        <MonthComparison current={currentStats} previous={previousStats} currentKey={selectedMonth} previousKey={prevKey} />
+
+        <MonthlyTrendChart points={trendPoints} />
 
         {/* Achievement badges */}
         <div className="pp-glass p-5">
@@ -551,6 +618,37 @@ function PortalContent({
           onlineExams={data.onlineExams}
           selectedMonth={selectedMonth}
         />
+
+        <div className="pp-glass p-5">
+          <div className="pp-section-title">
+            <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+            كيف حُسبت النسب
+          </div>
+          <CalcNote
+            label="نسبة الحضور"
+            value={currentStats.attendance.rate}
+            formula="عدد الحصص التي حضرها الطالب ÷ إجمالي الحصص المسجلة في هذا الشهر × 100"
+            detail={`${currentStats.attendance.present} حضور من ${currentStats.attendance.total} حصة`}
+          />
+          <CalcNote
+            label="إنجاز الواجبات"
+            value={currentStats.homework.rate}
+            formula="الواجبات المكتملة ÷ إجمالي الواجبات المسجلة لهذا الشهر × 100"
+            detail={`${currentStats.homework.done} مكتمل، ${currentStats.homework.incomplete} غير مكتمل من ${currentStats.homework.total}`}
+          />
+          <CalcNote
+            label="متوسط الامتحانات"
+            value={currentStats.exams.average}
+            formula="متوسط نسب الدرجات في جميع امتحانات هذا الشهر (المركز والإلكترونية)"
+            detail={`${currentStats.exams.count} امتحان في هذا الشهر`}
+          />
+          <CalcNote
+            label="السلوك الإيجابي"
+            value={currentStats.behavior.rate}
+            formula="التقييمات الإيجابية (ممتاز أو مشارك) ÷ إجمالي التقييمات المصنفة في هذا الشهر × 100"
+            detail={`${currentStats.behavior.positive} إيجابي، ${currentStats.behavior.warnings} تنبيه من ${currentStats.behavior.rated} تقييم`}
+          />
+        </div>
 
         {/* Attendance section */}
         <AttendanceSection records={monthFilteredAttendance} />
