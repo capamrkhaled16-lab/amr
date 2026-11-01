@@ -112,6 +112,9 @@ export default function FinancesModule({ focusStageId, focusGradeId, focusGroupI
   const [lastReceipt, setLastReceipt] = useState<{ receiptNumber: string; studentName: string; studentId?: string; amount: number; date: string; month?: string; monthKey?: string; note?: string | null; recordedBy?: string | null; groupName?: string; gradeName?: string; stageName?: string; baseSubscription?: number; discountAmount?: number; paymentId?: string; recordedAt?: string | null; totalDueAtPayment?: number; totalPaidAtPayment?: number } | null>(null);
   const [receiptSending, setReceiptSending] = useState<'image' | 'text' | null>(null);
   const [receiptWhatsappConfirm, setReceiptWhatsappConfirm] = useState<typeof lastReceipt | null>(null);
+  useEffect(() => {
+    if (lastReceipt) setReceiptWhatsappConfirm(lastReceipt);
+  }, [lastReceipt]);
   const [whatsappSending, setWhatsappSending] = useState(false);
   const [overrideUnlocked, setOverrideUnlocked] = useState(false);
   const [pinInput, setPinInput] = useState('');
@@ -377,8 +380,8 @@ export default function FinancesModule({ focusStageId, focusGradeId, focusGroupI
       const data = await fetchPayments(student.id, monthKey);
       if (epoch !== paymentsEpochRef.current) return;
       setPayments(data);
-    } catch {
-      if (epoch === paymentsEpochRef.current) setPayments([]);
+    } catch (err) {
+      if (epoch === paymentsEpochRef.current) showToast(`تعذّر تحميل سجل المدفوعات: ${err instanceof Error ? err.message : 'خطأ غير معروف'}`, 'error');
     }
   }
 

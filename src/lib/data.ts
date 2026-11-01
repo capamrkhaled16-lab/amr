@@ -1481,7 +1481,8 @@ export async function fetchPayments(studentId: string, monthKey?: string): Promi
   if (monthKey) {
     query = query.eq('month_key', monthKey).eq('is_historical_payment', false);
   }
-  const { data } = await withTimeout(query.order('payment_date', { ascending: false }));
+  const { data, error } = await withTimeout(query.order('payment_date', { ascending: false }));
+  if (error) throw new Error(error.message);
   return (data as Payment[]) ?? [];
   });
 }
