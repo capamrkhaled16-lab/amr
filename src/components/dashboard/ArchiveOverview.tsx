@@ -229,22 +229,46 @@ function previousMonthKey(): string {
 
 const RANK_LABELS = ['المركز الأول', 'المركز الثاني', 'المركز الثالث', 'المركز الرابع', 'المركز الخامس'];
 const RANK_STYLES = [
-  'bg-amber-500/20 border-amber-400/40 text-amber-300',
-  'bg-slate-300/15 border-slate-200/30 text-slate-200',
-  'bg-orange-600/20 border-orange-500/40 text-orange-300',
-  'bg-sky-500/15 border-sky-400/30 text-sky-300',
-  'bg-teal-500/15 border-teal-400/30 text-teal-300',
+  'bg-gradient-to-r from-amber-500/25 to-yellow-500/15 border-amber-400/50 text-amber-200',
+  'bg-slate-300/12 border-slate-200/25 text-slate-200',
+  'bg-orange-600/15 border-orange-500/30 text-orange-300',
+  'bg-sky-500/12 border-sky-400/25 text-sky-300',
+  'bg-emerald-500/12 border-emerald-400/25 text-emerald-300',
 ];
+const RANK_APPRECIATION = 'تفوق واستحقاق — بطل المجموعة';
+
+type ArchivedOnlineGrade = { id: string; student_id: string; score: number; max_score: number; exam_id?: string; updated_at?: string };
+type ArchivedOnlineExam = { id: string; title: string; max_score: number; pass_score: number; open_at?: string; created_at?: string };
 
 function computeGroupRankings(row: ArchiveRow): Map<string, { rank: number; totalScore: number; examCount: number }> {
   const students = getArchivedStudentsStatic(row);
   const grades = getArchivedGradesStatic(row);
   const exams = getArchivedExamsStatic(row);
-  const byGroup = new Map<string, { studentId: string; totalScore: number; examCount: number }[]>();
+  const data = row.archive_data ?? {};
+
+  const onlineGrades = (Array.isArray(data.online_grades) ? data.online_grades : []) as ArchivedOnlineGrade[];
+  // online_exams table is not archived separately, but online_grades has updated_at
+  // which the hall_of_fame view uses as fallback (COALESCE(e.open_at, og.updated_at))
+  const attendance = (Array.isArray(data.attendance) ? data.attendance : []) as ArchivedAttendance[];
+  const homeworkStatuses = (Array.isArray(data.homework_status) ? data.homework_status : []) as ArchivedHomework[];
+  const behaviorEvals = (Array.isArray(data.behavior_eval) ? data.behavior_eval : []) as ArchivedBehavior[];
+  const sessions = (Array.isArray(data.sessions) ? data.sessions : []) as { id: string; group_id: string; is_deleted: boolean }[];
+
+  const sessionCountByGroup = new Map<string, number>();
+  for (const sess of sessions) {
+    if (sess.is_deleted) continue;
+    if (!sess.group_id) continue;
+    sessionCountByGroup.set(sess.group_id, (sessionCountByGroup.get(sess.group_id) ?? 0) + 1);
+  }
+
+  type Entry = { studentId: string; totalScore: number; examCount: number; avgScore: number; attendanceRate: number; homeworkRate: number; behaviorScore: number };
+  const byGroup = new Map<string, Entry[]>();
 
   for (const s of students) {
     if (!s.group_id) continue;
-    const studentGrades = grades
+
+    // Center exam average (matches hall_of_fame center_scores CTE)
+    const centerGrades = grades
       .filter((g) => g.student_id === s.id)
       .map((g) => {
         const exam = exams.find((e) => e.id === g.center_exam_id);
@@ -252,22 +276,80 @@ function computeGroupRankings(row: ArchiveRow): Map<string, { rank: number; tota
       })
       .filter((x): x is { score: number; maxScore: number } => x !== null);
 
-    if (studentGrades.length === 0) continue;
-    const totalScore = studentGrades.reduce((sum, g) => sum + (g.maxScore > 0 ? (g.score / g.maxScore) * 100 : 0), 0);
-    const entry = { studentId: s.id, totalScore, examCount: studentGrades.length };
+    const centerAvg = centerGrades.length > 0
+      ? centerGrades.reduce((sum, g) => sum + (g.maxScore > 0 ? Math.min(100, (g.score / g.maxScore) * 100) : 0), 0) / centerGrades.length
+      : null;
+
+    // Online exam average (matches hall_of_fame online_scores CTE)
+    // The view uses COALESCE(e.open_at, og.updated_at) for month filtering.
+    // Since online_exams is not archived, we use og.updated_at as the fallback,
+    // which is exactly what the view does when open_at is null.
+    const ogPercents: number[] = [];
+    for (const og of onlineGrades.filter((g) => g.student_id === s.id)) {
+      const when = og.updated_at ?? '';
+      if (og.max_score > 0 && when.slice(0, 7) === row.archive_month) {
+        ogPercents.push(Math.min(100, (og.score / og.max_score) * 100));
+      }
+    }
+    const onlineAvg = ogPercents.length > 0
+      ? ogPercents.reduce((sum, v) => sum + v, 0) / ogPercents.length
+      : null;
+
+    // Combined exam average — same logic as hall_of_fame view:
+    // (center + online) / 2 when both exist, else whichever exists, else 0
+    let examAvg: number;
+    if (centerAvg !== null && onlineAvg !== null) examAvg = (centerAvg + onlineAvg) / 2;
+    else if (onlineAvg !== null) examAvg = onlineAvg;
+    else if (centerAvg !== null) examAvg = centerAvg;
+    else examAvg = 0;
+
+    // Attendance rate (same as hall_of_fame: capped by group session count)
+    const studentAttendance = attendance.filter((a) => a.student_id === s.id);
+    const rawPresent = studentAttendance.filter((a) => a.status === 'present').length;
+    const rawTotal = studentAttendance.length;
+    const groupSessionCount = sessionCountByGroup.get(s.group_id) ?? 0;
+    const attendanceRate = rawTotal > 0
+      ? Math.min(rawPresent, groupSessionCount) / Math.min(rawTotal, groupSessionCount) * 100
+      : 0;
+
+    // Homework rate (same as hall_of_fame: status = 'complete' only)
+    const studentHw = homeworkStatuses.filter((h) => h.student_id === s.id);
+    const completedHw = studentHw.filter((h) => h.status === 'complete').length;
+    const homeworkRate = studentHw.length > 0 ? (completedHw / studentHw.length) * 100 : 0;
+
+    // Behavior score (same as hall_of_fame: excellent or participatory = positive)
+    const studentBeh = behaviorEvals.filter((b) => b.student_id === s.id);
+    const positiveRatings = studentBeh.filter((b) => b.rating === 'excellent' || b.rating === 'participatory').length;
+    const behaviorScore = studentBeh.length > 0 ? (positiveRatings / studentBeh.length) * 100 : 0;
+
+    // Overall score: 0.35*exam + 0.25*attendance + 0.20*homework + 0.20*behavior
+    const totalScore = Math.round((0.35 * examAvg + 0.25 * attendanceRate + 0.20 * homeworkRate + 0.20 * behaviorScore) * 100) / 100;
+    const examCount = centerGrades.length + ogPercents.length;
     if (!byGroup.has(s.group_id)) byGroup.set(s.group_id, []);
-    byGroup.get(s.group_id)!.push(entry);
+    byGroup.get(s.group_id)!.push({ studentId: s.id, totalScore, examCount, avgScore: examAvg, attendanceRate, homeworkRate, behaviorScore });
   }
 
   const result = new Map<string, { rank: number; totalScore: number; examCount: number }>();
   for (const [, entries] of byGroup) {
-    entries.sort((a, b) => b.totalScore - a.totalScore);
-    let currentRank = 1;
+    // Tie-breaking matches canonicalRankEntries in leaderboardRank.ts:
+    // overall_score DESC, avg_score DESC, attendance_rate DESC,
+    // homework_rate DESC, behavior_score DESC, id ASC
+    entries.sort((a, b) => {
+      if (b.totalScore !== a.totalScore) return b.totalScore - a.totalScore;
+      if (b.avgScore !== a.avgScore) return b.avgScore - a.avgScore;
+      if (b.attendanceRate !== a.attendanceRate) return b.attendanceRate - a.attendanceRate;
+      if (b.homeworkRate !== a.homeworkRate) return b.homeworkRate - a.homeworkRate;
+      if (b.behaviorScore !== a.behaviorScore) return b.behaviorScore - a.behaviorScore;
+      return a.studentId.localeCompare(b.studentId);
+    });
+    let currentRank = 0;
     for (let i = 0; i < entries.length; i++) {
-      if (i > 0 && entries[i].totalScore !== entries[i - 1].totalScore) {
+      if (i > 0 && entries[i].totalScore === entries[i - 1].totalScore) {
+        result.set(entries[i].studentId, { rank: currentRank, totalScore: entries[i].totalScore, examCount: entries[i].examCount });
+      } else {
         currentRank = i + 1;
+        result.set(entries[i].studentId, { rank: currentRank, totalScore: entries[i].totalScore, examCount: entries[i].examCount });
       }
-      result.set(entries[i].studentId, { rank: currentRank, totalScore: entries[i].totalScore, examCount: entries[i].examCount });
     }
   }
   return result;
@@ -292,8 +374,15 @@ function RankBadge({ rank }: { rank: number }) {
   if (rank < 1 || rank > 5) return null;
   const style = RANK_STYLES[rank - 1];
   const label = RANK_LABELS[rank - 1];
+  if (rank === 1) {
+    return (
+      <span className={`inline-flex items-center gap-1 text-[10px] font-black px-2.5 py-1 rounded-full border ${style} shadow-sm shadow-amber-500/20`}>
+        <Award size={12} className="text-amber-300" /> {label}
+      </span>
+    );
+  }
   return (
-    <span className={`inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-full border ${style}`}>
+    <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${style}`}>
       <Award size={11} /> {label}
     </span>
   );
@@ -2719,8 +2808,11 @@ export default function ArchiveOverview({
                       </div>
                     )}
                     {detailRank && detailRank.rank <= 5 && (
-                      <div className="mt-1.5">
+                      <div className="mt-1.5 flex items-center gap-2 flex-wrap">
                         <RankBadge rank={detailRank.rank} />
+                        {detailRank.rank === 1 && (
+                          <span className="text-[10px] font-bold text-amber-300/90">{RANK_APPRECIATION}</span>
+                        )}
                       </div>
                     )}
                     <div className="flex items-center gap-3 text-[11px] text-slate-400 mt-1 flex-wrap">
@@ -4273,20 +4365,38 @@ export default function ArchiveOverview({
                 <span className="text-xs text-slate-400">{monthLabel}</span>
               </div>
               <div className="space-y-2">
-                {ranked.map((entry, idx) => {
-                  const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `${idx + 1}`;
-                  const bgClass = idx === 0 ? 'bg-amber-500/10 border-amber-500/30' : idx === 1 ? 'bg-slate-300/10 border-slate-300/20' : idx === 2 ? 'bg-orange-600/10 border-orange-500/20' : 'glass-light border-white/5';
+                {ranked.map((entry) => {
+                  const rank = entry.rank;
+                  const isFirst = rank === 1;
+                  const isTop3 = rank <= 3;
+                  const bgClass = isFirst
+                    ? 'bg-gradient-to-r from-amber-500/12 to-yellow-500/6 border-amber-400/35'
+                    : rank === 2 ? 'bg-slate-300/8 border-slate-200/20'
+                    : rank === 3 ? 'bg-orange-600/10 border-orange-500/20'
+                    : 'glass-light border-white/5';
+                  const rankLabel = RANK_LABELS[Math.min(rank, 5) - 1] ?? `المركز ${rank}`;
                   return (
                     <div key={entry.student.id} className={`flex items-center justify-between rounded-xl border px-4 py-3 ${bgClass}`}>
                       <div className="flex items-center gap-3 min-w-0">
-                        <span className="text-lg font-black flex-shrink-0 w-8 text-center">{medal}</span>
+                        <span className={`flex items-center justify-center w-8 h-8 rounded-lg flex-shrink-0 text-sm font-black ${
+                          isFirst ? 'bg-amber-500/20 text-amber-300 border border-amber-400/30'
+                          : isTop3 ? 'bg-white/8 text-slate-200 border border-white/10'
+                          : 'bg-white/5 text-slate-400 border border-white/5'
+                        }`}>{rank}</span>
                         <div className="min-w-0">
                           <p className="text-sm font-bold text-white truncate">{entry.student.name}</p>
-                          <p className="text-[10px] text-slate-500">{entry.examCount} تقييم</p>
+                          <div className="flex items-center gap-2">
+                            <span className={`text-[10px] font-bold ${isFirst ? 'text-amber-300' : isTop3 ? 'text-slate-300' : 'text-slate-500'}`}>{rankLabel}</span>
+                            <span className="text-[10px] text-slate-600">·</span>
+                            <span className="text-[10px] text-slate-500">{entry.examCount} تقييم</span>
+                          </div>
+                          {isFirst && (
+                            <p className="text-[10px] font-bold text-amber-300/80 mt-0.5">{RANK_APPRECIATION}</p>
+                          )}
                         </div>
                       </div>
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        <span className="text-sm font-black text-emerald-400">{entry.totalScore.toFixed(1)}</span>
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        <span className={`text-sm font-black ${isFirst ? 'text-amber-300' : 'text-emerald-400'}`}>{entry.totalScore.toFixed(1)}</span>
                         <span className="text-[10px] text-slate-500">نقطة</span>
                       </div>
                     </div>

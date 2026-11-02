@@ -58,6 +58,11 @@ import {
   Heart,
   Eye,
   X,
+  Compass,
+  PenLine,
+  Activity,
+  Footprints,
+  BookCheck,
 } from 'lucide-react';
 import { PDFButton } from '@/components/ui/PDFButton';
 import { exportParentPortalPDF } from '@/lib/pdfExport';
@@ -223,6 +228,7 @@ function WelcomeScreen({ studentName, onEnter }: { studentName: string; onEnter:
         <div className="space-y-2">
           <h1 className="text-2xl font-black leading-tight">مرحباً بكم في منصة الخالد التعليمية</h1>
           <p className="text-sm text-slate-400 leading-relaxed">نتابع معكم رحلة أبنائنا التعليمية خطوة بخطوة</p>
+          <p className="text-sm text-emerald-400/80 font-semibold mt-1">صَلِّ على النبي محمد ﷺ</p>
         </div>
         {settings.teacher_photo_url ? (
           <img src={settings.teacher_photo_url} alt={settings.teacher_name} className="w-28 h-28 rounded-full object-cover border border-amber-400/40" />
@@ -371,16 +377,6 @@ function PortalContent({
     return list;
   }, [attendanceRate, totalAttendance, hwRate, hwTotal, examAvg, monthFilteredBehavior, data.rank, feesRemaining, feesDue]);
 
-  // Encouraging message
-  const encouragement = useMemo(() => {
-    if (attendanceRate >= 90 && (examAvg ?? 0) >= 85) return 'أداء رائع هذا الشهر! استمر في التألق';
-    if (attendanceRate >= 80) return 'حضور ملتزم — أنت على الطريق الصحيح';
-    if (hwRate >= 80) return 'إنجاز ممتاز في الواجبات! واصل العطاء';
-    if (examAvg !== null && examAvg >= 75) return 'نتائج جيدة — مزيد من التركيز يحلق بك للأعلى';
-    if (feesRemaining === 0 && feesDue > 0) return 'رسوم الشهر مسددة بالكامل. شكراً لالتزامكم';
-    return 'كل خطوة تبني المستقبل — واصلوا المثابرة';
-  }, [attendanceRate, examAvg, hwRate, feesRemaining, feesDue]);
-
   const recordsForStats = useMemo(() => ({
     attendance: data.attendance,
     centerGrades: data.centerGrades,
@@ -394,6 +390,32 @@ function PortalContent({
   const prevKey = previousMonthKey(selectedMonth);
   const currentStats = useMemo(() => computeMonthStats(recordsForStats, selectedMonth), [recordsForStats, selectedMonth]);
   const previousStats = useMemo(() => computeMonthStats(recordsForStats, prevKey), [recordsForStats, prevKey]);
+
+  const behaviorRate = currentStats.behavior.rate ?? 0;
+  const overallPercentage = useMemo(() => {
+    const gradeRate = examAvg ?? 0;
+    const hasHw = hwTotal > 0;
+    if (hasHw) return Math.round((attendanceRate * 0.3 + gradeRate * 0.5 + hwRate * 0.2) * 10) / 10;
+    return Math.round((attendanceRate * 0.375 + gradeRate * 0.625) * 10) / 10;
+  }, [attendanceRate, examAvg, hwRate, hwTotal]);
+
+  const motivation = useMemo(() => {
+    if (overallPercentage >= 90) return { title: 'أداء استثنائي هذا الشهر!', subtitle: 'أنت في قمة مستواك — حافظ على هذا التألق وحلّق نحو أهداف أعلى' };
+    if (overallPercentage >= 75) return { title: 'أداء ممتاز ومتميز', subtitle: 'أنت على الطريق الصحيح — مزيد من التركيز يوصلك للقمة' };
+    if (overallPercentage >= 60) return { title: 'أداء جيد يحتاج تطوير', subtitle: 'كل خطوة تبني المستقبل — ركّز على نقاط الضعف لتحلق أعلى' };
+    return { title: 'بداية جديدة واعدة', subtitle: 'لا تستسلم! كل قمة تبدأ بخطوة — نحن نؤمن بقدرتك على التفوق' };
+  }, [overallPercentage]);
+
+  const nextStep = useMemo(() => {
+    const areas = [
+      { rate: attendanceRate, label: 'الحضور', suggestion: 'حاول عدم غياب أي حصة هذا الشهر — الحضور المنتظم أساس التفوق' },
+      { rate: hwRate, label: 'الواجبات', suggestion: 'اجتهد في تسليم جميع الواجبات في موعدها — الواجبات تقوّي الفهم وتثبّت المعلومة' },
+      { rate: examAvg ?? 0, label: 'الامتحانات', suggestion: 'راجع دروسك بانتظام واستعد جيداً للامتحانات القادمة — المراجعة المبكرة سرّ التفوق' },
+      { rate: behaviorRate, label: 'السلوك', suggestion: 'حافظ على السلوك الإيجابي والمشاركة الفعالة في الحصص — السلوك الحسن يفتح أبواب النجاح' },
+    ];
+    return areas.sort((a, b) => a.rate - b.rate)[0];
+  }, [attendanceRate, hwRate, examAvg, behaviorRate]);
+
   const trendPoints = useMemo(() => {
     const keys = Array.from(new Set([...availableMonths, selectedMonth, prevKey])).sort().slice(-6);
     return keys.map((k) => {
@@ -423,7 +445,11 @@ function PortalContent({
               </div>
               <div>
                 <h1 className="text-sm font-bold text-white">{settings.platform_name}</h1>
-                <p className="text-[10px] text-slate-400">بوابة ولي الأمر</p>
+                <div className="flex items-center gap-1.5">
+                  <p className="text-[10px] text-slate-400">بوابة ولي الأمر</p>
+                  <span className="text-[10px] text-slate-600">·</span>
+                  <p className="text-[10px] text-emerald-400/80 font-semibold">صَلِّ على النبي محمد ﷺ</p>
+                </div>
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -461,24 +487,95 @@ function PortalContent({
         {/* Profile header */}
         <ProfileHeader student={student} rank={data.rank} totalInGroup={data.totalStudentsInGroup} />
 
-        {/* Encouraging card */}
-        <EncouragingCard message={encouragement} attendanceRate={attendanceRate} hwRate={hwRate} examAvg={examAvg} />
+        {/* Hero card with overall percentage and animated ring */}
+        <HeroCard
+          overallPercentage={overallPercentage}
+          rank={data.rank}
+          totalInGroup={data.totalStudentsInGroup}
+          monthLabel={getMonthLabel(selectedMonth)}
+          motivation={motivation}
+          attendanceRate={attendanceRate}
+          hwRate={hwRate}
+          examAvg={examAvg}
+          behaviorRate={behaviorRate}
+        />
 
         {/* Month selector */}
         <MonthSelector selectedMonth={selectedMonth} onMonthChange={onMonthChange} availableMonths={availableMonths} />
 
-        {/* Progress rings */}
-        <div className="pp-glass p-5">
-          <div className="pp-section-title">
-            <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-            المستوى العام للطالب
-          </div>
-          <div className="flex justify-around items-start gap-2">
-            <AnimatedRing value={attendanceRate} label="الحضور" sublabel={`${presentCount} من ${totalAttendance}`} color="#10b981" />
-            <AnimatedRing value={hwRate} label="الواجبات" sublabel={`${hwDone} من ${hwTotal}`} color="#0ea5e9" />
-            <AnimatedRing value={examAvg ?? 0} label="المستوى" sublabel={examAvg === null ? 'لا توجد درجات' : `${examAvg}%`} color="#f59e0b" dimmed={examAvg === null} />
-          </div>
+        {/* Four detailed performance cards */}
+        <div className="grid grid-cols-2 gap-3">
+          <PerformanceCard
+            icon={<CheckCircle2 className="w-4 h-4" />}
+            title="الحضور"
+            rate={attendanceRate}
+            color="emerald"
+            details={
+              <div className="space-y-1 text-[10px] text-slate-400">
+                <div className="flex justify-between"><span>حاضر</span><span className="text-emerald-400 font-bold">{presentCount}</span></div>
+                <div className="flex justify-between"><span>غائب</span><span className="text-red-400 font-bold">{absentCount}</span></div>
+                <div className="flex justify-between"><span>بعذر</span><span className="text-amber-400 font-bold">{excusedCount}</span></div>
+                <div className="flex justify-between"><span>تأخر</span><span className="text-sky-400 font-bold">{lateCount}</span></div>
+              </div>
+            }
+          />
+          <PerformanceCard
+            icon={<BookCheck className="w-4 h-4" />}
+            title="الواجبات"
+            rate={hwRate}
+            color="sky"
+            dimmed={hwTotal === 0}
+            details={
+              hwTotal === 0 ? (
+                <p className="text-[10px] text-slate-500">لا توجد واجبات هذا الشهر</p>
+              ) : (
+                <div className="space-y-1 text-[10px] text-slate-400">
+                  <div className="flex justify-between"><span>مكتمل</span><span className="text-emerald-400 font-bold">{hwDone}</span></div>
+                  <div className="flex justify-between"><span>غير مكتمل</span><span className="text-red-400 font-bold">{hwTotal - hwDone}</span></div>
+                  <div className="flex justify-between"><span>الإجمالي</span><span className="text-white font-bold">{hwTotal}</span></div>
+                </div>
+              )
+            }
+          />
+          <PerformanceCard
+            icon={<TrendingUp className="w-4 h-4" />}
+            title="الامتحانات"
+            rate={examAvg ?? 0}
+            color="amber"
+            dimmed={examAvg === null}
+            details={
+              examAvg === null ? (
+                <p className="text-[10px] text-slate-500">لا توجد درجات هذا الشهر</p>
+              ) : (
+                <div className="space-y-1 text-[10px] text-slate-400">
+                  <div className="flex justify-between"><span>المتوسط</span><span className="text-amber-400 font-bold">{examAvg}%</span></div>
+                  <div className="flex justify-between"><span>عدد الامتحانات</span><span className="text-white font-bold">{currentStats.exams.count}</span></div>
+                </div>
+              )
+            }
+          />
+          <PerformanceCard
+            icon={<Activity className="w-4 h-4" />}
+            title="السلوك"
+            rate={behaviorRate}
+            color="rose"
+            dimmed={currentStats.behavior.rated === 0}
+            details={
+              currentStats.behavior.rated === 0 ? (
+                <p className="text-[10px] text-slate-500">لا توجد تقييمات هذا الشهر</p>
+              ) : (
+                <div className="space-y-1 text-[10px] text-slate-400">
+                  <div className="flex justify-between"><span>إيجابي</span><span className="text-emerald-400 font-bold">{currentStats.behavior.positive}</span></div>
+                  <div className="flex justify-between"><span>تنبيه</span><span className="text-amber-400 font-bold">{currentStats.behavior.warnings}</span></div>
+                  <div className="flex justify-between"><span>الإجمالي</span><span className="text-white font-bold">{currentStats.behavior.rated}</span></div>
+                </div>
+              )
+            }
+          />
         </div>
+
+        {/* Next step suggestion */}
+        <NextStepCard suggestion={nextStep.suggestion} label={nextStep.label} rate={nextStep.rate} />
 
         <MonthComparison current={currentStats} previous={previousStats} currentKey={selectedMonth} previousKey={prevKey} />
 
@@ -525,14 +622,6 @@ function PortalContent({
             </div>
           </div>
         )}
-
-        {/* Quick stats grid */}
-        <div className="grid grid-cols-4 gap-2.5">
-          <MiniStat icon={<CheckCircle2 className="w-3.5 h-3.5" />} label="حضور" value={presentCount} color="emerald" />
-          <MiniStat icon={<X className="w-3.5 h-3.5" />} label="غياب" value={absentCount} color="red" />
-          <MiniStat icon={<Clock className="w-3.5 h-3.5" />} label="تأخر" value={lateCount} color="sky" />
-          <MiniStat icon={<BookOpen className="w-3.5 h-3.5" />} label="واجبات" value={hwDone} color="amber" />
-        </div>
 
         {/* Financial summary + timeline */}
         <div className="pp-glass p-5">
@@ -661,6 +750,21 @@ function PortalContent({
 
         {/* Behavior section */}
         <BehaviorSection records={monthFilteredBehavior} />
+
+        {/* Monthly journey timeline */}
+        <JourneyTimeline
+          attendance={monthFilteredAttendance}
+          homework={monthFilteredHomework}
+          behavior={monthFilteredBehavior}
+          centerGrades={data.centerGrades}
+          centerExams={data.centerExams}
+          onlineGrades={data.onlineGrades}
+          onlineExams={data.onlineExams}
+          selectedMonth={selectedMonth}
+        />
+
+        {/* Signature card */}
+        <SignatureCard />
       </main>
 
       {/* Teacher contact: only uses a real saved number. None is stored in settings yet. */}
@@ -712,23 +816,76 @@ function ProfileHeader({ student, rank, totalInGroup }: { student: ParentData['s
   );
 }
 
-function EncouragingCard({ message, attendanceRate, hwRate, examAvg }: { message: string; attendanceRate: number; hwRate: number; examAvg: number | null }) {
+function HeroCard({ overallPercentage, rank, totalInGroup, monthLabel, motivation, attendanceRate, hwRate, examAvg, behaviorRate }: {
+  overallPercentage: number;
+  rank: number | null;
+  totalInGroup: number;
+  monthLabel: string;
+  motivation: { title: string; subtitle: string };
+  attendanceRate: number;
+  hwRate: number;
+  examAvg: number | null;
+  behaviorRate: number;
+}) {
+  const pct = Math.min(100, Math.round(overallPercentage));
+  const radius = 48;
+  const circumference = 2 * Math.PI * radius;
+  const dashOffset = circumference - (pct / 100) * circumference;
+  const ringColor = overallPercentage >= 90 ? '#10b981' : overallPercentage >= 75 ? '#34d399' : overallPercentage >= 60 ? '#f59e0b' : '#f43f5e';
+
   return (
-    <div className="relative overflow-hidden rounded-2xl p-4 bg-gradient-to-l from-emerald-600/15 via-teal-600/8 to-transparent border border-emerald-500/15">
-      <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/8 rounded-full blur-2xl pointer-events-none" />
-      <div className="relative flex items-center gap-3">
-        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500/20 to-teal-500/10 flex items-center justify-center shrink-0 border border-emerald-500/15">
-          <Heart className="w-5 h-5 text-emerald-400" />
+    <div className="pp-glass p-6 pp-neon-emerald relative overflow-hidden">
+      <div className="absolute top-0 right-0 w-40 h-40 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute bottom-0 left-0 w-32 h-32 bg-cyan-500/8 rounded-full blur-3xl pointer-events-none" />
+      <div className="relative flex items-center gap-5">
+        <div className="relative w-28 h-28 shrink-0">
+          <svg className="w-full h-full pp-progress-ring" viewBox="0 0 112 112">
+            <defs>
+              <linearGradient id="hero-ring-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor={ringColor} stopOpacity="0.9" />
+                <stop offset="100%" stopColor="#06b6d4" stopOpacity="0.6" />
+              </linearGradient>
+            </defs>
+            <circle cx="56" cy="56" r={radius} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="6" />
+            <circle
+              cx="56" cy="56" r={radius} fill="none" stroke="url(#hero-ring-grad)" strokeWidth="6" strokeLinecap="round"
+              strokeDasharray={circumference} strokeDashoffset={dashOffset}
+              style={{ transition: 'stroke-dashoffset 1.2s cubic-bezier(0.4,0,0.2,1)', filter: `drop-shadow(0 0 6px ${ringColor}55)` }}
+            />
+          </svg>
+          <div className="absolute inset-0 flex flex-col items-center justify-center">
+            <span className="text-2xl font-black text-white leading-none">{pct}<span className="text-sm text-slate-400">%</span></span>
+            <span className="text-[9px] text-slate-400 mt-1">المستوى العام</span>
+          </div>
         </div>
-        <div className="flex-1">
-          <p className="text-sm font-bold text-white leading-snug">{message}</p>
-          <div className="flex items-center gap-3 mt-1.5 text-[10px] text-slate-400">
-            <span className="flex items-center gap-1"><CheckCircle2 className="w-3 h-3 text-emerald-400" />حضور {attendanceRate}%</span>
-            {examAvg !== null && <span className="flex items-center gap-1"><TrendingUp className="w-3 h-3 text-amber-400" />مستوى {examAvg}%</span>}
-            <span className="flex items-center gap-1"><BookOpen className="w-3 h-3 text-sky-400" />واجب {hwRate}%</span>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-1 flex-wrap">
+            <span className="text-[10px] font-bold text-emerald-400/80">{monthLabel}</span>
+            {rank !== null && totalInGroup > 0 && (
+              <span className="pp-badge border-amber-500/20 text-amber-400 bg-amber-500/10">
+                <Trophy className="w-2.5 h-2.5" />الترتيب {rank} من {totalInGroup}
+              </span>
+            )}
+          </div>
+          <p className="text-sm font-black text-white leading-snug">{motivation.title}</p>
+          <p className="text-[11px] text-slate-400 leading-relaxed mt-1">{motivation.subtitle}</p>
+          <div className="grid grid-cols-4 gap-2 mt-3">
+            <MiniIndicator label="حضور" value={attendanceRate} color="#10b981" />
+            <MiniIndicator label="واجب" value={hwRate} color="#0ea5e9" />
+            <MiniIndicator label="امتحان" value={examAvg ?? 0} color="#f59e0b" dimmed={examAvg === null} />
+            <MiniIndicator label="سلوك" value={behaviorRate} color="#f43f5e" dimmed={behaviorRate === 0} />
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function MiniIndicator({ label, value, color, dimmed }: { label: string; value: number; color: string; dimmed?: boolean }) {
+  return (
+    <div className="flex flex-col items-center gap-1 bg-white/[0.03] rounded-lg p-2 border border-white/[0.04]">
+      <span className="text-sm font-black" style={{ color: dimmed ? '#64748b' : color }}>{dimmed ? '—' : `${value}%`}</span>
+      <span className="text-[9px] text-slate-400">{label}</span>
     </div>
   );
 }
@@ -753,30 +910,54 @@ function MonthSelector({ selectedMonth, onMonthChange, availableMonths }: { sele
   );
 }
 
-function AnimatedRing({ value, label, sublabel, color, dimmed }: { value: number; label: string; sublabel: string; color: string; dimmed?: boolean }) {
-  const pct = Math.min(100, value);
-  const radius = 34;
-  const circumference = 2 * Math.PI * radius;
-  const dashOffset = circumference - (pct / 100) * circumference;
+function PerformanceCard({ icon, title, rate, color, details, dimmed }: {
+  icon: React.ReactNode;
+  title: string;
+  rate: number;
+  color: 'emerald' | 'sky' | 'amber' | 'rose';
+  details: React.ReactNode;
+  dimmed?: boolean;
+}) {
+  const colorMap = {
+    emerald: { bg: 'bg-emerald-500/10', text: 'text-emerald-400', bar: 'bg-gradient-to-r from-emerald-500 to-teal-400' },
+    sky: { bg: 'bg-sky-500/10', text: 'text-sky-400', bar: 'bg-gradient-to-r from-sky-500 to-cyan-400' },
+    amber: { bg: 'bg-amber-500/10', text: 'text-amber-400', bar: 'bg-gradient-to-r from-amber-500 to-yellow-400' },
+    rose: { bg: 'bg-rose-500/10', text: 'text-rose-400', bar: 'bg-gradient-to-r from-rose-500 to-pink-400' },
+  };
+  const c = colorMap[color];
   return (
-    <div className="flex flex-col items-center gap-2">
-      <div className="relative w-20 h-20">
-        <svg className="w-full h-full pp-progress-ring" viewBox="0 0 80 80">
-          <circle cx="40" cy="40" r={radius} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="5" />
-          <circle
-            cx="40" cy="40" r={radius} fill="none" stroke={color} strokeWidth="5" strokeLinecap="round"
-            strokeDasharray={circumference} strokeDashoffset={dashOffset}
-            style={{ transition: 'stroke-dashoffset 0.8s cubic-bezier(0.4,0,0.2,1)', filter: dimmed ? 'none' : `drop-shadow(0 0 4px ${color}55)` }}
-            opacity={dimmed ? 0.3 : 1}
-          />
-        </svg>
-        <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className={`text-lg font-black ${dimmed ? 'text-slate-500' : 'text-white'}`}>{dimmed ? '—' : `${pct}%`}</span>
-        </div>
+    <div className="pp-glass p-4">
+      <div className="flex items-center gap-2 mb-3">
+        <div className={`w-8 h-8 rounded-lg ${c.bg} flex items-center justify-center shrink-0 ${c.text}`}>{icon}</div>
+        <span className="text-xs font-bold text-white">{title}</span>
       </div>
-      <div className="text-center">
-        <p className="text-xs font-bold text-white">{label}</p>
-        <p className="text-[10px] text-slate-400 mt-0.5">{sublabel}</p>
+      <div className="flex items-baseline gap-1 mb-2">
+        <span className={`text-2xl font-black ${dimmed ? 'text-slate-600' : 'text-white'}`}>{dimmed ? '—' : rate}</span>
+        {!dimmed && <span className="text-sm text-slate-400">%</span>}
+      </div>
+      <div className="h-2 bg-white/[0.06] rounded-full overflow-hidden mb-3">
+        <div className={`h-full ${c.bar} rounded-full transition-all duration-700 ease-out`} style={{ width: dimmed ? '0%' : `${Math.min(100, rate)}%` }} />
+      </div>
+      {details}
+    </div>
+  );
+}
+
+function NextStepCard({ suggestion, label, rate }: { suggestion: string; label: string; rate: number }) {
+  return (
+    <div className="pp-glass p-4 pp-neon-amber relative overflow-hidden">
+      <div className="absolute top-0 left-0 w-24 h-24 bg-amber-500/8 rounded-full blur-2xl pointer-events-none" />
+      <div className="relative flex items-start gap-3">
+        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500/20 to-yellow-500/10 flex items-center justify-center shrink-0 border border-amber-500/15">
+          <Compass className="w-5 h-5 text-amber-400" />
+        </div>
+        <div className="flex-1">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-xs font-black text-white">خطوتك القادمة</span>
+            <span className="pp-badge border-amber-500/20 text-amber-400 bg-amber-500/10">{label} {rate}%</span>
+          </div>
+          <p className="text-xs text-slate-300 leading-relaxed">{suggestion}</p>
+        </div>
       </div>
     </div>
   );
@@ -808,18 +989,115 @@ function Badge({ icon, label, color, achieved }: { icon: React.ReactNode; label:
   );
 }
 
-function MiniStat({ icon, label, value, color }: { icon: React.ReactNode; label: string; value: number; color: 'emerald' | 'red' | 'amber' | 'sky' }) {
-  const colorMap = {
-    emerald: 'text-emerald-400 bg-emerald-500/10',
-    red: 'text-red-400 bg-red-500/10',
-    amber: 'text-amber-400 bg-amber-500/10',
-    sky: 'text-sky-400 bg-sky-500/10',
+function JourneyTimeline({ attendance, homework, behavior, centerGrades, centerExams, onlineGrades, onlineExams, selectedMonth }: {
+  attendance: (AttendanceRecord & { sessions?: { id: string; title: string } | null })[];
+  homework: Homework[];
+  behavior: BehaviorEval[];
+  centerGrades: CenterGrade[];
+  centerExams: CenterExam[];
+  onlineGrades: OnlineGrade[];
+  onlineExams: OnlineExam[];
+  selectedMonth: string;
+}) {
+  const statusLabel: Record<string, string> = { present: 'حاضر', absent: 'غائب', late: 'تأخر', excused: 'بعذر', excused_absence: 'بعذر', unrecorded: 'لم يسجل' };
+  const ratingLabel: Record<string, string> = { excellent: 'سلوك ممتاز', participatory: 'مشارك إيجابي', quiet: 'هادئ', needs_attention: 'يحتاج اهتمام', disruptive: 'مزعج' };
+  const events: { date: string; title: string; subtitle?: string; color: string; icon: React.ReactNode }[] = [];
+
+  for (const rec of attendance) {
+    events.push({ date: rec.attendance_date, title: statusLabel[rec.status] ?? rec.status, subtitle: rec.sessions?.title, color: 'emerald', icon: <Calendar className="w-3.5 h-3.5" /> });
+  }
+  for (const hw of homework) {
+    events.push({ date: hw.due_date ?? `${selectedMonth}-15`, title: hw.title, subtitle: 'موعد تسليم الواجب', color: 'sky', icon: <BookOpen className="w-3.5 h-3.5" /> });
+  }
+  for (const cg of centerGrades) {
+    const exam = centerExams.find((e) => e.id === cg.center_exam_id);
+    if (exam?.exam_date?.slice(0, 7) === selectedMonth) {
+      events.push({ date: exam.exam_date, title: exam.title ?? 'امتحان', subtitle: `الدرجة: ${cg.score}/${exam.max_score}`, color: 'amber', icon: <TrendingUp className="w-3.5 h-3.5" /> });
+    }
+  }
+  for (const og of onlineGrades) {
+    const exam = onlineExams.find((e) => e.id === og.exam_id);
+    const when = exam?.open_at ?? exam?.created_at;
+    if (when?.slice(0, 7) === selectedMonth) {
+      events.push({ date: when.slice(0, 10), title: exam?.title ?? 'امتحان إلكتروني', subtitle: `الدرجة: ${og.score}/${og.max_score}`, color: 'amber', icon: <TrendingUp className="w-3.5 h-3.5" /> });
+    }
+  }
+  for (const b of behavior) {
+    if (b.eval_date?.slice(0, 7) === selectedMonth) {
+      events.push({ date: b.eval_date, title: ratingLabel[b.rating ?? ''] ?? 'تقييم سلوك', subtitle: b.note ?? undefined, color: 'rose', icon: <Award className="w-3.5 h-3.5" /> });
+    }
+  }
+
+  events.sort((a, b) => b.date.localeCompare(a.date));
+  if (events.length === 0) return null;
+
+  const colorMap: Record<string, { dot: string; text: string }> = {
+    emerald: { dot: 'bg-emerald-400 ring-emerald-500/20', text: 'text-emerald-400' },
+    sky: { dot: 'bg-sky-400 ring-sky-500/20', text: 'text-sky-400' },
+    amber: { dot: 'bg-amber-400 ring-amber-500/20', text: 'text-amber-400' },
+    rose: { dot: 'bg-rose-400 ring-rose-500/20', text: 'text-rose-400' },
   };
+  const shown = events.slice(0, 12);
+
   return (
-    <div className="glass-light rounded-xl p-2.5 text-center">
-      <div className={`w-7 h-7 rounded-lg ${colorMap[color]} flex items-center justify-center mx-auto mb-1.5`}>{icon}</div>
-      <p className="text-lg font-black text-white leading-none">{value}</p>
-      <p className="text-[9px] text-slate-400 mt-1">{label}</p>
+    <div className="pp-glass p-5">
+      <div className="pp-section-title">
+        <Footprints className="w-3.5 h-3.5 text-emerald-400" />
+        رحلة إنجازك هذا الشهر
+      </div>
+      <div className="space-y-0">
+        {shown.map((ev, i) => {
+          const c = colorMap[ev.color] ?? colorMap.emerald;
+          return (
+            <div key={i} className="flex gap-3">
+              <div className="flex flex-col items-center shrink-0">
+                <div className={`w-2.5 h-2.5 rounded-full ${c.dot} ring-2 mt-1.5`} />
+                {i < shown.length - 1 && <div className="w-px flex-1 bg-white/[0.08] min-h-[24px]" />}
+              </div>
+              <div className="flex-1 pb-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className={c.text}>{ev.icon}</span>
+                    <span className="text-xs font-bold text-white truncate">{ev.title}</span>
+                  </div>
+                  <span className="text-[10px] text-slate-400 shrink-0">{formatArabicDate(ev.date)}</span>
+                </div>
+                {ev.subtitle && <p className="text-[10px] text-slate-500 mt-0.5 truncate">{ev.subtitle}</p>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {events.length > 12 && (
+        <p className="text-[10px] text-slate-500 mt-2 text-center">+ {events.length - 12} حدث آخر هذا الشهر</p>
+      )}
+    </div>
+  );
+}
+
+function SignatureCard() {
+  return (
+    <div className="pp-glass p-5 pp-neon-gold relative overflow-hidden">
+      <div className="absolute top-0 left-0 w-32 h-32 bg-amber-500/8 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute bottom-0 right-0 w-24 h-24 bg-emerald-500/6 rounded-full blur-2xl pointer-events-none" />
+      <div className="relative">
+        <div className="flex items-center gap-2 mb-3">
+          <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center">
+            <PenLine className="w-4 h-4 text-amber-400" />
+          </div>
+          <span className="text-xs font-black text-amber-400">رسالة مستر عمرو خالد للطالب</span>
+        </div>
+        <p className="text-sm text-slate-200 leading-relaxed">
+          «بني الحبيب، كل درجة تحققها هي لبنة في صرح مستقبلك. لا تستهن بجهدك ولا تيأس من نتيجة، فالنجاح رحلة وليس محطة. وثق في قدرتك على التفوق، وأعلم أنني أؤمن بك وبما يمكنك تحقيقه. اجعل من كل شهر فرصة لتكون أفضل من الأمس.»
+        </p>
+        <p className="text-xs text-emerald-400/80 font-semibold mt-3 text-center">صَلِّ على النبي محمد ﷺ</p>
+        <div className="mt-4 flex items-center justify-end gap-2">
+          <div className="text-left">
+            <p className="text-sm font-black gradient-text">مستر عمرو خالد</p>
+            <p className="text-[10px] text-slate-400">مدرس ومؤسس المنصة</p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

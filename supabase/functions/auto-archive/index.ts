@@ -247,26 +247,37 @@ Deno.serve(async (req: Request) => {
     const homeworkDefs = (homeworkRes.data ?? []) as { id: string; group_id: string; title: string }[];
     const homeworkStatuses = (homeworkStatusRes.data ?? []) as { id: string; homework_id: string; student_id: string; status: string }[];
 
-    if (homeworkDefs.length > 0 && homeworkStatuses.length === 0) {
-      // Re-fetch homework_status with a broader query to rule out a date-range filter issue
+    if (homeworkDefs.length > 0) {
+      // Always re-fetch homework_status by homework_id to catch records
+      // whose recorded_at falls outside the month boundary but belong
+      // to this month's homework definitions.
       const hwIds = homeworkDefs.map((h) => h.id);
-      const { data: allHwStatus, error: allHwErr } = await supabase
+      const { data: linkedHwStatus, error: linkedHwErr } = await supabase
         .from("homework_status")
-        .select("id, homework_id, status")
+        .select("*")
         .in("homework_id", hwIds.slice(0, 500))
         .limit(1000);
 
-      if (!allHwErr && allHwStatus && allHwStatus.length > 0) {
-        // Source records exist but our date-filtered query returned zero — this is a recovery scenario.
-        // Relink the verified source records into the snapshot.
-        snapshot.homework_status = allHwStatus;
-        recordCounts.homework_status = allHwStatus.length;
-        await logDiagnostic(supabase, {
-          operation: "archive", module: "homework", month_key: archiveMonth,
-          entity_type: "homework_status", error_signature: "homework_status_zero_overwrite",
-          root_cause: `Date-filtered query returned 0 homework_status records, but ${allHwStatus.length} source records exist. Relinked source records into archive.`,
-          fix_status: "verified",
-        });
+      if (!linkedHwErr && linkedHwStatus) {
+        const existingIds = new Set(homeworkStatuses.map((h) => h.id));
+        const merged = [...homeworkStatuses];
+        let added = 0;
+        for (const hs of linkedHwStatus as { id: string; homework_id: string; student_id: string; status: string }[]) {
+          if (!existingIds.has(hs.id)) {
+            merged.push(hs);
+            added++;
+          }
+        }
+        if (added > 0) {
+          snapshot.homework_status = merged;
+          recordCounts.homework_status = merged.length;
+          await logDiagnostic(supabase, {
+            operation: "archive", module: "homework", month_key: archiveMonth,
+            entity_type: "homework_status", error_signature: "homework_status_link_recovery",
+            root_cause: `recorded_at date-filter missed ${added} homework_status records. Merged ${merged.length} total by homework_id link.`,
+            fix_status: "verified",
+          });
+        }
       }
     }
 
