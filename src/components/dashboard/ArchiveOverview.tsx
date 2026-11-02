@@ -2275,6 +2275,146 @@ export default function ArchiveOverview({
                           );
                         })()}
 
+                        {/* Modern performance chart — per group averages */}
+                        {archivedStudents.length > 0 && (() => {
+                          const ranked = computeGroupRankings(row);
+                          const groupStats = allGroups.filter(Boolean).map((grp) => {
+                            const groupStudents = archivedStudents.filter((s) => s.group_id === grp.id);
+                            if (groupStudents.length === 0) return null;
+                            let totalScore = 0;
+                            let totalAttendance = 0;
+                            let totalHomework = 0;
+                            let totalBehavior = 0;
+                            let count = 0;
+                            for (const s of groupStudents) {
+                              const r = ranked.get(s.id);
+                              if (r) { totalScore += r.totalScore; count++; }
+                              const att = getAttendanceForStudent(row, s.id);
+                              const totalAtt = att.present + att.absent + att.excused;
+                              if (totalAtt > 0) totalAttendance += (att.present / totalAtt) * 100;
+                              const hw = getHomeworkForStudent(row, s.id);
+                              const hwDone = hw.filter((h) => h.status === 'complete').length;
+                              if (hw.length > 0) totalHomework += (hwDone / hw.length) * 100;
+                              const beh = getBehaviorForStudent(row, s.id);
+                              const behPositive = beh.filter((b) => b.rating === 'excellent' || b.rating === 'participatory').length;
+                              if (beh.length > 0) totalBehavior += (behPositive / beh.length) * 100;
+                            }
+                            const n = groupStudents.length;
+                            return {
+                              group: grp,
+                              avgScore: count > 0 ? totalScore / count : 0,
+                              avgAttendance: n > 0 ? totalAttendance / n : 0,
+                              avgHomework: n > 0 ? totalHomework / n : 0,
+                              avgBehavior: n > 0 ? totalBehavior / n : 0,
+                              studentCount: n,
+                            };
+                          }).filter((x): x is NonNullable<typeof x> => x !== null).sort((a, b) => b.avgScore - a.avgScore);
+                          if (groupStats.length === 0) return null;
+                          const maxScore = Math.max(...groupStats.map((g) => g.avgScore), 1);
+                          return (
+                            <div className="glass-light rounded-xl p-4 space-y-3">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <BarChart3 size={14} className="text-emerald-400" />
+                                  <span className="text-xs font-bold text-white">أداء المجموعات</span>
+                                </div>
+                                <span className="text-[10px] text-slate-500">متوسط النسبة العامة لكل مجموعة</span>
+                              </div>
+                              <div className="space-y-2.5">
+                                {groupStats.map((g) => {
+                                  const pct = Math.round((g.avgScore / maxScore) * 100);
+                                  const scorePct = Math.round(g.avgScore);
+                                  const barColor = scorePct >= 80
+                                    ? 'from-emerald-500 via-teal-400 to-cyan-400'
+                                    : scorePct >= 60
+                                    ? 'from-amber-500 via-yellow-400 to-amber-300'
+                                    : 'from-rose-500 via-red-400 to-orange-400';
+                                  return (
+                                    <div key={g.group.id} className="space-y-1">
+                                      <div className="flex items-center justify-between text-[11px]">
+                                        <div className="flex items-center gap-1.5 min-w-0">
+                                          <span className="font-bold text-white truncate">{g.group.name}</span>
+                                          <span className="text-slate-500">({g.studentCount} طالب)</span>
+                                        </div>
+                                        <span className="font-black text-emerald-400 shrink-0">{scorePct}%</span>
+                                      </div>
+                                      <div className="h-2.5 bg-white/[0.06] rounded-full overflow-hidden">
+                                        <div
+                                          className={`h-full bg-gradient-to-r ${barColor} rounded-full transition-all duration-1000 ease-out`}
+                                          style={{ width: `${pct}%` }}
+                                        />
+                                      </div>
+                                      <div className="flex items-center gap-3 text-[9px] text-slate-500">
+                                        <span>حضور {Math.round(g.avgAttendance)}%</span>
+                                        <span>واجب {Math.round(g.avgHomework)}%</span>
+                                        <span>سلوك {Math.round(g.avgBehavior)}%</span>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          );
+                        })()}
+
+                        {/* Multi-session student review — separate from Honor Roll */}
+                        {isMaster && archivedStudents.length > 0 && (() => {
+                          const multiSessionStudents = archivedStudents
+                            .map((s) => {
+                              const att = getAttendanceForStudent(row, s.id);
+                              const totalSessions = att.present + att.absent + att.excused;
+                              const studentPayments = getPaymentsForStudent(row, s.id);
+                              const paidTotal = studentPayments.reduce((sum, p) => sum + (p.amount ?? 0), 0);
+                              return { student: s, totalSessions, present: att.present, absent: att.absent, paidTotal, payments: studentPayments };
+                            })
+                            .filter((x) => x.totalSessions > 1)
+                            .sort((a, b) => b.totalSessions - a.totalSessions);
+                          if (multiSessionStudents.length === 0) return null;
+                          const unpaidCount = multiSessionStudents.filter((x) => !x.student.is_exempt && (x.student.total_fees ?? 0) > 0 && x.paidTotal === 0).length;
+                          return (
+                            <div className="glass-light rounded-xl p-4 space-y-3 border border-sky-500/15">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <Users size={14} className="text-sky-400" />
+                                  <span className="text-xs font-bold text-white">مراجعة الطلاب الحاضرين</span>
+                                </div>
+                                <span className="text-[10px] text-slate-500">
+                                  {multiSessionStudents.length} طالب · {unpaidCount} غير مسدّد
+                                </span>
+                              </div>
+                              <p className="text-[10px] text-slate-500 leading-relaxed">
+                                طلاب حضروا أكثر من حصة واحدة. لا يعني الحضور دفع الرسوم — الحالة المالية من سجل المدفوعات فقط.
+                              </p>
+                              <div className="space-y-1.5 max-h-52 overflow-y-auto">
+                                {multiSessionStudents.map((x) => {
+                                  const remaining = x.student.is_exempt ? 0 : Math.max(0, (x.student.total_fees ?? 0) - x.paidTotal);
+                                  const isPaid = x.student.is_exempt || remaining <= 0;
+                                  return (
+                                    <div key={x.student.id} className="flex items-center justify-between bg-white/[0.02] rounded-lg px-3 py-2 border border-white/[0.04]">
+                                      <div className="flex items-center gap-2 min-w-0">
+                                        <span className="w-7 h-7 rounded-lg bg-sky-500/10 border border-sky-500/15 flex items-center justify-center text-[10px] font-black text-sky-400 shrink-0">
+                                          {x.totalSessions}
+                                        </span>
+                                        <div className="min-w-0">
+                                          <p className="text-xs font-bold text-white truncate">{x.student.name}</p>
+                                          <p className="text-[10px] text-slate-500">
+                                            {x.present} حضور · {x.absent} غياب
+                                          </p>
+                                        </div>
+                                      </div>
+                                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border shrink-0 ${
+                                        isPaid ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-amber-500/10 border-amber-500/20 text-amber-400'
+                                      }`}>
+                                        {x.student.is_exempt ? 'معفى' : isPaid ? 'مسدّد' : `متبقي ${formatCurrency(remaining)}`}
+                                      </span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          );
+                        })()}
+
                         {/* Student details section */}
                         {archivedStudents.length > 0 && (
                           <div className="space-y-3">
