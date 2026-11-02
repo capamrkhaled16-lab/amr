@@ -691,21 +691,17 @@ export default function AttendanceModule({ groupId, students, groupName, stageNa
     }
     addingSessionRef.current = true;
     const sessionMonth = monthLabelForDate(selectedDate);
-    setNewSessionTitle('');
-    setAddSessionOpen(false);
     try {
       const sess = await createSession(groupId, lessonNumber, sessionMonth, selectedDate);
-      if (sess) {
-        setCurrentMonth(sessionMonth);
-        setActiveSessionId(sess.id);
-        const refreshed = await fetchSessions(groupId, sessionMonth);
-        setSessions(refreshed);
-        showToast(`تم إنشاء الحصة بتاريخ ${formatArabicDate(selectedDate)}`, 'success');
-      } else {
-        showToast('تعذّر حفظ الحصة، حاول مرة أخرى', 'error');
-      }
-    } catch {
-      showToast('تعذّر حفظ الحصة، حاول مرة أخرى', 'error');
+      setNewSessionTitle('');
+      setAddSessionOpen(false);
+      setCurrentMonth(sessionMonth);
+      setActiveSessionId(sess.id);
+      const refreshed = await fetchSessions(groupId, sessionMonth);
+      setSessions(refreshed);
+      showToast(`تم إنشاء الحصة بتاريخ ${formatArabicDate(selectedDate)}`, 'success');
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'تعذّر حفظ الحصة، حاول مرة أخرى', 'error');
     } finally {
       addingSessionRef.current = false;
     }

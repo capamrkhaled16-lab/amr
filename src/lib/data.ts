@@ -1960,15 +1960,20 @@ export async function createSession(
   title: string,
   month: string,
   sessionDate?: string
-): Promise<Session | null> {
+): Promise<Session> {
   const { data, error } = await supabase.rpc('create_session_auto', {
     p_group_id: groupId,
     p_month: month,
     p_session_date: sessionDate ?? new Date().toISOString().slice(0, 10),
     p_title: title.trim() || null,
   });
-  if (error) return null;
-  if (!data || data.length === 0) return null;
+  if (error) {
+    if (error.code === '23505') {
+      throw new Error('يوجد حصة بنفس الرقم في هذا الشهر لهذه المجموعة، اختر رقماً آخر.');
+    }
+    throw new Error(error.message || 'تعذّر حفظ الحصة');
+  }
+  if (!data || data.length === 0) throw new Error('لم يتم استلام بيانات الحصة المحفوظة');
   invalidateCache(`sessions_${groupId}_${month}`);
   emitSessionsChanged(groupId);
   return data[0] as Session;
