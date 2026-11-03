@@ -394,10 +394,8 @@ function PortalContent({
   const behaviorRate = currentStats.behavior.rate ?? 0;
   const overallPercentage = useMemo(() => {
     const gradeRate = examAvg ?? 0;
-    const hasHw = hwTotal > 0;
-    if (hasHw) return Math.round((attendanceRate * 0.3 + gradeRate * 0.5 + hwRate * 0.2) * 10) / 10;
-    return Math.round((attendanceRate * 0.375 + gradeRate * 0.625) * 10) / 10;
-  }, [attendanceRate, examAvg, hwRate, hwTotal]);
+    return Math.round((gradeRate * 0.35 + attendanceRate * 0.25 + hwRate * 0.2 + behaviorRate * 0.2) * 10) / 10;
+  }, [attendanceRate, examAvg, hwRate, behaviorRate]);
 
   const motivation = useMemo(() => {
     if (overallPercentage >= 90) return { title: 'أداء استثنائي هذا الشهر!', subtitle: 'أنت في قمة مستواك — حافظ على هذا التألق وحلّق نحو أهداف أعلى' };
@@ -423,6 +421,15 @@ function PortalContent({
       return { monthKey: k, attendance: s.attendance.rate, exams: s.exams.average };
     });
   }, [recordsForStats, availableMonths, selectedMonth, prevKey]);
+
+  const radarAxes = totalAttendance > 0 && hwTotal > 0 && examAvg !== null && currentStats.behavior.rated > 0
+    ? [
+        { label: 'الحضور', value: attendanceRate },
+        { label: 'الواجبات', value: hwRate },
+        { label: 'الامتحانات', value: examAvg },
+        { label: 'السلوك', value: behaviorRate },
+      ]
+    : null;
 
   if (data.monthKey !== selectedMonth) return <FullScreenLoader label="جاري تحميل بيانات الشهر..." />;
 
@@ -486,6 +493,8 @@ function PortalContent({
       <main className="relative max-w-2xl md:max-w-4xl lg:max-w-5xl mx-auto px-4 py-5 space-y-5 pb-32">
         {/* Profile header */}
         <ProfileHeader student={student} rank={data.rank} totalInGroup={data.totalStudentsInGroup} />
+
+        <TeacherAppreciation />
 
         {/* Hero card with overall percentage and animated ring */}
         <HeroCard
@@ -572,6 +581,33 @@ function PortalContent({
               )
             }
           />
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="pp-glass p-5">
+            <div className="pp-section-title">
+              <Target className="w-3.5 h-3.5 text-violet-300" />
+              بصمة الأداء
+            </div>
+            {radarAxes ? (
+              <PerformanceRadar axes={radarAxes} />
+            ) : (
+              <p className="text-[11px] text-slate-500 py-6 text-center">تظهر بصمة الأداء عند توفر بيانات الحضور والواجبات والامتحانات والسلوك لهذا الشهر</p>
+            )}
+          </div>
+          <div className="pp-glass p-5">
+            <div className="pp-section-title">
+              <Calendar className="w-3.5 h-3.5 text-sky-300" />
+              خريطة الحضور
+            </div>
+            <AttendanceStrip records={monthFilteredAttendance} />
+            <div className="flex flex-wrap gap-3 mt-4 text-[10px] text-slate-400">
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-emerald-400" />حاضر</span>
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-rose-400" />غائب</span>
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-sky-400" />بعذر</span>
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-amber-300" />تأخر</span>
+            </div>
+          </div>
         </div>
 
         {/* Next step suggestion */}
@@ -763,22 +799,46 @@ function PortalContent({
           selectedMonth={selectedMonth}
         />
 
+        <DigitalAchievementCard
+          student={student}
+          monthLabel={getMonthLabel(selectedMonth)}
+          overallPercentage={overallPercentage}
+          rank={data.rank}
+          attendanceRate={attendanceRate}
+          hwRate={hwRate}
+          examAvg={examAvg}
+          behaviorRate={behaviorRate}
+        />
+
         {/* Signature card */}
         <SignatureCard />
+
+        <ClosingMessage />
       </main>
 
-      {/* Teacher contact: only uses a real saved number. None is stored in settings yet. */}
-      <div className="fixed bottom-5 left-4 right-4 max-w-2xl mx-auto z-30 pointer-events-none">
-        <div className="pointer-events-auto flex items-center justify-center gap-2 rounded-2xl bg-white/[0.04] border border-white/[0.08] px-4 py-3 text-xs text-slate-400">
-          <MessageCircle className="w-4 h-4" />
-          <span>رقم المعلم غير مسجل بعد للتواصل عبر واتساب</span>
-        </div>
-      </div>
+
     </div>
   );
 }
 
 /* ─── Sub-components ─── */
+
+function TeacherAppreciation() {
+  return (
+    <section className="pp-glass p-5 border-amber-400/20 bg-gradient-to-br from-amber-500/[0.08] via-white/[0.03] to-emerald-500/[0.06] relative overflow-hidden">
+      <div className="absolute -top-12 -left-12 w-32 h-32 rounded-full bg-amber-400/10 blur-3xl" />
+      <div className="relative flex items-start gap-3">
+        <div className="w-10 h-10 rounded-xl bg-amber-400/15 border border-amber-300/20 flex items-center justify-center shrink-0">
+          <Heart className="w-5 h-5 text-amber-300" />
+        </div>
+        <div>
+          <p className="text-sm font-bold text-white leading-relaxed">أنا فخور بكل خطوة بتاخدها نحو النجاح. استمر في الاجتهاد، وثق أن كل مجهود بتبذله النهارده بيقربك من حلمك. القادم أجمل بإذن الله</p>
+          <p className="text-xs text-amber-300/90 font-semibold mt-3">مع تحيات مستر عمرو خالد — طلاب الخالد غير أي حد</p>
+        </div>
+      </div>
+    </section>
+  );
+}
 
 function ProfileHeader({ student, rank, totalInGroup }: { student: ParentData['student']; rank: number | null; totalInGroup: number }) {
   const initials = student.name?.charAt(0) ?? '؟';
@@ -807,7 +867,7 @@ function ProfileHeader({ student, rank, totalInGroup }: { student: ParentData['s
           {rank !== null && totalInGroup > 0 && (
             <div className="flex items-center gap-1.5 mt-2">
               <Target className="w-3 h-3 text-amber-400" />
-              <span className="text-[11px] text-slate-300 font-semibold">الترتيب: <span className="text-amber-400 font-black">{rank}</span> من {totalInGroup}</span>
+              <span className="text-[11px] text-slate-300 font-semibold">{rankLabel(rank)}</span>
             </div>
           )}
         </div>
@@ -863,7 +923,7 @@ function HeroCard({ overallPercentage, rank, totalInGroup, monthLabel, motivatio
             <span className="text-[10px] font-bold text-emerald-400/80">{monthLabel}</span>
             {rank !== null && totalInGroup > 0 && (
               <span className="pp-badge border-amber-500/20 text-amber-400 bg-amber-500/10">
-                <Trophy className="w-2.5 h-2.5" />الترتيب {rank} من {totalInGroup}
+                <Trophy className="w-2.5 h-2.5" />{rankLabel(rank)}
               </span>
             )}
           </div>
@@ -879,6 +939,11 @@ function HeroCard({ overallPercentage, rank, totalInGroup, monthLabel, motivatio
       </div>
     </div>
   );
+}
+
+function rankLabel(rank: number | null): string {
+  const labels = ['المركز الأول', 'المركز الثاني', 'المركز الثالث', 'المركز الرابع', 'المركز الخامس', 'المركز السادس', 'المركز السابع', 'المركز الثامن', 'المركز التاسع', 'المركز العاشر'];
+  return rank && labels[rank - 1] ? labels[rank - 1] : 'المركز الرسمي غير متاح';
 }
 
 function MiniIndicator({ label, value, color, dimmed }: { label: string; value: number; color: string; dimmed?: boolean }) {
@@ -1075,6 +1140,59 @@ function JourneyTimeline({ attendance, homework, behavior, centerGrades, centerE
   );
 }
 
+function DigitalAchievementCard({ student, monthLabel, overallPercentage, rank, attendanceRate, hwRate, examAvg, behaviorRate }: {
+  student: ParentData['student'];
+  monthLabel: string;
+  overallPercentage: number;
+  rank: number | null;
+  attendanceRate: number;
+  hwRate: number;
+  examAvg: number | null;
+  behaviorRate: number;
+}) {
+  return (
+    <section className="pp-glass p-5 border border-amber-400/20 bg-gradient-to-br from-slate-950 via-emerald-950/40 to-black relative overflow-hidden">
+      <div className="absolute -top-16 -left-16 w-40 h-40 rounded-full bg-amber-400/10 blur-3xl" />
+      <div className="relative">
+        <div className="flex items-start justify-between gap-3 mb-5">
+          <div>
+            <p className="text-[10px] uppercase tracking-[0.28em] text-amber-300/80 font-bold">Achievement Card</p>
+            <h3 className="text-lg font-black text-white mt-1">بطاقة الإنجاز الشهرية</h3>
+            <p className="text-[11px] text-slate-400 mt-1">{monthLabel} · بيانات محفوظة من سجل الطالب</p>
+          </div>
+          <Award className="w-7 h-7 text-amber-300" />
+        </div>
+        <div className="flex items-center gap-3 border-b border-white/[0.08] pb-4">
+          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-700 flex items-center justify-center text-xl font-black text-white">{student.name?.charAt(0) ?? '؟'}</div>
+          <div>
+            <p className="text-base font-black text-white">{student.name}</p>
+            <p className="text-[11px] text-slate-400">{student.grade_name ?? 'الطالب'} · {student.group_name ?? 'المجموعة غير محددة'}</p>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-4">
+          <AchievementMetric label="المستوى العام" value={`${Math.round(overallPercentage)}%`} />
+          <AchievementMetric label="الترتيب الرسمي" value={rankLabel(rank)} />
+          <AchievementMetric label="الحضور" value={`${Math.round(attendanceRate)}%`} />
+          <AchievementMetric label="الواجبات" value={`${Math.round(hwRate)}%`} />
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-slate-300">
+          <span className="px-2 py-1 rounded-lg bg-amber-400/10 border border-amber-400/15">الامتحانات: {examAvg === null ? 'غير متاح' : `${Math.round(examAvg)}%`}</span>
+          <span className="px-2 py-1 rounded-lg bg-emerald-400/10 border border-emerald-400/15">السلوك: {Math.round(behaviorRate)}%</span>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function AchievementMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl bg-white/[0.04] border border-white/[0.06] p-2.5">
+      <p className="text-[9px] text-slate-500 mb-1">{label}</p>
+      <p className="text-xs font-black text-white leading-tight">{value}</p>
+    </div>
+  );
+}
+
 function SignatureCard() {
   return (
     <div className="pp-glass p-5 pp-neon-gold relative overflow-hidden">
@@ -1099,6 +1217,96 @@ function SignatureCard() {
         </div>
       </div>
     </div>
+  );
+}
+
+function PerformanceRadar({ axes }: { axes: { label: string; value: number }[] }) {
+  const size = 240;
+  const center = size / 2;
+  const radius = 72;
+  const angles = [-90, 0, 90, 180];
+  const toPoint = (value: number, angle: number) => {
+    const rad = (angle * Math.PI) / 180;
+    const d = (radius * value) / 100;
+    return { x: center + d * Math.cos(rad), y: center + d * Math.sin(rad) };
+  };
+  const ringPoints = (scale: number) => angles.map((a) => toPoint(scale, a)).map((p) => `${p.x},${p.y}`).join(' ');
+  const dataPoints = axes.map((a, i) => toPoint(Math.min(100, Math.max(0, a.value)), angles[i]));
+  const dataPath = dataPoints.map((p) => `${p.x},${p.y}`).join(' ');
+
+  return (
+    <svg viewBox={`0 0 ${size} ${size}`} className="w-full max-w-[260px] mx-auto overflow-visible" role="img" aria-label="بصمة الأداء">
+      <defs>
+        <linearGradient id="pp-radar-fill" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#10B981" stopOpacity="0.5" />
+          <stop offset="60%" stopColor="#60A5FA" stopOpacity="0.22" />
+          <stop offset="100%" stopColor="#A78BFA" stopOpacity="0.3" />
+        </linearGradient>
+      </defs>
+      {[25, 50, 75, 100].map((s) => (
+        <polygon key={s} points={ringPoints(s)} fill="none" stroke="rgba(248,250,252,0.08)" strokeWidth="1" />
+      ))}
+      {angles.map((a) => {
+        const p = toPoint(100, a);
+        return <line key={a} x1={center} y1={center} x2={p.x} y2={p.y} stroke="rgba(248,250,252,0.08)" strokeWidth="1" />;
+      })}
+      <polygon points={dataPath} fill="url(#pp-radar-fill)" stroke="#2DD4BF" strokeWidth="2" strokeLinejoin="round" style={{ transition: 'all 0.9s cubic-bezier(0.4,0,0.2,1)' }} />
+      {dataPoints.map((p, i) => (
+        <circle key={axes[i].label} cx={p.x} cy={p.y} r="4" fill="#F8FAFC" stroke="#10B981" strokeWidth="2" />
+      ))}
+      {axes.map((a, i) => {
+        const p = toPoint(130, angles[i]);
+        return (
+          <text key={a.label} x={p.x} y={p.y} textAnchor="middle" dominantBaseline="middle" fill="#CBD5E1" style={{ fontSize: 11, fontWeight: 700 }}>
+            {`${a.label} ${Math.round(a.value)}%`}
+          </text>
+        );
+      })}
+    </svg>
+  );
+}
+
+function AttendanceStrip({ records }: { records: { id: string; status: string; attendance_date: string }[] }) {
+  if (records.length === 0) {
+    return <p className="text-[11px] text-slate-500 py-6 text-center">لا توجد سجلات حضور محفوظة لهذا الشهر</p>;
+  }
+  const toneByStatus: Record<string, string> = {
+    present: 'bg-emerald-400 shadow-emerald-400/30',
+    absent: 'bg-rose-400 shadow-rose-400/30',
+    excused: 'bg-sky-400 shadow-sky-400/30',
+    excused_absence: 'bg-sky-400 shadow-sky-400/30',
+    late: 'bg-amber-300 shadow-amber-300/30',
+  };
+  const sorted = [...records].sort((a, b) => a.attendance_date.localeCompare(b.attendance_date));
+  return (
+    <div className="flex flex-wrap gap-2">
+      {sorted.map((r, i) => (
+        <span
+          key={r.id}
+          title={formatArabicDate(r.attendance_date)}
+          style={{ animationDelay: `${i * 40}ms` }}
+          className={`w-4 h-4 rounded-md shadow-md animate-fade-in ${toneByStatus[r.status] ?? 'bg-slate-600 shadow-slate-600/30'}`}
+        />
+      ))}
+    </div>
+  );
+}
+
+function ClosingMessage() {
+  return (
+    <section className="relative overflow-hidden rounded-3xl p-6 border border-[#D6B56D]/30 bg-gradient-to-br from-[#111827] via-[#0B0D12] to-[#0F2A22] shadow-2xl shadow-black/60">
+      <div className="absolute -top-16 right-0 w-48 h-48 rounded-full bg-[#D6B56D]/15 blur-3xl pointer-events-none" />
+      <div className="absolute -bottom-16 left-0 w-44 h-44 rounded-full bg-[#10B981]/15 blur-3xl pointer-events-none" />
+      <div className="relative">
+        <p className="text-[10px] uppercase tracking-[0.3em] text-[#D6B56D]/90 font-bold mb-3">كلمة أخيرة</p>
+        <p className="text-sm text-[#F8FAFC] leading-[2] font-medium">
+          وفي النهاية، افتكر دايمًا إن النجاح مش خطوة واحدة، النجاح مشوار وكل يوم بتتقدم فيه هو إنجاز جديد. أنا مستني أشوفك دايمًا في أحسن مكان، وواثق إنك تقدر تحقق أكتر وأكتر. ربنا يوفقك ويفرحنا بيك.
+        </p>
+        <div className="mt-5 pt-4 border-t border-white/10">
+          <p className="text-xs font-black text-[#D6B56D]">مستر عمرو خالد — طلاب الخالد غير أي حد</p>
+        </div>
+      </div>
+    </section>
   );
 }
 

@@ -107,6 +107,8 @@ type ArchivedPayment = {
   payment_date: string;
   note?: string | null;
   receipt_number?: string | null;
+  is_deleted?: boolean;
+  month_key?: string | null;
 };
 
 type ArchivedGrade = {
@@ -162,6 +164,23 @@ type ArchivedBehaviorFull = {
 };
 
 type ArchivedBehavior = ArchivedBehaviorFull;
+type OfficialArchiveRank = { id: string; group_id?: string | null; rank?: number; overall_score?: number; exams_taken?: number };
+
+function getOfficialRankingsStatic(row: ArchiveRow): Map<string, { rank: number; totalScore: number; examCount: number }> {
+  const raw = row.archive_data?.hall_of_fame;
+  if (!Array.isArray(raw)) return new Map();
+  const entries = raw.filter((entry): entry is OfficialArchiveRank => Boolean(entry && typeof entry === 'object' && typeof (entry as OfficialArchiveRank).id === 'string'));
+  const result = new Map<string, { rank: number; totalScore: number; examCount: number }>();
+  for (const entry of entries) {
+    if (typeof entry.rank !== 'number' || entry.rank < 1) continue;
+    result.set(entry.id, {
+      rank: entry.rank,
+      totalScore: typeof entry.overall_score === 'number' ? entry.overall_score : 0,
+      examCount: entry.exams_taken ?? 0,
+    });
+  }
+  return result;
+}
 
 const AR_MONTHS: Record<string, string> = {
   '01': 'يناير', '02': 'فبراير', '03': 'مارس', '04': 'أبريل',
@@ -227,7 +246,7 @@ function previousMonthKey(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
-const RANK_LABELS = ['المركز الأول', 'المركز الثاني', 'المركز الثالث', 'المركز الرابع', 'المركز الخامس'];
+const RANK_LABELS = ['المركز الأول', 'المركز الثاني', 'المركز الثالث', 'المركز الرابع', 'المركز الخامس', 'المركز السادس', 'المركز السابع', 'المركز الثامن', 'المركز التاسع', 'المركز العاشر'];
 const RANK_STYLES = [
   'bg-gradient-to-r from-amber-500/25 to-yellow-500/15 border-amber-400/50 text-amber-200',
   'bg-slate-300/12 border-slate-200/25 text-slate-200',
@@ -371,7 +390,7 @@ function getArchivedGradesStatic(row: ArchiveRow): ArchivedGrade[] {
 }
 
 function RankBadge({ rank }: { rank: number }) {
-  if (rank < 1 || rank > 5) return null;
+  if (rank < 1 || rank > RANK_LABELS.length) return null;
   const style = RANK_STYLES[rank - 1];
   const label = RANK_LABELS[rank - 1];
   if (rank === 1) {
@@ -2153,7 +2172,7 @@ export default function ArchiveOverview({
               ? paymentFilteredStudents.filter((s) => s.name.toLowerCase().includes(searchQuery))
               : paymentFilteredStudents;
             const totalCollected = getTotalCollected(row);
-            const rowRankings = computeGroupRankings(row);
+            const rowRankings = getOfficialRankingsStatic(row);
 
             return (
               <motion.div key={row.id} layout className="glass-card rounded-2xl overflow-hidden">
@@ -2277,7 +2296,7 @@ export default function ArchiveOverview({
 
                         {/* Modern performance chart — per group averages */}
                         {archivedStudents.length > 0 && (() => {
-                          const ranked = computeGroupRankings(row);
+                          const ranked = getOfficialRankingsStatic(row);
                           const groupStats = allGroups.filter(Boolean).map((grp) => {
                             const groupStudents = archivedStudents.filter((s) => s.group_id === grp.id);
                             if (groupStudents.length === 0) return null;
@@ -2362,15 +2381,17 @@ export default function ArchiveOverview({
                           const multiSessionStudents = archivedStudents
                             .map((s) => {
                               const att = getAttendanceForStudent(row, s.id);
-                              const totalSessions = att.present + att.absent + att.excused;
+                              const sessionIds = new Set(att.records.map((record) => record.session_id).filter((id): id is string => Boolean(id)));
+                              const totalSessions = sessionIds.size;
                               const studentPayments = getPaymentsForStudent(row, s.id);
                               const paidTotal = studentPayments.reduce((sum, p) => sum + (p.amount ?? 0), 0);
-                              return { student: s, totalSessions, present: att.present, absent: att.absent, paidTotal, payments: studentPayments };
+                              const paymentReview = studentPayments.some((p) => p.is_deleted === true || !Number.isFinite(p.amount) || p.amount <= 0);
+                              return { student: s, totalSessions, sessionIds, present: att.present, absent: att.absent, paidTotal, paymentReview, payments: studentPayments };
                             })
                             .filter((x) => x.totalSessions > 1)
                             .sort((a, b) => b.totalSessions - a.totalSessions);
                           if (multiSessionStudents.length === 0) return null;
-                          const unpaidCount = multiSessionStudents.filter((x) => !x.student.is_exempt && (x.student.total_fees ?? 0) > 0 && x.paidTotal === 0).length;
+                          const unpaidCount = multiSessionStudents.filter((x) => !x.student.is_exempt && (x.student.total_fees ?? 0) > 0 && x.paidTotal < (x.student.total_fees ?? 0)).length;
                           return (
                             <div className="glass-light rounded-xl p-4 space-y-3 border border-sky-500/15">
                               <div className="flex items-center justify-between">
@@ -2398,14 +2419,14 @@ export default function ArchiveOverview({
                                         <div className="min-w-0">
                                           <p className="text-xs font-bold text-white truncate">{x.student.name}</p>
                                           <p className="text-[10px] text-slate-500">
-                                            {x.present} حضور · {x.absent} غياب
+                                            {x.present} حضور · {x.absent} غياب · {Array.from(x.sessionIds).slice(0, 3).join('، ')}
                                           </p>
                                         </div>
                                       </div>
                                       <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border shrink-0 ${
                                         isPaid ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-amber-500/10 border-amber-500/20 text-amber-400'
                                       }`}>
-                                        {x.student.is_exempt ? 'معفى' : isPaid ? 'مسدّد' : `متبقي ${formatCurrency(remaining)}`}
+                                        {x.paymentReview ? 'مراجعة دفعات' : x.student.is_exempt ? 'معفى' : isPaid ? 'مسدّد' : `متبقي ${formatCurrency(remaining)}`}
                                       </span>
                                     </div>
                                   );
@@ -2518,16 +2539,17 @@ export default function ArchiveOverview({
                                             {s.name}
                                           </button>
                                           <div className="flex items-center gap-2 mt-1 flex-wrap">
-                                            {studentRank && studentRank.rank <= 5 && (
+                                            {studentRank && studentRank.rank <= RANK_LABELS.length && (
                                               <RankBadge rank={studentRank.rank} />
                                             )}
                                             {isMaster && (() => {
                                               const isPaid = s.is_exempt || remaining <= 0;
+                                              const paymentReview = studentPayments.some((p) => p.is_deleted === true || !Number.isFinite(p.amount) || p.amount <= 0);
                                               return (
                                                 <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                                                  isPaid ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-amber-500/10 border-amber-500/20 text-amber-400'
+                                                  paymentReview ? 'bg-red-500/10 border-red-500/20 text-red-300' : isPaid ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-amber-500/10 border-amber-500/20 text-amber-400'
                                                 }`}>
-                                                  {isPaid ? <><CheckCircle2 size={9} /> مسدّد</> : <><AlertTriangle size={9} /> متبقي {formatCurrency(remaining)}</>}
+                                                  {paymentReview ? <><AlertTriangle size={9} /> مراجعة دفعات</> : isPaid ? <><CheckCircle2 size={9} /> مسدّد</> : <><AlertTriangle size={9} /> متبقي {formatCurrency(remaining)}</>}
                                                 </span>
                                               );
                                             })()}
@@ -2922,7 +2944,7 @@ export default function ArchiveOverview({
           const homework = getHomeworkForStudent(row, s.id);
           const behavior = getBehaviorForStudent(row, s.id);
           const remaining = s.is_exempt ? 0 : Math.max(0, (s.total_fees ?? 0) - paidTotal);
-          const detailRank = computeGroupRankings(row).get(s.id);
+          const detailRank = getOfficialRankingsStatic(row).get(s.id);
           return (
             <>
             <div className="space-y-5">
@@ -4476,7 +4498,7 @@ export default function ArchiveOverview({
             return <p className="text-sm text-slate-400 text-center py-4">لا يوجد أرشيف لهذه المجموعة بعد.</p>;
           }
           const latestArchive = groupArchives[0];
-          const rankings = computeGroupRankings(latestArchive);
+          const rankings = getOfficialRankingsStatic(latestArchive);
           const groupStudents = getArchivedStudents(latestArchive).filter((s) => s.group_id === selectedGroup.id);
           const ranked = groupStudents
             .map((s) => {
@@ -4514,7 +4536,7 @@ export default function ArchiveOverview({
                     : rank === 2 ? 'bg-slate-300/8 border-slate-200/20'
                     : rank === 3 ? 'bg-orange-600/10 border-orange-500/20'
                     : 'glass-light border-white/5';
-                  const rankLabel = RANK_LABELS[Math.min(rank, 5) - 1] ?? `المركز ${rank}`;
+                  const rankLabel = RANK_LABELS[rank - 1] ?? 'المركز الرسمي غير متاح';
                   return (
                     <div key={entry.student.id} className={`flex items-center justify-between rounded-xl border px-4 py-3 ${bgClass}`}>
                       <div className="flex items-center gap-3 min-w-0">
