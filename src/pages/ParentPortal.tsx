@@ -442,7 +442,7 @@ function PortalContent({
   if (data.monthKey !== selectedMonth) return <FullScreenLoader label="جاري تحميل بيانات الشهر..." />;
 
   return (
-    <div className="min-h-screen bg-black text-white" dir="rtl" lang="ar">
+    <div className="pp-report min-h-screen text-white" dir="rtl" lang="ar">
       {/* Ambient glow background */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
         <div className="absolute -top-40 -right-40 w-96 h-96 bg-emerald-600/8 rounded-full blur-3xl" />
@@ -498,7 +498,7 @@ function PortalContent({
       </header>
 
       {/* Vertical scroll content */}
-      <main className="relative max-w-2xl md:max-w-4xl lg:max-w-5xl mx-auto px-4 py-5 space-y-5 pb-32">
+      <main className="pp-report-main relative max-w-2xl md:max-w-4xl lg:max-w-6xl mx-auto px-3 sm:px-5 py-5 sm:py-8 space-y-4 sm:space-y-6 pb-32">
         {/* Profile header */}
         <ProfileHeader student={student} rank={data.rank} totalInGroup={data.totalStudentsInGroup} monthLabel={getMonthLabel(selectedMonth)} />
 
@@ -616,7 +616,7 @@ function PortalContent({
         <MonthSelector selectedMonth={selectedMonth} onMonthChange={onMonthChange} availableMonths={availableMonths} />
 
         {/* Four detailed performance cards */}
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <PerformanceCard
             icon={<CheckCircle2 className="w-4 h-4" />}
             title="الحضور"
@@ -883,7 +883,7 @@ function TeacherMessage() {
 function ProfileHeader({ student, rank, totalInGroup, monthLabel }: { student: ParentData['student']; rank: number | null; totalInGroup: number; monthLabel: string }) {
   const initials = student.name?.charAt(0) ?? '؟';
   return (
-    <section className="pp-profile pp-glass p-5 sm:p-6">
+    <section className="pp-profile pp-glass p-5 sm:p-7">
       <div className="absolute -top-16 -right-10 h-40 w-40 rounded-full bg-amber-400/10 blur-3xl pointer-events-none" />
       <div className="relative flex items-center gap-4 sm:gap-5">
         <div className="relative shrink-0">
@@ -930,7 +930,7 @@ function HeroCard({ overallPercentage, rank, totalInGroup, monthLabel, motivatio
   const ringColor = overallPercentage >= 90 ? '#10b981' : overallPercentage >= 75 ? '#34d399' : overallPercentage >= 60 ? '#f59e0b' : '#f43f5e';
 
   return (
-    <div className="pp-hero pp-glass p-5 sm:p-6 pp-neon-gold relative overflow-hidden">
+    <section className="pp-hero pp-glass p-5 sm:p-7 pp-neon-gold relative overflow-hidden" aria-label={`المستوى العام لشهر ${monthLabel}`}>
       <div className="absolute -top-24 right-1/3 h-56 w-56 rounded-full bg-emerald-400/10 blur-3xl pointer-events-none" />
       <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center">
         <div className="relative w-28 h-28 shrink-0">
@@ -977,7 +977,7 @@ function HeroCard({ overallPercentage, rank, totalInGroup, monthLabel, motivatio
           </div>
         </div>
       </div>
-    </div>
+    </section>
   );
 }
 
