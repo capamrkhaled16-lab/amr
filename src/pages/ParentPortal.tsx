@@ -67,6 +67,7 @@ import { PDFButton } from '@/components/ui/PDFButton';
 import { exportParentPortalPDF } from '@/lib/pdfExport';
 import { computeMonthStats, previousMonthKey } from '@/lib/parentPortalStats';
 import { MonthComparison, MonthlyTrendChart, CalcNote } from '@/components/parent-portal/ParentInsights';
+import MotivationCard from '@/components/parent-portal/MotivationCard';
 
 type LoadState = 'loading' | 'success' | 'error' | 'notfound';
 
@@ -607,6 +608,8 @@ function PortalContent({
           behaviorRate={behaviorRate}
           trendPoints={trendPoints}
         />
+
+        <MotivationCard overallPercentage={overallPercentage} />
 
         {/* Month selector */}
         <MonthSelector selectedMonth={selectedMonth} onMonthChange={onMonthChange} availableMonths={availableMonths} />
