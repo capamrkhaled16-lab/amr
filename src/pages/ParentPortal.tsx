@@ -501,6 +501,99 @@ function PortalContent({
         {/* Profile header */}
         <ProfileHeader student={student} rank={data.rank} totalInGroup={data.totalStudentsInGroup} monthLabel={getMonthLabel(selectedMonth)} />
 
+        {/* Financial summary + timeline */}
+        <div className="pp-glass p-5">
+          <div className="pp-section-title">
+            <Wallet className="w-3.5 h-3.5 text-emerald-400" />
+            الملخص المالي
+          </div>
+          <p className="text-[10px] text-slate-400 mb-3 leading-relaxed">
+            نسبة التحصيل = المبلغ المدفوع ÷ المستحق لهذا الشهر × 100، وتحسب من سجل المدفوعات المسجل لهذا الشهر فقط.
+          </p>
+          {isExempt ? (
+            <div className="bg-emerald-500/10 rounded-xl p-4 text-center border border-emerald-500/15">
+              <p className="text-sm font-bold text-emerald-400">معفى من الرسوم</p>
+            </div>
+          ) : feesDue === 0 ? (
+            <div className="bg-white/[0.03] rounded-xl p-4 text-center">
+              <p className="text-sm text-slate-400">لا توجد رسوم مسجلة لهذا الشهر</p>
+            </div>
+          ) : (
+            <>
+              <div className="mb-4">
+                {feesRemaining === 0 ? (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/15 border border-emerald-500/25 text-emerald-400 text-xs font-bold">
+                    <CheckCircle2 className="w-3.5 h-3.5" /> مسدد بالكامل
+                  </span>
+                ) : feesPaid > 0 ? (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-500/15 border border-amber-500/25 text-amber-400 text-xs font-bold">
+                    <Clock className="w-3.5 h-3.5" /> مسدد جزئياً
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-rose-500/15 border border-rose-500/25 text-rose-400 text-xs font-bold">
+                    <AlertCircle className="w-3.5 h-3.5" /> لم يسدد
+                  </span>
+                )}
+              </div>
+              <div className="grid grid-cols-3 gap-2.5 mb-4">
+                <FinanceTile label="إجمالي الرسوم" value={formatCurrency(feesDue)} color="text-white" />
+                <FinanceTile label="المبلغ المدفوع" value={formatCurrency(feesPaid)} color="text-emerald-400" />
+                <FinanceTile label="المتبقي" value={formatCurrency(feesRemaining)} color={feesRemaining > 0 ? 'text-rose-400' : 'text-emerald-400'} highlight />
+              </div>
+              <div className="mb-2">
+                <div className="flex justify-between text-[10px] text-slate-400 mb-1.5">
+                  <span>نسبة التحصيل</span>
+                  <span className="font-bold text-emerald-400">{collectionRate}%</span>
+                </div>
+                <div className="h-2.5 bg-white/[0.06] rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-400 rounded-full transition-all duration-700 ease-out"
+                    style={{ width: `${collectionRate}%` }}
+                  />
+                </div>
+              </div>
+            </>
+          )}
+
+          {monthFilteredPayments.length > 0 && (
+            <div className="mt-4 pt-4 border-t border-white/[0.06]">
+              <div className="flex items-center gap-1.5 mb-3">
+                <Receipt className="w-3.5 h-3.5 text-emerald-400" />
+                <span className="text-[11px] font-bold text-slate-300">سجل المدفوعات</span>
+              </div>
+              <div className="space-y-0">
+                {monthFilteredPayments.map((p, i) => (
+                  <div key={p.id} className="flex gap-3">
+                    {/* Timeline line + dot */}
+                    <div className="flex flex-col items-center shrink-0">
+                      <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 ring-2 ring-emerald-500/20 mt-1.5" />
+                      {i < monthFilteredPayments.length - 1 && <div className="w-px flex-1 bg-white/[0.08] min-h-[28px]" />}
+                    </div>
+                    <div className="flex-1 pb-4">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-bold text-white">{formatCurrency(p.amount)} ج.م</span>
+                        <span className="text-[10px] text-slate-400">{formatArabicDate(p.payment_date)}</span>
+                      </div>
+                      {p.receipt_number && <p className="text-[10px] text-slate-500 mt-0.5" dir="ltr">رقم الإيصال: {p.receipt_number}</p>}
+                      {p.recorded_by && <p className="text-[10px] text-slate-500 mt-0.5">استلم: {p.recorded_by}</p>}
+                      {p.note && <p className="text-[10px] text-slate-400 mt-0.5">{p.note}</p>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {monthFilteredPayments.length === 0 && !isExempt && feesDue > 0 && (
+            <div className="flex flex-col items-center justify-center py-6 text-center mt-3">
+              <div className="w-12 h-12 rounded-xl bg-white/[0.04] flex items-center justify-center text-slate-500 mb-2">
+                <Wallet className="w-5 h-5" />
+              </div>
+              <p className="text-xs text-slate-400">لم يتم تسجيل مدفوعات لهذا الشهر</p>
+            </div>
+          )}
+        </div>
+
         {/* Hero card with overall percentage and animated ring */}
         <HeroCard
           overallPercentage={overallPercentage}
@@ -671,99 +764,6 @@ function PortalContent({
             </div>
           </div>
         )}
-
-        {/* Financial summary + timeline */}
-        <div className="pp-glass p-5">
-          <div className="pp-section-title">
-            <Wallet className="w-3.5 h-3.5 text-emerald-400" />
-            الملخص المالي
-          </div>
-          <p className="text-[10px] text-slate-400 mb-3 leading-relaxed">
-            نسبة التحصيل = المبلغ المدفوع ÷ المستحق لهذا الشهر × 100، وتحسب من سجل المدفوعات المسجل لهذا الشهر فقط.
-          </p>
-          {isExempt ? (
-            <div className="bg-emerald-500/10 rounded-xl p-4 text-center border border-emerald-500/15">
-              <p className="text-sm font-bold text-emerald-400">معفى من الرسوم</p>
-            </div>
-          ) : feesDue === 0 ? (
-            <div className="bg-white/[0.03] rounded-xl p-4 text-center">
-              <p className="text-sm text-slate-400">لا توجد رسوم مسجلة لهذا الشهر</p>
-            </div>
-          ) : (
-            <>
-              <div className="mb-4">
-                {feesRemaining === 0 ? (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/15 border border-emerald-500/25 text-emerald-400 text-xs font-bold">
-                    <CheckCircle2 className="w-3.5 h-3.5" /> مسدد بالكامل
-                  </span>
-                ) : feesPaid > 0 ? (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-500/15 border border-amber-500/25 text-amber-400 text-xs font-bold">
-                    <Clock className="w-3.5 h-3.5" /> مسدد جزئياً
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-rose-500/15 border border-rose-500/25 text-rose-400 text-xs font-bold">
-                    <AlertCircle className="w-3.5 h-3.5" /> لم يسدد
-                  </span>
-                )}
-              </div>
-              <div className="grid grid-cols-3 gap-2.5 mb-4">
-                <FinanceTile label="إجمالي الرسوم" value={formatCurrency(feesDue)} color="text-white" />
-                <FinanceTile label="المبلغ المدفوع" value={formatCurrency(feesPaid)} color="text-emerald-400" />
-                <FinanceTile label="المتبقي" value={formatCurrency(feesRemaining)} color={feesRemaining > 0 ? 'text-rose-400' : 'text-emerald-400'} highlight />
-              </div>
-              <div className="mb-2">
-                <div className="flex justify-between text-[10px] text-slate-400 mb-1.5">
-                  <span>نسبة التحصيل</span>
-                  <span className="font-bold text-emerald-400">{collectionRate}%</span>
-                </div>
-                <div className="h-2.5 bg-white/[0.06] rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-400 rounded-full transition-all duration-700 ease-out"
-                    style={{ width: `${collectionRate}%` }}
-                  />
-                </div>
-              </div>
-            </>
-          )}
-
-          {monthFilteredPayments.length > 0 && (
-            <div className="mt-4 pt-4 border-t border-white/[0.06]">
-              <div className="flex items-center gap-1.5 mb-3">
-                <Receipt className="w-3.5 h-3.5 text-emerald-400" />
-                <span className="text-[11px] font-bold text-slate-300">سجل المدفوعات</span>
-              </div>
-              <div className="space-y-0">
-                {monthFilteredPayments.map((p, i) => (
-                  <div key={p.id} className="flex gap-3">
-                    {/* Timeline line + dot */}
-                    <div className="flex flex-col items-center shrink-0">
-                      <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 ring-2 ring-emerald-500/20 mt-1.5" />
-                      {i < monthFilteredPayments.length - 1 && <div className="w-px flex-1 bg-white/[0.08] min-h-[28px]" />}
-                    </div>
-                    <div className="flex-1 pb-4">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-bold text-white">{formatCurrency(p.amount)} ج.م</span>
-                        <span className="text-[10px] text-slate-400">{formatArabicDate(p.payment_date)}</span>
-                      </div>
-                      {p.receipt_number && <p className="text-[10px] text-slate-500 mt-0.5" dir="ltr">رقم الإيصال: {p.receipt_number}</p>}
-                      {p.recorded_by && <p className="text-[10px] text-slate-500 mt-0.5">استلم: {p.recorded_by}</p>}
-                      {p.note && <p className="text-[10px] text-slate-400 mt-0.5">{p.note}</p>}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {monthFilteredPayments.length === 0 && !isExempt && feesDue > 0 && (
-            <div className="flex flex-col items-center justify-center py-6 text-center mt-3">
-              <div className="w-12 h-12 rounded-xl bg-white/[0.04] flex items-center justify-center text-slate-500 mb-2">
-                <Wallet className="w-5 h-5" />
-              </div>
-              <p className="text-xs text-slate-400">لم يتم تسجيل مدفوعات لهذا الشهر</p>
-            </div>
-          )}
-        </div>
 
         {/* Grades section */}
         <GradesSection

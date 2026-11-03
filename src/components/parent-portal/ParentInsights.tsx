@@ -72,14 +72,13 @@ function describeChange(row: MetricRow): { text: string; improved: boolean | nul
   if (row.current === null || row.previous === null) {
     return { text: 'لا يمكن المقارنة لعدم توفر بيانات لأحد الشهرين', improved: null };
   }
-  const diff = row.current - row.previous;
+  const diff = Math.round((row.current - row.previous) * 10) / 10;
   if (diff === 0) return { text: 'بدون تغيير عن الشهر السابق', improved: null };
   const improved = row.higherIsBetter ? diff > 0 : diff < 0;
-  const direction = diff > 0 ? 'ارتفع' : 'انخفض';
-  return {
-    text: `${direction} بمقدار ${Math.abs(diff)} نقطة (${row.previousDetail} ← ${row.currentDetail})`,
-    improved,
-  };
+  const text = diff > 0
+    ? `زيادة بنسبة +${diff}% عن الشهر السابق`
+    : `انخفاض بنسبة ${diff}% عن الشهر السابق`;
+  return { text, improved };
 }
 
 export function MonthComparison({ current, previous, currentKey, previousKey }: { current: MonthStats; previous: MonthStats; currentKey: string; previousKey: string }) {
@@ -94,7 +93,7 @@ export function MonthComparison({ current, previous, currentKey, previousKey }: 
         {rows.map((row) => {
           const change = describeChange(row);
           const Icon = change.improved === null ? Minus : change.improved ? TrendingUp : TrendingDown;
-          const tone = change.improved === null ? 'text-slate-400' : change.improved ? 'text-emerald-400' : 'text-red-400';
+          const tone = change.improved === null ? 'text-slate-400' : change.improved ? 'text-emerald-400' : 'text-rose-400';
           return (
             <div key={row.key} className="bg-white/[0.03] rounded-xl p-3 border border-white/[0.04]">
               <div className="flex items-center justify-between gap-3">
