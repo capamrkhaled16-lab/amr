@@ -502,6 +502,8 @@ function PortalContent({
         {/* Profile header */}
         <ProfileHeader student={student} rank={data.rank} totalInGroup={data.totalStudentsInGroup} monthLabel={getMonthLabel(selectedMonth)} />
 
+        <MonthSelector selectedMonth={selectedMonth} onMonthChange={onMonthChange} availableMonths={availableMonths} />
+
         {/* Financial summary + timeline */}
         <div className="pp-glass p-5">
           <div className="pp-section-title">
@@ -611,9 +613,6 @@ function PortalContent({
         />
 
         <MotivationCard overallPercentage={overallPercentage} />
-
-        {/* Month selector */}
-        <MonthSelector selectedMonth={selectedMonth} onMonthChange={onMonthChange} availableMonths={availableMonths} />
 
         {/* Four detailed performance cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -883,7 +882,7 @@ function TeacherMessage() {
 function ProfileHeader({ student, rank, totalInGroup, monthLabel }: { student: ParentData['student']; rank: number | null; totalInGroup: number; monthLabel: string }) {
   const initials = student.name?.charAt(0) ?? '؟';
   return (
-    <section className="pp-profile pp-glass p-5 sm:p-7">
+    <section className="pp-profile pp-glass p-5 sm:p-7 pp-neon-gold">
       <div className="absolute -top-16 -right-10 h-40 w-40 rounded-full bg-amber-400/10 blur-3xl pointer-events-none" />
       <div className="relative flex items-center gap-4 sm:gap-5">
         <div className="relative shrink-0">
@@ -897,7 +896,7 @@ function ProfileHeader({ student, rank, totalInGroup, monthLabel }: { student: P
             <span className="h-1 w-1 rounded-full bg-emerald-400" />
             <span className="text-[10px] font-semibold text-emerald-300">تقرير مباشر</span>
           </div>
-          <h2 className="mt-1 truncate text-xl sm:text-2xl font-black tracking-tight text-white">{student.name}</h2>
+          <h2 className="mt-1 truncate text-2xl sm:text-3xl font-black tracking-tight text-white">{student.name}</h2>
           <div className="mt-2 flex flex-wrap gap-1.5">
             {student.grade_name && <span className="pp-badge border-emerald-500/25 text-emerald-300 bg-emerald-500/10">{student.grade_name}</span>}
             {student.group_name && <span className="pp-badge border-cyan-500/25 text-cyan-300 bg-cyan-500/10">{student.group_name}</span>}
@@ -932,7 +931,7 @@ function HeroCard({ overallPercentage, rank, totalInGroup, monthLabel, motivatio
   return (
     <section className="pp-hero pp-glass p-5 sm:p-7 pp-neon-gold relative overflow-hidden" aria-label={`المستوى العام لشهر ${monthLabel}`}>
       <div className="absolute -top-24 right-1/3 h-56 w-56 rounded-full bg-emerald-400/10 blur-3xl pointer-events-none" />
-      <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center">
+      <div className="relative flex flex-col gap-6 sm:flex-row sm:items-center">
         <div className="relative w-28 h-28 shrink-0">
           <svg className="w-full h-full pp-progress-ring" viewBox="0 0 112 112">
             <defs>
@@ -962,8 +961,8 @@ function HeroCard({ overallPercentage, rank, totalInGroup, monthLabel, motivatio
               </span>
             )}
           </div>
-          <p className="text-sm font-black text-white leading-snug">{motivation.title}</p>
-          <p className="text-[11px] text-slate-400 leading-relaxed mt-1">{motivation.subtitle}</p>
+          <p className="text-lg sm:text-xl font-black text-white leading-snug">المستوى العام لشهر {monthLabel}</p>
+          <p className="text-[11px] text-slate-400 leading-relaxed mt-1">ملخص حقيقي لأداء الطالب في هذا الشهر</p>
           <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
             <MiniIndicator label="حضور" value={attendanceRate} color="#34d399" />
             <MiniIndicator label="واجب" value={hwRate} color="#22d3ee" />
