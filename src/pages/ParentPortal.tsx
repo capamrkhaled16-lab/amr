@@ -556,35 +556,6 @@ function PortalContent({
             </>
           )}
 
-          {monthFilteredPayments.length > 0 && (
-            <div className="mt-4 pt-4 border-t border-white/[0.06]">
-              <div className="flex items-center gap-1.5 mb-3">
-                <Receipt className="w-3.5 h-3.5 text-emerald-400" />
-                <span className="text-[11px] font-bold text-slate-300">سجل المدفوعات</span>
-              </div>
-              <div className="space-y-0">
-                {monthFilteredPayments.map((p, i) => (
-                  <div key={p.id} className="flex gap-3">
-                    {/* Timeline line + dot */}
-                    <div className="flex flex-col items-center shrink-0">
-                      <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 ring-2 ring-emerald-500/20 mt-1.5" />
-                      {i < monthFilteredPayments.length - 1 && <div className="w-px flex-1 bg-white/[0.08] min-h-[28px]" />}
-                    </div>
-                    <div className="flex-1 pb-4">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-bold text-white">{formatCurrency(p.amount)} ج.م</span>
-                        <span className="text-[10px] text-slate-400">{formatArabicDate(p.payment_date)}</span>
-                      </div>
-                      {p.receipt_number && <p className="text-[10px] text-slate-500 mt-0.5" dir="ltr">رقم الإيصال: {p.receipt_number}</p>}
-                      {p.recorded_by && <p className="text-[10px] text-slate-500 mt-0.5">استلم: {p.recorded_by}</p>}
-                      {p.note && <p className="text-[10px] text-slate-400 mt-0.5">{p.note}</p>}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
           {monthFilteredPayments.length === 0 && !isExempt && feesDue > 0 && (
             <div className="flex flex-col items-center justify-center py-6 text-center mt-3">
               <div className="w-12 h-12 rounded-xl bg-white/[0.04] flex items-center justify-center text-slate-500 mb-2">
@@ -594,6 +565,36 @@ function PortalContent({
             </div>
           )}
         </div>
+
+        <section className="pp-glass p-5 pp-neon-emerald">
+          <div className="pp-section-title">
+            <Receipt className="w-3.5 h-3.5 text-cyan-300" />
+            تفاصيل إيصال الدفع
+          </div>
+          {monthFilteredPayments.length > 0 ? (
+            <div className="space-y-3">
+              {monthFilteredPayments.map((p) => (
+                <article key={p.id} className="rounded-2xl border border-white/[0.07] bg-white/[0.03] p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-lg font-black text-white">{formatCurrency(p.amount)} <span className="text-xs font-bold text-slate-400">ج.م</span></p>
+                      <p className="mt-1 text-[10px] text-slate-400">تاريخ الدفع: {formatArabicDate(p.payment_date)}</p>
+                    </div>
+                    <span className="pp-badge border-emerald-500/25 bg-emerald-500/10 text-emerald-300">مسجل</span>
+                  </div>
+                  <div className="mt-3 grid grid-cols-1 gap-2 text-[10px] text-slate-400 sm:grid-cols-3">
+                    <span>رقم الإيصال: {p.receipt_number ?? 'غير مسجل'}</span>
+                    <span>استلم: {p.recorded_by ?? 'غير مسجل'}</span>
+                    <span>واتساب: غير مسجل</span>
+                  </div>
+                  {p.note && <p className="mt-3 border-t border-white/[0.06] pt-3 text-[10px] text-slate-300">{p.note}</p>}
+                </article>
+              ))}
+            </div>
+          ) : (
+            <p className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4 text-center text-xs text-slate-500">لا يوجد إيصال مسجل لهذا الشهر</p>
+          )}
+        </section>
 
         {/* Hero card with overall percentage and animated ring */}
         <HeroCard
