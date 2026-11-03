@@ -59,7 +59,6 @@ import {
   Eye,
   X,
   Compass,
-  PenLine,
   Activity,
   Footprints,
   BookCheck,
@@ -502,8 +501,6 @@ function PortalContent({
         {/* Profile header */}
         <ProfileHeader student={student} rank={data.rank} totalInGroup={data.totalStudentsInGroup} monthLabel={getMonthLabel(selectedMonth)} />
 
-        <TeacherAppreciation />
-
         {/* Hero card with overall percentage and animated ring */}
         <HeroCard
           overallPercentage={overallPercentage}
@@ -515,6 +512,7 @@ function PortalContent({
           hwRate={hwRate}
           examAvg={examAvg}
           behaviorRate={behaviorRate}
+          trendPoints={trendPoints}
         />
 
         {/* Month selector */}
@@ -579,7 +577,7 @@ function PortalContent({
             dimmed={currentStats.behavior.rated === 0}
             details={
               currentStats.behavior.rated === 0 ? (
-                <p className="text-[10px] text-slate-500">لا توجد تقييمات هذا الشهر</p>
+                <p className="text-[10px] text-slate-500">غير مسجل هذا الشهر</p>
               ) : (
                 <div className="space-y-1 text-[10px] text-slate-400">
                   <div className="flex justify-between"><span>إيجابي</span><span className="text-emerald-400 font-bold">{currentStats.behavior.positive}</span></div>
@@ -693,12 +691,26 @@ function PortalContent({
             </div>
           ) : (
             <>
-              <div className="grid grid-cols-3 gap-2.5 mb-4">
-                <FinanceTile label="المستحقة" value={formatCurrency(feesDue)} color="text-white" />
-                <FinanceTile label="المدفوع" value={formatCurrency(feesPaid)} color="text-emerald-400" />
-                <FinanceTile label="المتبقي" value={formatCurrency(feesRemaining)} color={feesRemaining > 0 ? 'text-red-400' : 'text-emerald-400'} highlight />
+              <div className="mb-4">
+                {feesRemaining === 0 ? (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/15 border border-emerald-500/25 text-emerald-400 text-xs font-bold">
+                    <CheckCircle2 className="w-3.5 h-3.5" /> مسدد بالكامل
+                  </span>
+                ) : feesPaid > 0 ? (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-500/15 border border-amber-500/25 text-amber-400 text-xs font-bold">
+                    <Clock className="w-3.5 h-3.5" /> مسدد جزئياً
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-rose-500/15 border border-rose-500/25 text-rose-400 text-xs font-bold">
+                    <AlertCircle className="w-3.5 h-3.5" /> لم يسدد
+                  </span>
+                )}
               </div>
-              {/* Collection progress bar */}
+              <div className="grid grid-cols-3 gap-2.5 mb-4">
+                <FinanceTile label="إجمالي الرسوم" value={formatCurrency(feesDue)} color="text-white" />
+                <FinanceTile label="المبلغ المدفوع" value={formatCurrency(feesPaid)} color="text-emerald-400" />
+                <FinanceTile label="المتبقي" value={formatCurrency(feesRemaining)} color={feesRemaining > 0 ? 'text-rose-400' : 'text-emerald-400'} highlight />
+              </div>
               <div className="mb-2">
                 <div className="flex justify-between text-[10px] text-slate-400 mb-1.5">
                   <span>نسبة التحصيل</span>
@@ -714,7 +726,6 @@ function PortalContent({
             </>
           )}
 
-          {/* Payment timeline */}
           {monthFilteredPayments.length > 0 && (
             <div className="mt-4 pt-4 border-t border-white/[0.06]">
               <div className="flex items-center gap-1.5 mb-3">
@@ -735,6 +746,7 @@ function PortalContent({
                         <span className="text-[10px] text-slate-400">{formatArabicDate(p.payment_date)}</span>
                       </div>
                       {p.receipt_number && <p className="text-[10px] text-slate-500 mt-0.5" dir="ltr">رقم الإيصال: {p.receipt_number}</p>}
+                      {p.recorded_by && <p className="text-[10px] text-slate-500 mt-0.5">استلم: {p.recorded_by}</p>}
                       {p.note && <p className="text-[10px] text-slate-400 mt-0.5">{p.note}</p>}
                     </div>
                   </div>
@@ -825,10 +837,7 @@ function PortalContent({
           behaviorRate={behaviorRate}
         />
 
-        {/* Signature card */}
-        <SignatureCard />
-
-        <ClosingMessage />
+        <TeacherMessage />
       </main>
 
 
@@ -838,17 +847,29 @@ function PortalContent({
 
 /* ─── Sub-components ─── */
 
-function TeacherAppreciation() {
+function TeacherMessage() {
   return (
-    <section className="pp-glass p-5 border-amber-400/20 bg-gradient-to-br from-amber-500/[0.08] via-white/[0.03] to-emerald-500/[0.06] relative overflow-hidden">
-      <div className="absolute -top-12 -left-12 w-32 h-32 rounded-full bg-amber-400/10 blur-3xl" />
-      <div className="relative flex items-start gap-3">
-        <div className="w-10 h-10 rounded-xl bg-amber-400/15 border border-amber-300/20 flex items-center justify-center shrink-0">
-          <Heart className="w-5 h-5 text-amber-300" />
+    <section className="relative overflow-hidden rounded-[28px] border border-[#D6B56D]/30 bg-[linear-gradient(135deg,rgba(214,181,109,0.12),rgba(17,24,39,0.94)_42%,rgba(16,185,129,0.08))] p-5 sm:p-7 shadow-[0_20px_60px_rgba(0,0,0,0.28)]">
+      <div className="absolute -top-20 -left-12 h-44 w-44 rounded-full bg-[#D6B56D]/10 blur-3xl" />
+      <div className="absolute -bottom-20 -right-10 h-44 w-44 rounded-full bg-[#10B981]/10 blur-3xl" />
+      <div className="relative">
+        <div className="flex items-center gap-3 border-b border-white/10 pb-4">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-[#D6B56D]/30 bg-[#D6B56D]/10">
+            <Heart className="h-5 w-5 text-[#D6B56D]" />
+          </div>
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#D6B56D]">رسالة خاصة</p>
+            <h3 className="mt-1 text-base font-black text-[#F8FAFC]">رسالة مستر عمرو خالد للطالب</h3>
+          </div>
         </div>
-        <div>
-          <p className="text-sm font-bold text-white leading-relaxed">أنا فخور بكل خطوة بتاخدها نحو النجاح. استمر في الاجتهاد، وثق أن كل مجهود بتبذله النهارده بيقربك من حلمك. القادم أجمل بإذن الله</p>
-          <p className="text-xs text-amber-300/90 font-semibold mt-3">مع تحيات مستر عمرو خالد — طلاب الخالد غير أي حد</p>
+        <p className="mt-5 text-sm font-medium leading-[2.05] text-[#F8FAFC]">
+          وفي النهاية، افتكر دايمًا إن النجاح مش خطوة واحدة، النجاح مشوار، وكل يوم بتتقدم فيه هو إنجاز جديد. أنا مستني أشوفك دايمًا في أحسن مكان، وواثق إنك تقدر تحقق أكتر وأكتر. ربنا يوفقك ويفرحنا بيك.
+        </p>
+        <div className="mt-6 border-t border-white/10 pt-5 text-center">
+          <p className="text-sm font-bold text-[#D6B56D]">صلّوا على النبي ﷺ</p>
+          <p className="mt-3 text-xs font-black tracking-wide text-[#F8FAFC]">طلاب الخالد غير أي حد</p>
+          <p className="mt-2 text-base font-black text-[#D6B56D]">مستر عمرو خالد</p>
+          <p className="mt-1 text-[10px] leading-relaxed text-slate-400">مدرس ومؤسس المنصة وصاحب سلسلة الخالد في العلوم والأحياء</p>
         </div>
       </div>
     </section>
@@ -858,41 +879,35 @@ function TeacherAppreciation() {
 function ProfileHeader({ student, rank, totalInGroup, monthLabel }: { student: ParentData['student']; rank: number | null; totalInGroup: number; monthLabel: string }) {
   const initials = student.name?.charAt(0) ?? '؟';
   return (
-    <div className="pp-glass p-5 pp-neon-emerald">
-      <div className="flex items-center gap-4">
+    <section className="pp-profile pp-glass p-5 sm:p-6">
+      <div className="absolute -top-16 -right-10 h-40 w-40 rounded-full bg-amber-400/10 blur-3xl pointer-events-none" />
+      <div className="relative flex items-center gap-4 sm:gap-5">
         <div className="relative shrink-0">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-2xl font-black text-white shadow-lg shadow-emerald-500/20">
-            {initials}
-          </div>
-          {rank !== null && rank <= 3 && (
-            <div className="absolute -bottom-1.5 -right-1.5 w-7 h-7 rounded-full bg-gradient-to-br from-amber-400 to-yellow-600 flex items-center justify-center shadow-lg ring-2 ring-black">
-              <Trophy className="w-3.5 h-3.5 text-white" />
-            </div>
-          )}
+          <div className="pp-avatar h-[76px] w-[76px] sm:h-[88px] sm:w-[88px] rounded-[26px] flex items-center justify-center text-3xl font-black text-white">{initials}</div>
+          <span className="absolute -bottom-1 -left-1 h-4 w-4 rounded-full border-2 border-[#0b0d10] bg-emerald-400 shadow-[0_0_14px_rgba(52,211,153,.8)]" />
+          {rank !== null && rank <= 3 && <div className="absolute -top-2 -right-2 flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-amber-300 to-amber-600 shadow-lg ring-2 ring-[#0b0d10]"><Trophy className="h-4 w-4 text-white" /></div>}
         </div>
-        <div className="flex-1 min-w-0">
-          <h2 className="text-lg font-black text-white truncate">{student.name}</h2>
-          <div className="flex flex-wrap gap-1.5 mt-1.5">
-            {student.stage_name && <span className="pp-badge border-white/10 text-slate-300 bg-white/[0.04]">{student.stage_name}</span>}
-            {student.grade_name && <span className="pp-badge border-emerald-500/20 text-emerald-400 bg-emerald-500/10">{student.grade_name}</span>}
-            {student.group_name && <span className="pp-badge border-sky-500/20 text-sky-400 bg-sky-500/10">{student.group_name}</span>}
-            <span className="pp-badge border-amber-500/20 text-amber-300 bg-amber-500/10"><Calendar className="w-2.5 h-2.5" />{monthLabel}</span>
-            {student.group_schedule && <span className="pp-badge border-white/10 text-slate-300 bg-white/[0.04]">{student.group_schedule}</span>}
-            <span className={`pp-badge ${student.status === 'active' ? 'border-emerald-500/20 text-emerald-400 bg-emerald-500/10' : 'border-white/10 text-slate-400 bg-white/[0.04]'}`}>{student.status === 'active' ? 'نشط' : 'غير نشط'}</span>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-300/80">ملف الطالب</p>
+            <span className="h-1 w-1 rounded-full bg-emerald-400" />
+            <span className="text-[10px] font-semibold text-emerald-300">تقرير مباشر</span>
           </div>
-          {rank !== null && totalInGroup > 0 && (
-            <div className="flex items-center gap-1.5 mt-2">
-              <Target className="w-3 h-3 text-amber-400" />
-              <span className="text-[11px] text-slate-300 font-semibold">{rankLabel(rank)}</span>
-            </div>
-          )}
+          <h2 className="mt-1 truncate text-xl sm:text-2xl font-black tracking-tight text-white">{student.name}</h2>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {student.grade_name && <span className="pp-badge border-emerald-500/25 text-emerald-300 bg-emerald-500/10">{student.grade_name}</span>}
+            {student.group_name && <span className="pp-badge border-cyan-500/25 text-cyan-300 bg-cyan-500/10">{student.group_name}</span>}
+            <span className="pp-badge border-amber-500/25 text-amber-300 bg-amber-500/10"><Calendar className="h-2.5 w-2.5" />{monthLabel}</span>
+            <span className={`pp-badge ${student.status === 'active' ? 'border-emerald-500/25 text-emerald-300 bg-emerald-500/10' : 'border-white/10 text-slate-400 bg-white/[0.04]'}`}>{student.status === 'active' ? 'نشط' : 'غير نشط'}</span>
+          </div>
+          {rank !== null && totalInGroup > 0 && <div className="mt-2 flex items-center gap-1.5 text-[11px] font-bold text-amber-200"><Target className="h-3 w-3 text-amber-400" />{rankLabel(rank)} من المجموعة</div>}
         </div>
       </div>
-    </div>
+    </section>
   );
 }
 
-function HeroCard({ overallPercentage, rank, totalInGroup, monthLabel, motivation, attendanceRate, hwRate, examAvg, behaviorRate }: {
+function HeroCard({ overallPercentage, rank, totalInGroup, monthLabel, motivation, attendanceRate, hwRate, examAvg, behaviorRate, trendPoints }: {
   overallPercentage: number;
   rank: number | null;
   totalInGroup: number;
@@ -902,6 +917,7 @@ function HeroCard({ overallPercentage, rank, totalInGroup, monthLabel, motivatio
   hwRate: number;
   examAvg: number | null;
   behaviorRate: number;
+  trendPoints: { monthKey: string; attendance: number | null; exams: number | null }[];
 }) {
   const pct = Math.min(100, Math.round(overallPercentage));
   const radius = 48;
@@ -910,10 +926,9 @@ function HeroCard({ overallPercentage, rank, totalInGroup, monthLabel, motivatio
   const ringColor = overallPercentage >= 90 ? '#10b981' : overallPercentage >= 75 ? '#34d399' : overallPercentage >= 60 ? '#f59e0b' : '#f43f5e';
 
   return (
-    <div className="pp-glass p-6 pp-neon-emerald relative overflow-hidden">
-      <div className="absolute top-0 right-0 w-40 h-40 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute bottom-0 left-0 w-32 h-32 bg-cyan-500/8 rounded-full blur-3xl pointer-events-none" />
-      <div className="relative flex items-center gap-5">
+    <div className="pp-hero pp-glass p-5 sm:p-6 pp-neon-gold relative overflow-hidden">
+      <div className="absolute -top-24 right-1/3 h-56 w-56 rounded-full bg-emerald-400/10 blur-3xl pointer-events-none" />
+      <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center">
         <div className="relative w-28 h-28 shrink-0">
           <svg className="w-full h-full pp-progress-ring" viewBox="0 0 112 112">
             <defs>
@@ -945,11 +960,16 @@ function HeroCard({ overallPercentage, rank, totalInGroup, monthLabel, motivatio
           </div>
           <p className="text-sm font-black text-white leading-snug">{motivation.title}</p>
           <p className="text-[11px] text-slate-400 leading-relaxed mt-1">{motivation.subtitle}</p>
-          <div className="grid grid-cols-4 gap-2 mt-3">
-            <MiniIndicator label="حضور" value={attendanceRate} color="#10b981" />
-            <MiniIndicator label="واجب" value={hwRate} color="#0ea5e9" />
-            <MiniIndicator label="امتحان" value={examAvg ?? 0} color="#f59e0b" dimmed={examAvg === null} />
-            <MiniIndicator label="سلوك" value={behaviorRate} color="#f43f5e" dimmed={behaviorRate === 0} />
+          <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <MiniIndicator label="حضور" value={attendanceRate} color="#34d399" />
+            <MiniIndicator label="واجب" value={hwRate} color="#22d3ee" />
+            <MiniIndicator label="درجات" value={examAvg ?? 0} color="#f5c76b" dimmed={examAvg === null} />
+            <MiniIndicator label="سلوك" value={behaviorRate} color="#fb7185" dimmed={behaviorRate === 0} />
+          </div>
+          <div className="mt-4 flex items-center gap-3 border-t border-white/10 pt-3">
+            <span className="text-[10px] font-bold text-slate-500">مقارنة الشهور</span>
+            <Sparkline points={trendPoints.map((point) => point.exams ?? point.attendance ?? 0)} />
+            <span className="mr-auto text-[10px] text-slate-400">آخر {trendPoints.length} أشهر</span>
           </div>
         </div>
       </div>
@@ -960,6 +980,15 @@ function HeroCard({ overallPercentage, rank, totalInGroup, monthLabel, motivatio
 function rankLabel(rank: number | null): string {
   const labels = ['المركز الأول', 'المركز الثاني', 'المركز الثالث', 'المركز الرابع', 'المركز الخامس', 'المركز السادس', 'المركز السابع', 'المركز الثامن', 'المركز التاسع', 'المركز العاشر'];
   return rank && labels[rank - 1] ? labels[rank - 1] : 'المركز الرسمي غير متاح';
+}
+
+function Sparkline({ points }: { points: number[] }) {
+  const values = points.length > 1 ? points : [0, 0];
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = max - min || 1;
+  const coordinates = values.map((value, index) => `${(index / (values.length - 1)) * 100},${28 - ((value - min) / range) * 22}`).join(' ');
+  return <svg viewBox="0 0 100 32" preserveAspectRatio="none" className="h-8 min-w-0 flex-1 overflow-visible" aria-label="منحنى الأداء"><defs><linearGradient id="pp-sparkline" x1="0" x2="1"><stop offset="0" stopColor="#D6B56D" /><stop offset="1" stopColor="#34D399" /></linearGradient></defs><polyline points={coordinates} fill="none" stroke="url(#pp-sparkline)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ filter: 'drop-shadow(0 0 4px rgba(52,211,153,.55))' }} /></svg>;
 }
 
 function MiniIndicator({ label, value, color, dimmed }: { label: string; value: number; color: string; dimmed?: boolean }) {
@@ -1209,33 +1238,6 @@ function AchievementMetric({ label, value }: { label: string; value: string }) {
   );
 }
 
-function SignatureCard() {
-  return (
-    <div className="pp-glass p-5 pp-neon-gold relative overflow-hidden">
-      <div className="absolute top-0 left-0 w-32 h-32 bg-amber-500/8 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute bottom-0 right-0 w-24 h-24 bg-emerald-500/6 rounded-full blur-2xl pointer-events-none" />
-      <div className="relative">
-        <div className="flex items-center gap-2 mb-3">
-          <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center">
-            <PenLine className="w-4 h-4 text-amber-400" />
-          </div>
-          <span className="text-xs font-black text-amber-400">رسالة مستر عمرو خالد للطالب</span>
-        </div>
-        <p className="text-sm text-slate-200 leading-relaxed">
-          «بني الحبيب، كل درجة تحققها هي لبنة في صرح مستقبلك. لا تستهن بجهدك ولا تيأس من نتيجة، فالنجاح رحلة وليس محطة. وثق في قدرتك على التفوق، وأعلم أنني أؤمن بك وبما يمكنك تحقيقه. اجعل من كل شهر فرصة لتكون أفضل من الأمس.»
-        </p>
-        <p className="text-xs text-emerald-400/80 font-semibold mt-3 text-center">صَلِّ على النبي محمد ﷺ</p>
-        <div className="mt-4 flex items-center justify-end gap-2">
-          <div className="text-left">
-            <p className="text-sm font-black gradient-text">مستر عمرو خالد</p>
-            <p className="text-[10px] text-slate-400">مدرس ومؤسس المنصة</p>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function HomeworkRing({ done, total, rate }: { done: number; total: number; rate: number }) {
   const radius = 44;
   const circumference = 2 * Math.PI * radius;
@@ -1272,51 +1274,38 @@ function HomeworkRing({ done, total, rate }: { done: number; total: number; rate
 function ExamTrendChart({ points }: { points: { id: string; label: string; pct: number }[] }) {
   if (points.length === 0) {
     return (
-      <div className="pp-glass p-5">
-        <div className="pp-section-title">
-          <Activity className="w-3.5 h-3.5 text-amber-300" />
-          منحنى الامتحانات
+      <div className="pp-glass p-4">
+        <div className="flex items-center gap-2 mb-2">
+          <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center shrink-0 text-amber-400">
+            <Activity className="w-4 h-4" />
+          </div>
+          <span className="text-xs font-bold text-white">أداء الامتحانات</span>
         </div>
-        <p className="text-[11px] text-slate-500 py-6 text-center">لا توجد درجات امتحانات محفوظة لهذا الشهر</p>
+        <p className="text-[10px] text-slate-500">لا توجد درجات امتحانات محفوظة لهذا الشهر</p>
       </div>
     );
   }
-  const barWidth = 44;
-  const gap = 16;
-  const chartHeight = 110;
-  const top = 20;
-  const width = points.length * (barWidth + gap);
-  const baseline = top + chartHeight;
+  const avg = Math.round(points.reduce((acc, p) => acc + p.pct, 0) / points.length);
+  const best = points.reduce((a, b) => (a.pct >= b.pct ? a : b));
   return (
-    <div className="pp-glass p-5">
-      <div className="pp-section-title">
-        <Activity className="w-3.5 h-3.5 text-amber-300" />
-        منحنى الامتحانات
+    <div className="pp-glass p-4">
+      <div className="flex items-center gap-2 mb-3">
+        <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center shrink-0 text-amber-400">
+          <Activity className="w-4 h-4" />
+        </div>
+        <span className="text-xs font-bold text-white">أداء الامتحانات</span>
+        <span className="pp-badge border-amber-500/20 text-amber-400 bg-amber-500/10 shrink-0 mr-auto">{points.length} امتحان</span>
       </div>
-      <svg viewBox={`0 0 ${width} ${baseline + 4}`} className="w-full h-auto" role="img" aria-label="درجات الامتحانات">
-        <defs>
-          <linearGradient id="pp-exam-bar" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#D6B56D" stopOpacity="0.95" />
-            <stop offset="100%" stopColor="#10B981" stopOpacity="0.55" />
-          </linearGradient>
-        </defs>
-        {points.map((p, i) => {
-          const clamped = Math.min(100, Math.max(0, p.pct));
-          const h = Math.max(4, (clamped / 100) * chartHeight);
-          const x = i * (barWidth + gap) + gap / 2;
-          const y = baseline - h;
-          return (
-            <g key={p.id}>
-              <title>{`${p.label}: ${Math.round(p.pct)}%`}</title>
-              <rect x={x} y={y} width={barWidth} height={h} rx="8" fill="url(#pp-exam-bar)" />
-              <text x={x + barWidth / 2} y={y - 6} textAnchor="middle" fill="#F8FAFC" style={{ fontSize: 11, fontWeight: 800 }}>
-                {`${Math.round(p.pct)}%`}
-              </text>
-            </g>
-          );
-        })}
-        <line x1="0" x2={width} y1={baseline} y2={baseline} stroke="rgba(248,250,252,0.12)" strokeWidth="1" />
-      </svg>
+      <div className="flex items-baseline gap-1 mb-2">
+        <span className="text-2xl font-black text-white">{avg}</span>
+        <span className="text-sm text-slate-400">% المتوسط</span>
+      </div>
+      <div className="h-2 bg-white/[0.06] rounded-full overflow-hidden mb-3">
+        <div className="h-full bg-gradient-to-r from-amber-500 to-yellow-400 rounded-full transition-all duration-700 ease-out" style={{ width: `${Math.min(100, avg)}%` }} />
+      </div>
+      <div className="space-y-1 text-[10px] text-slate-400">
+        <div className="flex justify-between"><span>أعلى نتيجة</span><span className="text-amber-400 font-bold">{best.label} — {Math.round(best.pct)}%</span></div>
+      </div>
     </div>
   );
 }
@@ -1356,7 +1345,7 @@ function PerformanceRadar({ axes }: { axes: { label: string; value: number }[] }
   const dataPath = dataPoints.map((p) => `${p.x},${p.y}`).join(' ');
 
   return (
-    <svg viewBox={`0 0 ${size} ${size}`} className="w-full max-w-[260px] mx-auto overflow-visible" role="img" aria-label="بصمة الأداء">
+    <svg viewBox={`0 0 ${size} ${size}`} className="block w-full max-w-[260px] mx-auto" role="img" aria-label="بصمة الأداء">
       <defs>
         <linearGradient id="pp-radar-fill" x1="0" y1="0" x2="1" y2="1">
           <stop offset="0%" stopColor="#10B981" stopOpacity="0.5" />
@@ -1376,7 +1365,7 @@ function PerformanceRadar({ axes }: { axes: { label: string; value: number }[] }
         <circle key={axes[i].label} cx={p.x} cy={p.y} r="4" fill="#F8FAFC" stroke="#10B981" strokeWidth="2" />
       ))}
       {axes.map((a, i) => {
-        const p = toPoint(130, angles[i]);
+        const p = toPoint(112, angles[i]);
         return (
           <text key={a.label} x={p.x} y={p.y} textAnchor="middle" dominantBaseline="middle" fill="#CBD5E1" style={{ fontSize: 11, fontWeight: 700 }}>
             {`${a.label} ${Math.round(a.value)}%`}
@@ -1410,24 +1399,6 @@ function AttendanceStrip({ records }: { records: { id: string; status: string; a
         />
       ))}
     </div>
-  );
-}
-
-function ClosingMessage() {
-  return (
-    <section className="relative overflow-hidden rounded-3xl p-6 border border-[#D6B56D]/30 bg-gradient-to-br from-[#111827] via-[#0B0D12] to-[#0F2A22] shadow-2xl shadow-black/60">
-      <div className="absolute -top-16 right-0 w-48 h-48 rounded-full bg-[#D6B56D]/15 blur-3xl pointer-events-none" />
-      <div className="absolute -bottom-16 left-0 w-44 h-44 rounded-full bg-[#10B981]/15 blur-3xl pointer-events-none" />
-      <div className="relative">
-        <p className="text-[10px] uppercase tracking-[0.3em] text-[#D6B56D]/90 font-bold mb-3">كلمة أخيرة</p>
-        <p className="text-sm text-[#F8FAFC] leading-[2] font-medium">
-          وفي النهاية، افتكر دايمًا إن النجاح مش خطوة واحدة، النجاح مشوار وكل يوم بتتقدم فيه هو إنجاز جديد. أنا مستني أشوفك دايمًا في أحسن مكان، وواثق إنك تقدر تحقق أكتر وأكتر. ربنا يوفقك ويفرحنا بيك.
-        </p>
-        <div className="mt-5 pt-4 border-t border-white/10">
-          <p className="text-xs font-black text-[#D6B56D]">مستر عمرو خالد — طلاب الخالد غير أي حد</p>
-        </div>
-      </div>
-    </section>
   );
 }
 
