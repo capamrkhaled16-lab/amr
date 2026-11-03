@@ -323,20 +323,28 @@ function PortalContent({
   const hwTotal = monthFilteredHwStatuses.length;
   const hwRate = hwTotal > 0 ? Math.round((hwDone / hwTotal) * 100) : 0;
 
-  const examAvg = useMemo(() => {
-    const allGrades: { score: number; max: number }[] = [];
+  const examPoints = useMemo(() => {
+    const points: { id: string; label: string; pct: number; when: string }[] = [];
     for (const cg of data.centerGrades) {
       const exam = data.centerExams.find((e) => e.id === cg.center_exam_id);
-      if (exam && exam.max_score > 0 && exam.exam_date?.slice(0, 7) === selectedMonth) allGrades.push({ score: cg.score, max: exam.max_score });
+      if (exam && exam.max_score > 0 && exam.exam_date?.slice(0, 7) === selectedMonth) {
+        points.push({ id: `center-${cg.id}`, label: exam.title ?? 'امتحان', pct: (cg.score / exam.max_score) * 100, when: exam.exam_date ?? '' });
+      }
     }
     for (const og of data.onlineGrades) {
       const exam = data.onlineExams.find((e) => e.id === og.exam_id);
-      const when = exam?.open_at ?? exam?.created_at;
-      if (og.max_score > 0 && when?.slice(0, 7) === selectedMonth) allGrades.push({ score: og.score, max: og.max_score });
+      const when = exam?.open_at ?? exam?.created_at ?? '';
+      if (og.max_score > 0 && when.slice(0, 7) === selectedMonth) {
+        points.push({ id: `online-${og.id}`, label: exam?.title ?? 'امتحان أونلاين', pct: (og.score / og.max_score) * 100, when });
+      }
     }
-    if (allGrades.length === 0) return null;
-    return Math.round(allGrades.reduce((acc, g) => acc + (g.score / g.max) * 100, 0) / allGrades.length);
+    return points.sort((a, b) => a.when.localeCompare(b.when));
   }, [data.centerGrades, data.centerExams, data.onlineGrades, data.onlineExams, selectedMonth]);
+
+  const examAvg = useMemo(() => {
+    if (examPoints.length === 0) return null;
+    return Math.round(examPoints.reduce((acc, p) => acc + p.pct, 0) / examPoints.length);
+  }, [examPoints]);
 
   const feesDue = monthSubscription?.amount_due ?? 0;
   const feesPaid = monthFilteredPayments.reduce((sum, p) => sum + (p.amount ?? 0), 0);
@@ -492,7 +500,7 @@ function PortalContent({
       {/* Vertical scroll content */}
       <main className="relative max-w-2xl md:max-w-4xl lg:max-w-5xl mx-auto px-4 py-5 space-y-5 pb-32">
         {/* Profile header */}
-        <ProfileHeader student={student} rank={data.rank} totalInGroup={data.totalStudentsInGroup} />
+        <ProfileHeader student={student} rank={data.rank} totalInGroup={data.totalStudentsInGroup} monthLabel={getMonthLabel(selectedMonth)} />
 
         <TeacherAppreciation />
 
@@ -611,6 +619,13 @@ function PortalContent({
         </div>
 
         {/* Next step suggestion */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <HomeworkRing done={hwDone} total={hwTotal} rate={hwRate} />
+          <ExamTrendChart points={examPoints} />
+        </div>
+
+        {radarAxes && <StrengthsPanel axes={radarAxes} />}
+
         <NextStepCard suggestion={nextStep.suggestion} label={nextStep.label} rate={nextStep.rate} />
 
         <MonthComparison current={currentStats} previous={previousStats} currentKey={selectedMonth} previousKey={prevKey} />
@@ -840,7 +855,7 @@ function TeacherAppreciation() {
   );
 }
 
-function ProfileHeader({ student, rank, totalInGroup }: { student: ParentData['student']; rank: number | null; totalInGroup: number }) {
+function ProfileHeader({ student, rank, totalInGroup, monthLabel }: { student: ParentData['student']; rank: number | null; totalInGroup: number; monthLabel: string }) {
   const initials = student.name?.charAt(0) ?? '؟';
   return (
     <div className="pp-glass p-5 pp-neon-emerald">
@@ -861,6 +876,7 @@ function ProfileHeader({ student, rank, totalInGroup }: { student: ParentData['s
             {student.stage_name && <span className="pp-badge border-white/10 text-slate-300 bg-white/[0.04]">{student.stage_name}</span>}
             {student.grade_name && <span className="pp-badge border-emerald-500/20 text-emerald-400 bg-emerald-500/10">{student.grade_name}</span>}
             {student.group_name && <span className="pp-badge border-sky-500/20 text-sky-400 bg-sky-500/10">{student.group_name}</span>}
+            <span className="pp-badge border-amber-500/20 text-amber-300 bg-amber-500/10"><Calendar className="w-2.5 h-2.5" />{monthLabel}</span>
             {student.group_schedule && <span className="pp-badge border-white/10 text-slate-300 bg-white/[0.04]">{student.group_schedule}</span>}
             <span className={`pp-badge ${student.status === 'active' ? 'border-emerald-500/20 text-emerald-400 bg-emerald-500/10' : 'border-white/10 text-slate-400 bg-white/[0.04]'}`}>{student.status === 'active' ? 'نشط' : 'غير نشط'}</span>
           </div>
@@ -1215,6 +1231,111 @@ function SignatureCard() {
             <p className="text-[10px] text-slate-400">مدرس ومؤسس المنصة</p>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function HomeworkRing({ done, total, rate }: { done: number; total: number; rate: number }) {
+  const radius = 44;
+  const circumference = 2 * Math.PI * radius;
+  return (
+    <div className="pp-glass p-5">
+      <div className="pp-section-title">
+        <BookCheck className="w-3.5 h-3.5 text-sky-300" />
+        إنجاز الواجبات
+      </div>
+      {total > 0 ? (
+        <div className="flex items-center gap-5">
+          <div className="relative w-24 h-24 shrink-0">
+            <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
+              <circle cx="50" cy="50" r={radius} fill="none" stroke="rgba(248,250,252,0.08)" strokeWidth="8" />
+              <circle
+                cx="50" cy="50" r={radius} fill="none" stroke="#60A5FA" strokeWidth="8" strokeLinecap="round"
+                strokeDasharray={circumference} strokeDashoffset={circumference - (rate / 100) * circumference}
+                style={{ transition: 'stroke-dashoffset 1s cubic-bezier(0.4,0,0.2,1)' }}
+              />
+            </svg>
+            <div className="absolute inset-0 flex items-center justify-center text-lg font-black text-[#F8FAFC]">{rate}%</div>
+          </div>
+          <p className="text-xs text-slate-300 leading-relaxed">
+            <span className="font-black text-[#F8FAFC]">{done}</span> من {total} واجب تم إنجازه هذا الشهر
+          </p>
+        </div>
+      ) : (
+        <p className="text-[11px] text-slate-500 py-6 text-center">لا توجد واجبات محفوظة لهذا الشهر</p>
+      )}
+    </div>
+  );
+}
+
+function ExamTrendChart({ points }: { points: { id: string; label: string; pct: number }[] }) {
+  if (points.length === 0) {
+    return (
+      <div className="pp-glass p-5">
+        <div className="pp-section-title">
+          <Activity className="w-3.5 h-3.5 text-amber-300" />
+          منحنى الامتحانات
+        </div>
+        <p className="text-[11px] text-slate-500 py-6 text-center">لا توجد درجات امتحانات محفوظة لهذا الشهر</p>
+      </div>
+    );
+  }
+  const barWidth = 44;
+  const gap = 16;
+  const chartHeight = 110;
+  const top = 20;
+  const width = points.length * (barWidth + gap);
+  const baseline = top + chartHeight;
+  return (
+    <div className="pp-glass p-5">
+      <div className="pp-section-title">
+        <Activity className="w-3.5 h-3.5 text-amber-300" />
+        منحنى الامتحانات
+      </div>
+      <svg viewBox={`0 0 ${width} ${baseline + 4}`} className="w-full h-auto" role="img" aria-label="درجات الامتحانات">
+        <defs>
+          <linearGradient id="pp-exam-bar" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#D6B56D" stopOpacity="0.95" />
+            <stop offset="100%" stopColor="#10B981" stopOpacity="0.55" />
+          </linearGradient>
+        </defs>
+        {points.map((p, i) => {
+          const clamped = Math.min(100, Math.max(0, p.pct));
+          const h = Math.max(4, (clamped / 100) * chartHeight);
+          const x = i * (barWidth + gap) + gap / 2;
+          const y = baseline - h;
+          return (
+            <g key={p.id}>
+              <title>{`${p.label}: ${Math.round(p.pct)}%`}</title>
+              <rect x={x} y={y} width={barWidth} height={h} rx="8" fill="url(#pp-exam-bar)" />
+              <text x={x + barWidth / 2} y={y - 6} textAnchor="middle" fill="#F8FAFC" style={{ fontSize: 11, fontWeight: 800 }}>
+                {`${Math.round(p.pct)}%`}
+              </text>
+            </g>
+          );
+        })}
+        <line x1="0" x2={width} y1={baseline} y2={baseline} stroke="rgba(248,250,252,0.12)" strokeWidth="1" />
+      </svg>
+    </div>
+  );
+}
+
+function StrengthsPanel({ axes }: { axes: { label: string; value: number }[] }) {
+  const sorted = [...axes].sort((a, b) => b.value - a.value);
+  const strongest = sorted[0];
+  const focus = sorted[sorted.length - 1];
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <div className="pp-glass p-5 border border-[#10B981]/25">
+        <p className="text-[10px] font-bold uppercase tracking-wider text-[#10B981] mb-2">نقطة قوتك</p>
+        <p className="text-lg font-black text-[#F8FAFC]">{strongest.label}</p>
+        <p className="text-xs text-slate-400 mt-1">{Math.round(strongest.value)}% في هذا الشهر</p>
+      </div>
+      <div className="pp-glass p-5 border border-[#FB7185]/25">
+        <p className="text-[10px] font-bold uppercase tracking-wider text-[#FB7185] mb-2">أولوية التحسين</p>
+        <p className="text-lg font-black text-[#F8FAFC]">{focus.label}</p>
+        <p className="text-xs text-slate-400 mt-1">{Math.round(focus.value)}% في هذا الشهر</p>
       </div>
     </div>
   );
