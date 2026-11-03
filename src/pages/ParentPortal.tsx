@@ -625,8 +625,8 @@ function PortalContent({
               <div className="space-y-1 text-[10px] text-slate-400">
                 <div className="flex justify-between"><span>حاضر</span><span className="text-emerald-400 font-bold">{presentCount}</span></div>
                 <div className="flex justify-between"><span>غائب</span><span className="text-red-400 font-bold">{absentCount}</span></div>
-                <div className="flex justify-between"><span>بعذر</span><span className="text-amber-400 font-bold">{excusedCount}</span></div>
-                <div className="flex justify-between"><span>تأخر</span><span className="text-sky-400 font-bold">{lateCount}</span></div>
+                <div className="flex justify-between"><span>بعذر</span><span className="text-sky-400 font-bold">{excusedCount}</span></div>
+                <div className="flex justify-between"><span>تأخر</span><span className="text-amber-300 font-bold">{lateCount}</span></div>
               </div>
             }
           />
@@ -1501,9 +1501,9 @@ function AttendanceSection({ records }: { records: (AttendanceRecord & { session
   const statusConfig: Record<string, { label: string; color: string; bg: string }> = {
     present: { label: 'حاضر', color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
     absent: { label: 'غائب', color: 'text-red-400', bg: 'bg-red-500/10' },
-    excused: { label: 'بعذر', color: 'text-amber-400', bg: 'bg-amber-500/10' },
-    excused_absence: { label: 'بعذر', color: 'text-amber-400', bg: 'bg-amber-500/10' },
-    late: { label: 'تأخر', color: 'text-sky-400', bg: 'bg-sky-500/10' },
+    excused: { label: 'بعذر', color: 'text-sky-400', bg: 'bg-sky-500/10' },
+    excused_absence: { label: 'بعذر', color: 'text-sky-400', bg: 'bg-sky-500/10' },
+    late: { label: 'تأخر', color: 'text-amber-300', bg: 'bg-amber-400/10' },
     unrecorded: { label: 'لم يسجل', color: 'text-slate-400', bg: 'bg-slate-500/10' },
   };
   return (
@@ -1541,7 +1541,7 @@ function HomeworkSection({ homework, statuses, studentId }: { homework: Homework
     incomplete: { label: 'غير مكتمل', color: 'text-red-400', bg: 'bg-red-500/10' },
     not_done: { label: 'لم يتم', color: 'text-red-400', bg: 'bg-red-500/10' },
     absent: { label: 'غائب', color: 'text-slate-400', bg: 'bg-slate-500/10' },
-    excused: { label: 'بعذر', color: 'text-amber-400', bg: 'bg-amber-500/10' },
+    excused: { label: 'بعذر', color: 'text-sky-400', bg: 'bg-sky-500/10' },
     unrecorded: { label: 'لم يسجل', color: 'text-slate-400', bg: 'bg-slate-500/10' },
   };
   return (
