@@ -37,7 +37,6 @@ import { PDFButton } from '@/components/ui/PDFButton';
 import { exportParentPortalPDF } from '@/lib/pdfExport';
 import { computeMonthStats, previousMonthKey } from '@/lib/parentPortalStats';
 import { MonthComparison, MonthlyTrendChart, CalcNote } from '@/components/parent-portal/ParentInsights';
-import MotivationCard from '@/components/parent-portal/MotivationCard';
 import {
   ProfileCard,
   MonthSelector,
@@ -451,7 +450,7 @@ function PortalContent({
       </header>
 
       <main className="mx-auto max-w-2xl space-y-5 px-4 py-6 pb-28 lg:max-w-5xl">
-        <ProfileCard student={student} rank={data.rank} totalInGroup={data.totalStudentsInGroup} />
+        <ProfileCard student={student} rank={data.rank} totalInGroup={data.totalStudentsInGroup} monthLabel={getMonthLabel(selectedMonth)} />
 
         <MonthSelector selectedMonth={selectedMonth} onMonthChange={onMonthChange} availableMonths={availableMonths} />
 
@@ -528,8 +527,6 @@ function PortalContent({
         <MonthComparison current={currentStats} previous={previousStats} currentKey={selectedMonth} previousKey={prevKey} />
 
         <MonthlyTrendChart points={trendPoints} />
-
-        <MotivationCard overallPercentage={overallPercentage} />
 
         <TeacherMessage />
       </main>

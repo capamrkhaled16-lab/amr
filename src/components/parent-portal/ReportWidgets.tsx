@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Award, Calendar, CheckCircle2, ChevronLeft, ChevronRight, Clock, AlertCircle, Receipt, Target, Wallet } from 'lucide-react';
+import { Award, Calendar, CheckCircle2, ChevronLeft, ChevronRight, Clock, AlertCircle, Receipt, Star, Target, Wallet } from 'lucide-react';
 import { formatArabicDate, formatCurrency, getGradeRating, getMonthLabel } from '@/lib/format';
 import type { AttendanceRecord, BehaviorEval, CenterExam, CenterGrade, Homework, HomeworkStatus, OnlineExam, OnlineGrade, Payment } from '@/lib/types';
 
@@ -39,19 +39,20 @@ export interface StudentInfo {
   group_schedule?: string | null;
 }
 
-export function ProfileCard({ student, rank, totalInGroup }: { student: StudentInfo; rank: number | null; totalInGroup: number }) {
+export function ProfileCard({ student, rank, totalInGroup, monthLabel }: { student: StudentInfo; rank: number | null; totalInGroup: number; monthLabel: string }) {
   const rankText = rank !== null && totalInGroup > 0 ? rankLabel(rank) : null;
   return (
-    <section className={`${CARD} relative overflow-hidden border-[#d4af37]/35`}>
+    <section className={`${CARD} relative overflow-hidden`}>
       <div className="pointer-events-none absolute -top-20 left-0 h-48 w-48 rounded-full bg-[#10b981]/10 blur-3xl" />
-      <div className="relative flex items-center gap-4">
-        <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[#10b981] to-[#06b6d4] text-2xl font-black text-[#071010] shadow-[0_0_24px_rgba(16,185,129,0.35)]">
-          {student.name?.charAt(0) ?? '؟'}
-        </div>
-        <div className="min-w-0 flex-1">
+      <div className="relative flex items-start justify-between gap-3">
+        <div className="min-w-0">
           <p className="text-[10px] font-bold tracking-[0.18em] text-[#d4af37]">ملف الطالب</p>
-          <h2 className="truncate text-2xl font-black text-white">{student.name}</h2>
+          <h2 className="mt-1 truncate text-2xl font-black text-white">{student.name}</h2>
           {rankText && <p className="mt-1 text-[11px] font-bold text-[#d4af37]">{rankText} في المجموعة</p>}
+        </div>
+        <div className="shrink-0 rounded-xl border border-[#d4af37]/25 bg-[#d4af37]/[0.06] px-3 py-2 text-center">
+          <p className="text-[9px] text-slate-400">الشهر المستهدف</p>
+          <p className="mt-0.5 text-xs font-black text-[#f0d27a]">{monthLabel}</p>
         </div>
       </div>
       <div className="relative mt-5 flex flex-wrap gap-2">
@@ -202,6 +203,30 @@ export interface HeroMetric {
   color: string;
 }
 
+const PERFORMANCE_BORDER = (pct: number) => (pct >= 90 ? '#10b981' : pct >= 50 ? '#d4af37' : '#ef4444');
+
+const PRAISE_MESSAGES = [
+  'برافو عليك يا بطل! مستواك ممتاز، حافظ على قوتك وخلينا نشوف إنجاز أكبر الشهر الجاي!',
+  'أداء رائع وتعبك واضح! كمل بنفس الحماس، والقمة مستنياك!',
+  'نتيجة تفرح، وفخور باجتهادك. مستني منك الأفضل دايمًا!',
+];
+const POSITIVE_MESSAGES = [
+  'شاطر يا بطل! مستواك كويس، ومع شوية تركيز هتوصل لمستوى أعلى بكتير!',
+  'أنت ماشي في الطريق الصح، كمل واجتهد، ومستني منك نتيجة أقوى المرة الجاية!',
+  'تقدم جميل، وعندك فرصة تحقق أكتر. أنا واثق إنك تقدر!',
+];
+const ENCOURAGEMENT_MESSAGES = [
+  'ولا يهمك يا بطل، لسه قدامك فرصة كبيرة تتحسن، وأنا مستني أشوف منك نتيجة تفرحك!',
+  'أنت تقدر تعمل أحسن من كده، ابدأ خطوة خطوة وركز في اللي جاي، وأنا واثق فيك!',
+  'النتيجة دي مش نهاية الطريق، شد حيلك، والشهر الجاي بإذن الله نشوف تقدم يفرحنا!',
+];
+
+function motivationFor(pct: number): string {
+  if (pct >= 100) return 'مليون مبروك يا بطل! جبت الدرجة النهائية 100%، إنجاز يستحق الفخر والتقدير. حافظ على تفوقك، والقمة دايمًا مستنياك!';
+  const pool = pct >= 85 ? PRAISE_MESSAGES : pct >= 50 ? POSITIVE_MESSAGES : ENCOURAGEMENT_MESSAGES;
+  return pool[Math.round(pct) % pool.length];
+}
+
 export function PerformanceHero({ overall, monthLabel, metrics, trend }: {
   overall: number;
   monthLabel: string;
@@ -211,8 +236,9 @@ export function PerformanceHero({ overall, monthLabel, metrics, trend }: {
   const pct = Math.min(100, Math.max(0, Math.round(overall)));
   const radius = 54;
   const circumference = 2 * Math.PI * radius;
+  const accent = PERFORMANCE_BORDER(pct);
   return (
-    <section className={`${CARD} border-[#d4af37]/35`}>
+    <section className={CARD} style={{ borderColor: `${accent}99`, boxShadow: `0 0 36px ${accent}22, 0 18px 50px rgba(0,0,0,0.45)` }}>
       <div className="flex flex-col items-center gap-5 sm:flex-row sm:items-center">
         <div className="relative h-36 w-36 shrink-0">
           <svg viewBox="0 0 128 128" className="h-full w-full -rotate-90">
@@ -249,6 +275,15 @@ export function PerformanceHero({ overall, monthLabel, metrics, trend }: {
           <span>آخر {trend.length} أشهر</span>
         </div>
         <Sparkline values={trend} />
+      </div>
+      <div className="mt-5 flex items-start gap-3 rounded-2xl border border-[#10b981]/25 bg-[#10b981]/[0.06] p-4">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#10b981]/15 text-[#34d399]">
+          <Star className="h-4 w-4" />
+        </span>
+        <div className="min-w-0">
+          <p className="text-[10px] font-bold tracking-wider text-[#34d399]">رسالة تشجيع</p>
+          <p className="mt-1 text-sm leading-relaxed text-slate-100">{motivationFor(pct)}</p>
+        </div>
       </div>
     </section>
   );
