@@ -1,17 +1,14 @@
 import { TrendingDown, TrendingUp, Minus } from 'lucide-react';
 import type { MonthStats } from '@/lib/parentPortalStats';
 import { getMonthLabel } from '@/lib/format';
-
-type MetricKey = 'attendance' | 'absence' | 'homework' | 'exams' | 'behavior';
+import { CARD } from '@/components/parent-portal/ReportWidgets';
 
 interface MetricRow {
-  key: MetricKey;
+  key: string;
   label: string;
   higherIsBetter: boolean;
   current: number | null;
   previous: number | null;
-  currentDetail: string;
-  previousDetail: string;
 }
 
 function buildRows(current: MonthStats, previous: MonthStats): MetricRow[] {
@@ -22,8 +19,6 @@ function buildRows(current: MonthStats, previous: MonthStats): MetricRow[] {
       higherIsBetter: true,
       current: current.attendance.rate,
       previous: previous.attendance.rate,
-      currentDetail: `${current.attendance.present} حضور من ${current.attendance.total} حصة`,
-      previousDetail: `${previous.attendance.present} حضور من ${previous.attendance.total} حصة`,
     },
     {
       key: 'absence',
@@ -31,8 +26,6 @@ function buildRows(current: MonthStats, previous: MonthStats): MetricRow[] {
       higherIsBetter: false,
       current: current.attendance.absenceRate,
       previous: previous.attendance.absenceRate,
-      currentDetail: `${current.attendance.absent} غياب من ${current.attendance.total} حصة`,
-      previousDetail: `${previous.attendance.absent} غياب من ${previous.attendance.total} حصة`,
     },
     {
       key: 'homework',
@@ -40,8 +33,6 @@ function buildRows(current: MonthStats, previous: MonthStats): MetricRow[] {
       higherIsBetter: true,
       current: current.homework.rate,
       previous: previous.homework.rate,
-      currentDetail: `${current.homework.done} مكتمل من ${current.homework.total} واجب`,
-      previousDetail: `${previous.homework.done} مكتمل من ${previous.homework.total} واجب`,
     },
     {
       key: 'exams',
@@ -49,8 +40,6 @@ function buildRows(current: MonthStats, previous: MonthStats): MetricRow[] {
       higherIsBetter: true,
       current: current.exams.average,
       previous: previous.exams.average,
-      currentDetail: `متوسط ${current.exams.count} امتحان`,
-      previousDetail: `متوسط ${previous.exams.count} امتحان`,
     },
     {
       key: 'behavior',
@@ -58,8 +47,6 @@ function buildRows(current: MonthStats, previous: MonthStats): MetricRow[] {
       higherIsBetter: true,
       current: current.behavior.rate,
       previous: previous.behavior.rate,
-      currentDetail: `${current.behavior.positive} تقييم إيجابي من ${current.behavior.rated}`,
-      previousDetail: `${previous.behavior.positive} تقييم إيجابي من ${previous.behavior.rated}`,
     },
   ];
 }
@@ -75,16 +62,16 @@ function describeChange(row: MetricRow): { text: string; improved: boolean | nul
   const diff = Math.round((row.current - row.previous) * 10) / 10;
   if (diff === 0) return { text: 'بدون تغيير عن الشهر السابق', improved: null };
   const improved = row.higherIsBetter ? diff > 0 : diff < 0;
-  const text = diff > 0
-    ? `زيادة بنسبة +${diff}% عن الشهر السابق`
-    : `انخفاض بنسبة ${diff}% عن الشهر السابق`;
+  const text = improved
+    ? `تحسن بنسبة +${Math.abs(diff)}%`
+    : `تراجع بنسبة -${Math.abs(diff)}%`;
   return { text, improved };
 }
 
 export function MonthComparison({ current, previous, currentKey, previousKey }: { current: MonthStats; previous: MonthStats; currentKey: string; previousKey: string }) {
   const rows = buildRows(current, previous);
   return (
-    <div className="pp-glass p-5">
+    <div className={CARD}>
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-sm font-bold text-white">مقارنة مع الشهر السابق</h3>
         <span className="text-[10px] text-slate-400">{getMonthLabel(previousKey)} ← {getMonthLabel(currentKey)}</span>
@@ -112,66 +99,6 @@ export function MonthComparison({ current, previous, currentKey, previousKey }: 
           );
         })}
       </div>
-    </div>
-  );
-}
-
-interface TrendPoint {
-  monthKey: string;
-  attendance: number | null;
-  exams: number | null;
-}
-
-export function MonthlyTrendChart({ points }: { points: TrendPoint[] }) {
-  const width = 320;
-  const height = 160;
-  const baseline = 130;
-  const slot = points.length > 0 ? (width - 24) / points.length : 0;
-  const barWidth = Math.min(16, slot / 3);
-
-  return (
-    <div className="pp-glass p-5">
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-bold text-white">اتجاه الأداء الشهري</h3>
-        <div className="flex items-center gap-3 text-[10px] text-slate-400">
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-emerald-400" />الحضور</span>
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-amber-400" />الامتحانات</span>
-        </div>
-      </div>
-      <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto" role="img" aria-label="مخطط الحضور والامتحانات لكل شهر">
-        <line x1="0" x2={width} y1={baseline} y2={baseline} stroke="rgba(255,255,255,0.12)" />
-        {points.map((p, i) => {
-          const x = 12 + i * slot + slot / 2;
-          const bars = [
-            { value: p.attendance, color: '#34d399', offset: -barWidth - 1 },
-            { value: p.exams, color: '#fbbf24', offset: 1 },
-          ];
-          return (
-            <g key={p.monthKey}>
-              {bars.map((bar, j) => {
-                if (bar.value === null) return null;
-                const h = (bar.value / 100) * (baseline - 20);
-                return (
-                  <rect key={j} x={x + bar.offset} y={baseline - h} width={barWidth} height={h} rx="2" fill={bar.color}>
-                    <title>{`${bar.value}%`}</title>
-                  </rect>
-                );
-              })}
-              {bars.map((bar, j) => (
-                <text key={`t${j}`} x={x + bar.offset + barWidth / 2} y={bar.value === null ? baseline - 4 : baseline - (bar.value / 100) * (baseline - 20) - 3} textAnchor="middle" fontSize="8" fill="#e2e8f0">
-                  {bar.value === null ? '—' : `${bar.value}`}
-                </text>
-              ))}
-              <text x={x} y={baseline + 14} textAnchor="middle" fontSize="9" fill="#94a3b8">
-                {p.monthKey.slice(5)}/{p.monthKey.slice(2, 4)}
-              </text>
-            </g>
-          );
-        })}
-      </svg>
-      <p className="text-[10px] text-slate-500 mt-2 leading-relaxed">
-        كل عمود يمثل شهراً واحداً محسوباً من سجلاته فقط. الرقم "—" يعني أنه لا توجد بيانات لهذا الشهر.
-      </p>
     </div>
   );
 }

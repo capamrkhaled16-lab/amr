@@ -36,15 +36,13 @@ import { GraduationCap, CircleAlert as AlertCircle, Loader as Loader2 } from 'lu
 import { PDFButton } from '@/components/ui/PDFButton';
 import { exportParentPortalPDF } from '@/lib/pdfExport';
 import { computeMonthStats, previousMonthKey } from '@/lib/parentPortalStats';
-import { MonthComparison, MonthlyTrendChart, CalcNote } from '@/components/parent-portal/ParentInsights';
+import { MonthComparison, CalcNote } from '@/components/parent-portal/ParentInsights';
 import {
   ProfileCard,
   MonthSelector,
   FinanceCard,
   ReceiptCard,
   PerformanceHero,
-  AttendanceMap,
-  PerformanceRadarCard,
   CalcNotesCard,
   AchievementsCard,
   GradesList,
@@ -389,19 +387,10 @@ function PortalContent({
     });
   }, [recordsForStats, availableMonths, selectedMonth, prevKey]);
 
-  const radarAxes = totalAttendance > 0 && hwTotal > 0 && examAvg !== null && currentStats.behavior.rated > 0
-    ? [
-        { label: 'الحضور', value: attendanceRate },
-        { label: 'الواجبات', value: hwRate },
-        { label: 'الامتحانات', value: examAvg },
-        { label: 'السلوك', value: behaviorRate },
-      ]
-    : null;
-
   const heroMetrics: HeroMetric[] = [
     { label: 'الحضور', value: totalAttendance > 0 ? attendanceRate : null, previous: previousStats.attendance.rate ?? null, color: '#10b981' },
     { label: 'الواجبات', value: hwTotal > 0 ? hwRate : null, previous: previousStats.homework.rate ?? null, color: '#06b6d4' },
-    { label: 'الامتحانات', value: examAvg, previous: previousStats.exams.average ?? null, color: '#d4af37' },
+    { label: 'الدرجات', value: examAvg, previous: previousStats.exams.average ?? null, color: '#d4af37' },
     { label: 'السلوك', value: currentStats.behavior.rated > 0 ? behaviorRate : null, previous: previousStats.behavior.rate ?? null, color: '#34d399' },
   ];
 
@@ -472,11 +461,6 @@ function PortalContent({
         />
 
         <div className="grid gap-5 lg:grid-cols-2">
-          <AttendanceMap records={monthFilteredAttendance} />
-          <PerformanceRadarCard axes={radarAxes} />
-        </div>
-
-        <div className="grid gap-5 lg:grid-cols-2">
           <CalcNotesCard>
             <CalcNote
               label="نسبة الحضور"
@@ -525,8 +509,6 @@ function PortalContent({
         </div>
 
         <MonthComparison current={currentStats} previous={previousStats} currentKey={selectedMonth} previousKey={prevKey} />
-
-        <MonthlyTrendChart points={trendPoints} />
 
         <TeacherMessage />
       </main>

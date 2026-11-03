@@ -6,21 +6,6 @@ import type { AttendanceRecord, BehaviorEval, CenterExam, CenterGrade, Homework,
 export const CARD = 'rounded-[24px] border border-[#d4af37]/25 bg-[#0c1210]/95 p-5 sm:p-6 shadow-[0_18px_50px_rgba(0,0,0,0.45)]';
 export const TILE = 'rounded-2xl border border-white/[0.06] bg-[#111815] p-3';
 
-export const STATUS_COLORS = {
-  present: '#10b981',
-  absent: '#ef4444',
-  excused: '#3b82f6',
-  late: '#d4af37',
-} as const;
-
-const ATTENDANCE_TONE: Record<string, string> = {
-  present: STATUS_COLORS.present,
-  absent: STATUS_COLORS.absent,
-  excused: STATUS_COLORS.excused,
-  excused_absence: STATUS_COLORS.excused,
-  late: STATUS_COLORS.late,
-};
-
 export function SectionTitle({ icon, children }: { icon: ReactNode; children: ReactNode }) {
   return (
     <div className="mb-4 flex items-center gap-2 text-sm font-black text-white">
@@ -292,7 +277,7 @@ export function PerformanceHero({ overall, monthLabel, metrics, trend }: {
 function MetricCard({ metric }: { metric: HeroMetric }) {
   const { label, value, previous, color } = metric;
   const diff = value !== null && previous !== null ? Math.round(value - previous) : null;
-  const deltaText = diff === null ? 'لا توجد مقارنة' : diff > 0 ? `+${diff}% زيادة` : diff < 0 ? `${diff}% انخفاض` : 'بدون تغيير';
+  const deltaText = diff === null ? 'لا توجد مقارنة' : diff > 0 ? `تحسن بنسبة +${diff}%` : diff < 0 ? `تراجع بنسبة ${diff}%` : 'بدون تغيير عن الشهر السابق';
   const deltaTone = diff === null || diff === 0 ? 'text-slate-400' : diff > 0 ? 'text-[#34d399]' : 'text-[#fca5a5]';
   return (
     <div className={TILE}>
@@ -322,94 +307,6 @@ function Sparkline({ values }: { values: (number | null)[] }) {
       <polygon points={area} fill="url(#spark-fill)" />
       <polyline points={coords} fill="none" stroke="#10b981" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ filter: 'drop-shadow(0 0 4px rgba(16,185,129,0.7))' }} />
     </svg>
-  );
-}
-
-export function AttendanceMap({ records }: { records: AttendanceRecord[] }) {
-  const sorted = [...records].sort((a, b) => a.attendance_date.localeCompare(b.attendance_date));
-  return (
-    <section className={CARD}>
-      <SectionTitle icon={<Calendar className="h-4 w-4" />}>خريطة الحضور</SectionTitle>
-      {sorted.length === 0 ? (
-        <p className={TILE + ' text-center text-xs text-slate-500'}>لا توجد سجلات حضور محفوظة لهذا الشهر</p>
-      ) : (
-        <div className="flex flex-wrap gap-2">
-          {sorted.map((r) => (
-            <span
-              key={r.id}
-              title={formatArabicDate(r.attendance_date)}
-              className="h-5 w-5 rounded-md"
-              style={{ backgroundColor: ATTENDANCE_TONE[r.status] ?? '#475569', boxShadow: `0 0 10px ${ATTENDANCE_TONE[r.status] ?? '#475569'}55` }}
-            />
-          ))}
-        </div>
-      )}
-      <div className="mt-4 flex flex-wrap gap-3 text-[11px] text-slate-400">
-        <LegendDot color={STATUS_COLORS.present} label="حاضر" />
-        <LegendDot color={STATUS_COLORS.absent} label="غائب" />
-        <LegendDot color={STATUS_COLORS.excused} label="بعذر" />
-        <LegendDot color={STATUS_COLORS.late} label="متأخر" />
-      </div>
-    </section>
-  );
-}
-
-function LegendDot({ color, label }: { color: string; label: string }) {
-  return (
-    <span className="flex items-center gap-1.5">
-      <span className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: color }} />
-      {label}
-    </span>
-  );
-}
-
-export function PerformanceRadar({ axes }: { axes: { label: string; value: number }[] }) {
-  const size = 240;
-  const center = size / 2;
-  const radius = 80;
-  const angles = [-90, 0, 90, 180];
-  const toPoint = (value: number, angle: number) => {
-    const rad = (angle * Math.PI) / 180;
-    const d = (radius * value) / 100;
-    return { x: center + d * Math.cos(rad), y: center + d * Math.sin(rad) };
-  };
-  const ring = (scale: number) => angles.map((a) => toPoint(scale, a)).map((p) => `${p.x},${p.y}`).join(' ');
-  const dataPoints = axes.map((a, i) => toPoint(Math.min(100, Math.max(0, a.value)), angles[i]));
-  return (
-    <svg viewBox={`0 0 ${size} ${size}`} className="mx-auto block w-full max-w-[260px]" role="img" aria-label="بصمة الأداء">
-      {[25, 50, 75, 100].map((s) => (
-        <polygon key={s} points={ring(s)} fill="none" stroke="rgba(212,175,55,0.12)" strokeWidth="1" />
-      ))}
-      {angles.map((a) => {
-        const p = toPoint(100, a);
-        return <line key={a} x1={center} y1={center} x2={p.x} y2={p.y} stroke="rgba(212,175,55,0.12)" strokeWidth="1" />;
-      })}
-      <polygon points={dataPoints.map((p) => `${p.x},${p.y}`).join(' ')} fill="rgba(16,185,129,0.25)" stroke="#10b981" strokeWidth="2" strokeLinejoin="round" />
-      {dataPoints.map((p, i) => (
-        <circle key={axes[i].label} cx={p.x} cy={p.y} r="4" fill="#d4af37" stroke="#071010" strokeWidth="2" />
-      ))}
-      {axes.map((a, i) => {
-        const p = toPoint(118, angles[i]);
-        return (
-          <text key={a.label} x={p.x} y={p.y} textAnchor="middle" dominantBaseline="middle" fill="#cbd5e1" style={{ fontSize: 11, fontWeight: 700 }}>
-            {`${a.label} ${Math.round(a.value)}%`}
-          </text>
-        );
-      })}
-    </svg>
-  );
-}
-
-export function PerformanceRadarCard({ axes }: { axes: { label: string; value: number }[] | null }) {
-  return (
-    <section className={CARD}>
-      <SectionTitle icon={<Target className="h-4 w-4" />}>بصمة الأداء</SectionTitle>
-      {axes ? (
-        <PerformanceRadar axes={axes} />
-      ) : (
-        <p className={TILE + ' text-center text-xs text-slate-500'}>تظهر بصمة الأداء عند توفر بيانات الحضور والواجبات والامتحانات والسلوك لهذا الشهر</p>
-      )}
-    </section>
   );
 }
 
@@ -532,7 +429,21 @@ export function HomeworkList({ homework, statuses, studentId }: { homework: Home
 }
 
 export function AttendanceList({ records }: { records: (AttendanceRecord & { sessions?: { id: string; title: string } | null })[] }) {
-  if (records.length === 0) return null;
+  const count = (...statuses: string[]) => records.filter((r) => statuses.includes(r.status)).length;
+  const summary = [
+    { label: 'حاضر', value: count('present'), cls: 'border-[#10b981]/30 bg-[#10b981]/10 text-[#34d399]' },
+    { label: 'غائب', value: count('absent'), cls: 'border-[#ef4444]/30 bg-[#ef4444]/10 text-[#fca5a5]' },
+    { label: 'بعذر', value: count('excused', 'excused_absence'), cls: 'border-[#3b82f6]/30 bg-[#3b82f6]/10 text-[#93c5fd]' },
+    { label: 'متأخر', value: count('late'), cls: 'border-[#d4af37]/30 bg-[#d4af37]/10 text-[#f0d27a]' },
+  ];
+  if (records.length === 0) {
+    return (
+      <section className={CARD}>
+        <SectionTitle icon={<Calendar className="h-4 w-4" />}>سجل الحضور</SectionTitle>
+        <p className={TILE + ' text-center text-xs text-slate-500'}>لا توجد سجلات حضور محفوظة لهذا الشهر</p>
+      </section>
+    );
+  }
   const statusLabel: Record<string, { label: string; tone: 'green' | 'red' | 'gold' | 'blue' | 'muted' }> = {
     present: { label: 'حاضر', tone: 'green' },
     absent: { label: 'غائب', tone: 'red' },
@@ -543,6 +454,14 @@ export function AttendanceList({ records }: { records: (AttendanceRecord & { ses
   return (
     <section className={CARD}>
       <SectionTitle icon={<Calendar className="h-4 w-4" />}>سجل الحضور</SectionTitle>
+      <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {summary.map((s) => (
+          <div key={s.label} className={`rounded-2xl border px-3 py-2.5 text-center ${s.cls}`}>
+            <p className="text-[10px] font-bold">{s.label}</p>
+            <p className="mt-0.5 text-lg font-black">{s.value}</p>
+          </div>
+        ))}
+      </div>
       <div className="space-y-2">
         {records.map((rec) => {
           const cfg = statusLabel[rec.status] ?? { label: 'لم يسجل', tone: 'muted' as const };
