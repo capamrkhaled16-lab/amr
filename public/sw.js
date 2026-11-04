@@ -1,4 +1,4 @@
-const CACHE_NAME = 'alkhaled-v70';
+const CACHE_NAME = 'alkhaled-v71';
 const STATIC_ASSETS = [
   '/',
   '/index.html',

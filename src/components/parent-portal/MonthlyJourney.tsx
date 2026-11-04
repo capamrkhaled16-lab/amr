@@ -59,7 +59,7 @@ export function MonthlyJourney({ monthKey, events, hasOverall, overall }: {
                   {ev.trend !== null && ev.trend !== undefined && (
                     <span className={`mt-1.5 inline-flex items-center gap-1 text-[11px] font-bold ${ev.trend >= 0 ? 'text-[#087F5B]' : 'text-[#B91C1C]'}`}>
                       {ev.trend >= 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-                      {ev.trend >= 0 ? `+${ev.trend}%` : `${ev.trend}%`} عن الشهر السابق
+                      {ev.trend >= 0 ? `+${ev.trend}` : `${ev.trend}`} نقطة عن الشهر السابق
                     </span>
                   )}
                 </div>

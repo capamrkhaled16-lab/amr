@@ -35,7 +35,7 @@ import type {
 import { Award, CalendarCheck, ClipboardCheck, GraduationCap, CircleAlert as AlertCircle, Loader as Loader2, Moon, Sparkles, Sun } from 'lucide-react';
 import { PDFButton } from '@/components/ui/PDFButton';
 import { exportParentPortalPDF } from '@/lib/pdfExport';
-import { computeMonthStats, previousMonthKey } from '@/lib/parentPortalStats';
+import { computeMonthStats, previousMonthKey, type MonthStats } from '@/lib/parentPortalStats';
 import { MonthComparison, CalcNote } from '@/components/parent-portal/ParentInsights';
 import {
   ProfileCard,
@@ -59,6 +59,20 @@ import { PerformanceTrendChart } from '@/components/parent-portal/PerformanceTre
 import { PerformanceRadar, AttendanceDonut, AcademicBars } from '@/components/parent-portal/PortalCharts';
 import { MonthlyJourney, type JourneyEvent } from '@/components/parent-portal/MonthlyJourney';
 import { PORTAL_THEME_CSS, portalBackground } from '@/components/parent-portal/portalTheme';
+
+const OVERALL_WEIGHTS = { exams: 0.35, attendance: 0.25, homework: 0.2, behavior: 0.2 } as const;
+
+function overallFromStats(stats: MonthStats): number | null {
+  const parts = [
+    { value: stats.exams.average, weight: OVERALL_WEIGHTS.exams },
+    { value: stats.attendance.rate, weight: OVERALL_WEIGHTS.attendance },
+    { value: stats.homework.rate, weight: OVERALL_WEIGHTS.homework },
+    { value: stats.behavior.rate, weight: OVERALL_WEIGHTS.behavior },
+  ].filter((p): p is { value: number; weight: number } => p.value !== null);
+  const totalWeight = parts.reduce((sum, p) => sum + p.weight, 0);
+  if (totalWeight === 0) return null;
+  return Math.round((parts.reduce((sum, p) => sum + p.value * p.weight, 0) / totalWeight) * 10) / 10;
+}
 
 type LoadState = 'loading' | 'success' | 'error' | 'notfound';
 
@@ -358,12 +372,10 @@ function PortalContent({
       totals.exams.max += grade.max_score;
     }
     const toRate = (part: { score: number; max: number }): number | null => part.max > 0 ? Math.round((part.score / part.max) * 100) : null;
-    const total = Object.values(totals).reduce((sum, part) => ({ score: sum.score + part.score, max: sum.max + part.max }), { score: 0, max: 0 });
     return {
       recitation: { ...totals.recitation, rate: toRate(totals.recitation) },
       sheet: { ...totals.sheet, rate: toRate(totals.sheet) },
       exams: { ...totals.exams, rate: toRate(totals.exams) },
-      combined: toRate(total),
     };
   }, [data.centerGrades, data.centerExams, data.onlineGrades, data.onlineExams, selectedMonth]);
 
@@ -442,19 +454,14 @@ function PortalContent({
     [trendMonths, recordsForStats],
   );
 
-  const behaviorRate = currentStats.behavior.rate ?? 0;
   const hasOverallData = examAvg !== null || totalAttendance > 0 || hwTotal > 0 || currentStats.behavior.rated > 0;
-  const overallPercentage = useMemo(() => {
-    if (!hasOverallData) return null;
-    const gradeRate = examAvg ?? 0;
-    return Math.round((gradeRate * 0.35 + attendanceRate * 0.25 + hwRate * 0.2 + behaviorRate * 0.2) * 10) / 10;
-  }, [attendanceRate, examAvg, hwRate, behaviorRate, hasOverallData]);
+  const overallPercentage = hasOverallData ? overallFromStats(currentStats) : null;
 
   const heroMetrics: HeroMetric[] = [
     { label: 'نسبة الواجبات', value: hwTotal > 0 ? hwRate : null, previous: previousStats.homework.rate ?? null, color: '#2B7BB9', icon: ClipboardCheck },
-    { label: 'نسبة الدرجات والامتحانات', value: gradeBreakdown.combined, previous: previousStats.exams.average ?? null, color: '#C69B35', icon: Award },
+    { label: 'نسبة الدرجات والامتحانات', value: currentStats.exams.average, previous: previousStats.exams.average ?? null, color: '#C69B35', icon: Award },
     { label: 'نسبة الحضور', value: totalAttendance > 0 ? attendanceRate : null, previous: previousStats.attendance.rate ?? null, color: '#087F5B', icon: CalendarCheck },
-    { label: 'نسبة السلوك', value: currentStats.behavior.rated > 0 ? behaviorRate : null, previous: previousStats.behavior.rate ?? null, color: '#2B7BB9', icon: Sparkles },
+    { label: 'نسبة السلوك', value: currentStats.behavior.rate, previous: previousStats.behavior.rate ?? null, color: '#2B7BB9', icon: Sparkles },
   ];
 
   const journeyEvents = useMemo((): JourneyEvent[] => {
@@ -489,9 +496,7 @@ function PortalContent({
       }
     }
     if (hasOverallData && overallPercentage !== null) {
-      const prevOverall = previousStats.attendance.rate !== null || previousStats.exams.average !== null || previousStats.homework.rate !== null || previousStats.behavior.rate !== null
-        ? Math.round((previousStats.exams.average ?? 0) * 0.35 + (previousStats.attendance.rate ?? 0) * 0.25 + (previousStats.homework.rate ?? 0) * 0.2 + (previousStats.behavior.rate ?? 0) * 0.2)
-        : null;
+      const prevOverall = overallFromStats(previousStats);
       events.push({
         date: `${selectedMonth}-15`,
         title: 'النسبة العامة للشهر',
@@ -509,7 +514,7 @@ function PortalContent({
     { axis: 'الامتحانات', value: gradeBreakdown.exams.rate },
     { axis: 'الحضور', value: totalAttendance > 0 ? attendanceRate : null },
     { axis: 'الواجبات', value: hwTotal > 0 ? hwRate : null },
-    { axis: 'السلوك', value: currentStats.behavior.rated > 0 ? behaviorRate : null },
+    { axis: 'السلوك', value: currentStats.behavior.rate },
   ];
 
   const academicBars = [
@@ -598,6 +603,12 @@ function PortalContent({
 
         <div className="grid gap-5 lg:grid-cols-2">
           <CalcNotesCard>
+            <CalcNote
+              label="النسبة العامة للشهر"
+              value={overallPercentage}
+              formula="متوسط مرجح: الامتحانات 35% + الحضور 25% + الواجبات 20% + السلوك الإيجابي 20%. أي جزء بلا بيانات في الشهر يُستبعد وتُوزع أوزانه على باقي الأجزاء."
+              detail="تُحسب من النسب الظاهرة في بطاقات هذا الشهر فقط"
+            />
             <CalcNote
               label="نسبة الحضور"
               value={currentStats.attendance.rate}

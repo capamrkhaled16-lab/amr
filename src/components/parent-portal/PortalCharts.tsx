@@ -20,7 +20,7 @@ export function PerformanceRadar({ data, theme }: { data: RadarPoint[]; theme: P
       </section>
     );
   }
-  const chartData = data.map((d) => ({ axis: d.axis, value: d.value ?? 0 }));
+  const chartData = data.map((d) => ({ axis: d.axis, value: d.value }));
   return (
     <section className={CARD}>
       <SectionTitle icon={<Activity className="h-4 w-4" />}>رسم راداري للأداء</SectionTitle>
@@ -29,7 +29,7 @@ export function PerformanceRadar({ data, theme }: { data: RadarPoint[]; theme: P
           <RadarChart data={chartData} outerRadius="62%">
             <PolarGrid stroke={gridColor} strokeDasharray="2 4" />
             <PolarAngleAxis dataKey="axis" tick={{ fill: axisColor, fontSize: 10 }} />
-            <Radar dataKey="value" stroke="#C69B35" fill="#C69B35" fillOpacity={0.18} strokeWidth={1.5} />
+            <Radar dataKey="value" stroke="#C69B35" fill="#C69B35" fillOpacity={0.18} strokeWidth={1.5} connectNulls />
             <Tooltip formatter={(v) => `${v}%`} contentStyle={{ borderRadius: 8, direction: 'rtl', fontSize: 12 }} />
           </RadarChart>
         </ResponsiveContainer>
@@ -113,7 +113,7 @@ export function AcademicBars({ data }: { data: BarPoint[] }) {
       </section>
     );
   }
-  const chartData = data.map((d) => ({ label: d.label, value: d.value ?? 0, color: d.color }));
+  const chartData = data.filter((d): d is BarPoint & { value: number } => d.value !== null).map((d) => ({ label: d.label, value: d.value, color: d.color }));
   return (
     <section className={CARD}>
       <SectionTitle icon={<BarChart3 className="h-4 w-4" />}>مقارنة المؤشرات الأكاديمية</SectionTitle>

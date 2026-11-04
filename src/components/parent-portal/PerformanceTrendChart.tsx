@@ -18,10 +18,12 @@ const SERIES = [
 
 type SeriesKey = (typeof SERIES)[number]['key'];
 
-function latestChange(data: TrendPoint[], key: SeriesKey): number | null {
-  const values = data.map((point) => point[key]).filter((value): value is number => value !== null);
-  if (values.length < 2) return null;
-  return Math.round(values[values.length - 1] - values[values.length - 2]);
+function latestChange(data: TrendPoint[], key: SeriesKey): { delta: number; from: string; to: string } | null {
+  const points = data.filter((point) => point[key] !== null);
+  if (points.length < 2) return null;
+  const last = points[points.length - 1];
+  const prev = points[points.length - 2];
+  return { delta: Math.round((last[key] as number) - (prev[key] as number)), from: prev.month, to: last.month };
 }
 
 export function PerformanceTrendChart({ data, theme }: { data: TrendPoint[]; theme: PortalTheme }) {
@@ -37,10 +39,10 @@ export function PerformanceTrendChart({ data, theme }: { data: TrendPoint[]; the
           {SERIES.map((series) => {
             const change = latestChange(data, series.key);
             if (change === null) return null;
-            const up = change >= 0;
+            const up = change.delta >= 0;
             return (
               <span key={series.key} className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-black ${up ? 'bg-[#E8F5EF] text-[#087F5B]' : 'bg-[#FEF2F2] text-[#B91C1C]'}`}>
-                {series.label}: {change > 0 ? '+' : ''}{change}% {up ? 'تحسن' : 'تراجع'}
+                {series.label}: {change.delta > 0 ? '+' : ''}{change.delta} نقطة {up ? 'تحسن' : 'تراجع'} ({change.from} ← {change.to})
               </span>
             );
           })}
