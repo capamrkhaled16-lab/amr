@@ -50,7 +50,7 @@ const BLUE = '#1D4ED8';
 
 let generating = false;
 
-function escapeHtml(str: string | number | null | undefined): string {
+export function escapeHtml(str: string | number | null | undefined): string {
   if (str == null) return '';
   const s = String(str);
   return s
