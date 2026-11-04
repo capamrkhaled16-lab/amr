@@ -77,6 +77,7 @@ export interface Payment {
   note: string | null;
   recorded_by: string | null;
   receipt_number: string | null;
+  recorded_at?: string | null;
   is_deleted: boolean;
   month_key: string | null;
   idempotency_key: string | null;

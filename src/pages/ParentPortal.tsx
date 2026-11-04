@@ -40,8 +40,6 @@ import { MonthComparison, CalcNote } from '@/components/parent-portal/ParentInsi
 import {
   ProfileCard,
   MonthSelector,
-  FinanceCard,
-  ReceiptCard,
   CalcNotesCard,
   AchievementsCard,
   GradesList,
@@ -53,8 +51,9 @@ import {
   SectionNav,
   REPORT_SECTIONS,
   PortalSkeleton,
-  type FinanceStatus,
 } from '@/components/parent-portal/ReportWidgets';
+import { FinanceSummaryCard, ReceiptHistoryCard } from '@/components/parent-portal/PaymentStatement';
+import { computeParentFinance } from '@/lib/parentPaymentLedger';
 import { MotivationBox, PerformanceHero, type HeroMetric } from '@/components/parent-portal/PerformanceHero';
 import { PerformanceTrendChart } from '@/components/parent-portal/PerformanceTrendChart';
 import { PerformanceRadar, AttendanceDonut, AcademicBars } from '@/components/parent-portal/PortalCharts';
@@ -373,19 +372,9 @@ function PortalContent({
     return Math.round(examPoints.reduce((acc, p) => acc + p.pct, 0) / examPoints.length);
   }, [examPoints]);
 
-  const feesDue = monthSubscription?.amount_due ?? 0;
-  const feesPaid = monthFilteredPayments.reduce((sum, p) => sum + (p.amount ?? 0), 0);
-  const feesRemaining = Math.max(0, feesDue - feesPaid);
-  const isExempt = monthSubscription?.is_exempt ?? false;
-  const financeStatus: FinanceStatus = isExempt
-    ? 'exempt'
-    : !monthSubscription || feesDue <= 0
-      ? 'missing'
-      : feesPaid <= 0
-        ? 'unpaid'
-        : feesRemaining > 0
-          ? 'partial'
-          : 'paid';
+  const finance = computeParentFinance(monthSubscription, monthFilteredPayments);
+  const { feesDue, feesPaid, feesRemaining } = finance;
+  const isExempt = finance.status === 'exempt';
 
   const upcomingExams = useMemo(() => {
     const now = new Date().toISOString().slice(0, 10);
@@ -592,13 +581,8 @@ function PortalContent({
 
         <div className="space-y-5 lg:grid lg:grid-cols-5 lg:items-start lg:gap-5 lg:space-y-0">
         <div id="payments" className="scroll-mt-32 space-y-5 lg:col-span-2">
-          <FinanceCard
-            status={financeStatus}
-            feesDue={feesDue}
-            feesPaid={feesPaid}
-            feesRemaining={feesRemaining}
-          />
-          <ReceiptCard payments={monthFilteredPayments} feesRemaining={monthSubscription ? feesRemaining : null} />
+          <FinanceSummaryCard finance={finance} />
+          <ReceiptHistoryCard finance={finance} studentName={student.name} groupName={student.group_name ?? null} />
         </div>
 
         <div className="lg:col-span-3 space-y-5">
