@@ -377,7 +377,6 @@ function PortalContent({
   const feesPaid = monthFilteredPayments.reduce((sum, p) => sum + (p.amount ?? 0), 0);
   const feesRemaining = Math.max(0, feesDue - feesPaid);
   const isExempt = monthSubscription?.is_exempt ?? false;
-  const collectionRate = feesDue > 0 ? Math.min(100, Math.round((feesPaid / feesDue) * 100)) : 0;
   const financeStatus: FinanceStatus = isExempt
     ? 'exempt'
     : !monthSubscription || feesDue <= 0
