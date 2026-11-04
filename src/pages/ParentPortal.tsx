@@ -32,7 +32,7 @@ import type {
   HomeworkStatus,
   BehaviorEval,
 } from '@/lib/types';
-import { Award, CalendarCheck, ClipboardCheck, GraduationCap, CircleAlert as AlertCircle, Loader as Loader2, Sparkles } from 'lucide-react';
+import { Award, CalendarCheck, ClipboardCheck, GraduationCap, CircleAlert as AlertCircle, Loader as Loader2, Moon, Sparkles, Sun } from 'lucide-react';
 import { PDFButton } from '@/components/ui/PDFButton';
 import { exportParentPortalPDF } from '@/lib/pdfExport';
 import { computeMonthStats, previousMonthKey } from '@/lib/parentPortalStats';
@@ -54,6 +54,23 @@ import {
   REPORT_SECTIONS,
 } from '@/components/parent-portal/ReportWidgets';
 import { PerformanceHero, type HeroMetric } from '@/components/parent-portal/PerformanceHero';
+
+const PORTAL_THEME_STYLES = `
+  .pp-dark { background: #0B1210 !important; color: #F4F7F4 !important; }
+  .pp-dark .bg-white { background-color: #14201B !important; }
+  .pp-dark .bg-\\[\\#F7F8F5\\] { background-color: #101A16 !important; }
+  .pp-dark .bg-\\[\\#E8F5EF\\] { background-color: #173A2C !important; }
+  .pp-dark .bg-\\[\\#FBF3DF\\] { background-color: #3A311B !important; }
+  .pp-dark .bg-\\[\\#EAF4FC\\] { background-color: #172C3A !important; }
+  .pp-dark .border-\\[\\#E6EAE5\\] { border-color: #2B3B34 !important; }
+  .pp-dark .border-\\[\\#D8DED9\\] { border-color: #405248 !important; }
+  .pp-dark [class*=\\"text-\\[\\#24332D\\]\\"] { color: #F4F7F4 !important; }
+  .pp-dark [class*=\\"text-\\[\\#5F6B65\\]\\"] { color: #B4C2BA !important; }
+  .pp-dark [class*=\\"text-\\[\\#77847D\\"] { color: #91A39A !important; }
+  .pp-dark .shadow-\\[0_8px_30px_rgba\\(36\\,51\\,45\\,0.06\\)\\] { box-shadow: 0 12px 36px rgba(0,0,0,.24) !important; }
+  .pp-dark nav { background-color: rgba(11,18,16,.94) !important; }
+  .pp-dark .pp-dark-control { background-color: #1B2A23 !important; color: #F4F7F4 !important; border-color: #405248 !important; }
+`;
 
 type LoadState = 'loading' | 'success' | 'error' | 'notfound';
 
@@ -273,6 +290,21 @@ function PortalContent({
 }) {
   const { student } = data;
   const { settings } = useSettings();
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    try {
+      return localStorage.getItem('parent-portal-theme') === 'dark' ? 'dark' : 'light';
+    } catch {
+      return 'light';
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('parent-portal-theme', theme);
+    } catch {
+      // Theme persistence is optional when browser storage is unavailable.
+    }
+  }, [theme]);
 
   const availableMonths = useMemo(() => {
     const months = new Set<string>();
@@ -321,19 +353,31 @@ function PortalContent({
     return points.sort((a, b) => a.when.localeCompare(b.when));
   }, [data.centerGrades, data.centerExams, data.onlineGrades, data.onlineExams, selectedMonth]);
 
-  const categoryRates = useMemo(() => {
-    const categories = { recitation: [] as number[], sheet: [] as number[] };
+  const gradeBreakdown = useMemo(() => {
+    const totals = { recitation: { score: 0, max: 0 }, sheet: { score: 0, max: 0 }, exams: { score: 0, max: 0 } };
     for (const grade of data.centerGrades) {
       const exam = data.centerExams.find((item) => item.id === grade.center_exam_id);
       if (!exam || exam.max_score <= 0 || exam.exam_date?.slice(0, 7) !== selectedMonth) continue;
-      const category = exam.category === 'recitation' ? 'recitation' : exam.category === 'sheet' ? 'sheet' : null;
-      if (category) categories[category].push((grade.score / exam.max_score) * 100);
+      const category = exam.category === 'recitation' ? 'recitation' : exam.category === 'sheet' ? 'sheet' : 'exams';
+      totals[category].score += grade.score;
+      totals[category].max += exam.max_score;
     }
+    for (const grade of data.onlineGrades) {
+      const exam = data.onlineExams.find((item) => item.id === grade.exam_id);
+      const when = exam?.open_at ?? exam?.created_at ?? '';
+      if (!exam || grade.max_score <= 0 || when.slice(0, 7) !== selectedMonth) continue;
+      totals.exams.score += grade.score;
+      totals.exams.max += grade.max_score;
+    }
+    const toRate = (part: { score: number; max: number }): number | null => part.max > 0 ? Math.round((part.score / part.max) * 100) : null;
+    const total = Object.values(totals).reduce((sum, part) => ({ score: sum.score + part.score, max: sum.max + part.max }), { score: 0, max: 0 });
     return {
-      recitation: categories.recitation.length > 0 ? Math.round(categories.recitation.reduce((sum, value) => sum + value, 0) / categories.recitation.length) : null,
-      sheet: categories.sheet.length > 0 ? Math.round(categories.sheet.reduce((sum, value) => sum + value, 0) / categories.sheet.length) : null,
+      recitation: { ...totals.recitation, rate: toRate(totals.recitation) },
+      sheet: { ...totals.sheet, rate: toRate(totals.sheet) },
+      exams: { ...totals.exams, rate: toRate(totals.exams) },
+      combined: toRate(total),
     };
-  }, [data.centerGrades, data.centerExams, selectedMonth]);
+  }, [data.centerGrades, data.centerExams, data.onlineGrades, data.onlineExams, selectedMonth]);
 
   const examAvg = useMemo(() => {
     if (examPoints.length === 0) return null;
@@ -398,9 +442,7 @@ function PortalContent({
 
   const heroMetrics: HeroMetric[] = [
     { label: 'نسبة الواجبات', value: hwTotal > 0 ? hwRate : null, previous: previousStats.homework.rate ?? null, color: '#2B7BB9', icon: ClipboardCheck },
-    { label: 'نسبة التلاوة', value: categoryRates.recitation, previous: null, color: '#C69B35', icon: Award },
-    { label: 'نسبة الأوراق', value: categoryRates.sheet, previous: null, color: '#087F5B', icon: ClipboardCheck },
-    { label: 'نسبة الدرجات والامتحانات', value: examAvg, previous: previousStats.exams.average ?? null, color: '#C69B35', icon: Award },
+    { label: 'نسبة الدرجات والامتحانات', value: gradeBreakdown.combined, previous: previousStats.exams.average ?? null, color: '#C69B35', icon: Award },
     { label: 'نسبة الحضور', value: totalAttendance > 0 ? attendanceRate : null, previous: previousStats.attendance.rate ?? null, color: '#087F5B', icon: CalendarCheck },
     { label: 'نسبة السلوك', value: currentStats.behavior.rated > 0 ? behaviorRate : null, previous: previousStats.behavior.rate ?? null, color: '#2B7BB9', icon: Sparkles },
   ];
@@ -408,7 +450,8 @@ function PortalContent({
   if (data.monthKey !== selectedMonth) return <FullScreenLoader label="جاري تحميل بيانات الشهر..." />;
 
   return (
-    <div className="min-h-screen bg-[#F7F8F5] text-[#24332D]" dir="rtl" lang="ar">
+    <div className={`pp-portal min-h-screen ${theme === 'dark' ? 'pp-dark' : 'pp-light'} bg-[#F7F8F5] text-[#24332D]`} dir="rtl" lang="ar">
+      <style>{PORTAL_THEME_STYLES}</style>
       <header className="sticky top-0 z-30 border-b border-[#E6EAE5] bg-white/95 backdrop-blur-md">
         <div className="mx-auto flex max-w-2xl items-center justify-between px-4 py-3 lg:max-w-5xl">
           <div className="flex items-center gap-2.5">
@@ -422,6 +465,15 @@ function PortalContent({
           </div>
           <div className="flex items-center gap-2">
             {loadingMonth && <Loader2 className="h-4 w-4 animate-spin text-[#087F5B]" />}
+            <button
+              type="button"
+              aria-label={theme === 'dark' ? 'تفعيل الوضع الفاتح' : 'تفعيل الوضع الغامق'}
+              onClick={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')}
+              className="pp-dark-control flex h-9 items-center gap-2 rounded-xl border border-[#E6EAE5] bg-white px-3 text-[11px] font-bold text-[#24332D] transition hover:border-[#087F5B]/40 active:scale-95 motion-reduce:transition-none"
+            >
+              {theme === 'dark' ? <Sun className="h-4 w-4 text-[#C69B35]" /> : <Moon className="h-4 w-4 text-[#087F5B]" />}
+              <span className="hidden sm:inline">{theme === 'dark' ? 'الوضع الفاتح' : 'الوضع الغامق'}</span>
+            </button>
             <PDFButton
               label="تصدير PDF"
               size="sm"
@@ -470,6 +522,7 @@ function PortalContent({
           overall={overallPercentage}
           monthLabel={getMonthLabel(selectedMonth)}
           metrics={heroMetrics}
+          gradeBreakdown={gradeBreakdown}
         />
 
         <div className="grid gap-5 lg:grid-cols-2">

@@ -115,7 +115,7 @@ export type FinanceStatus = 'exempt' | 'missing' | 'unpaid' | 'partial' | 'paid'
 
 const FINANCE_STATUS: Record<FinanceStatus, { label: string; tone: PillTone; icon: LucideIcon | null }> = {
   exempt: { label: 'معفى من الرسوم', tone: 'green', icon: CheckCircle2 },
-  missing: { label: 'لا توجد رسوم مسجلة لهذا الشهر', tone: 'muted', icon: null },
+  missing: { label: 'غير مسجل', tone: 'muted', icon: null },
   unpaid: { label: 'غير مسدد', tone: 'red', icon: AlertCircle },
   partial: { label: 'مسدد جزئياً', tone: 'gold', icon: Clock },
   paid: { label: 'مسدد بالكامل', tone: 'green', icon: CheckCircle2 },
@@ -138,6 +138,7 @@ export function FinanceCard({ status, feesDue, feesPaid, feesRemaining, collecti
         {Icon && <Icon className="h-3.5 w-3.5" />}
         {info.label}
       </Pill>
+      {status === 'missing' && <div className="mt-5 rounded-2xl border border-dashed border-[#D8DED9] bg-[#F7F8F5] p-4 text-center text-sm font-bold text-[#5F6B65]">بيانات الرسوم لهذا الشهر غير مسجلة</div>}
       {showAmounts && (
         <>
           <div className="mt-5 grid grid-cols-3 gap-2.5">
@@ -250,6 +251,40 @@ function gradeTone(pct: number): PillTone {
   return 'red';
 }
 
+type GradeCategory = 'recitation' | 'sheet' | 'exam';
+type GradeRow = { id: string; title: string; sub: string; score: number; max: number; category: GradeCategory };
+
+function GradeRows({ title, rows }: { title: string; rows: GradeRow[] }) {
+  return (
+    <div className="rounded-2xl border border-[#E6EAE5] bg-[#F7F8F5] p-3.5">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <h3 className="text-xs font-black text-[#24332D]">{title}</h3>
+        <span className="text-[10px] font-bold text-[#77847D]">{rows.length} سجل</span>
+      </div>
+      {rows.length === 0 ? <EmptyNote>غير مسجل لهذا الشهر</EmptyNote> : (
+        <div className="space-y-2">
+          {rows.map((r) => {
+            const pct = r.max > 0 ? Math.round((r.score / r.max) * 100) : 0;
+            const rating = getGradeRating(r.score, r.max);
+            return (
+              <div key={r.id} className="flex items-center justify-between gap-3 rounded-xl border border-[#E6EAE5] bg-white p-3">
+                <div className="min-w-0">
+                  <p className="truncate text-xs font-bold text-[#24332D]">{r.title}</p>
+                  <p className="mt-0.5 text-[10px] text-[#5F6B65]">{r.sub}</p>
+                </div>
+                <div className="shrink-0 text-left">
+                  <p className="text-sm font-black text-[#24332D]">{r.score}<span className="text-[10px] font-bold text-[#5F6B65]"> / {r.max}</span></p>
+                  <Pill tone={gradeTone(pct)}>{pct}% · {rating.label}</Pill>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function GradesList({ centerGrades, centerExams, onlineGrades, onlineExams, selectedMonth }: {
   centerGrades: CenterGrade[];
   centerExams: CenterExam[];
@@ -257,53 +292,27 @@ export function GradesList({ centerGrades, centerExams, onlineGrades, onlineExam
   onlineExams: OnlineExam[];
   selectedMonth: string;
 }) {
-  const monthCenter = centerGrades.filter((g) => {
-    const ex = centerExams.find((e) => e.id === g.center_exam_id);
-    return ex?.exam_date && ex.exam_date.slice(0, 7) === selectedMonth;
-  });
-  const monthOnline = onlineGrades.filter((og) => {
-    const ex = onlineExams.find((e) => e.id === og.exam_id);
-    return ex && (ex.open_at ?? ex.created_at)?.slice(0, 7) === selectedMonth;
-  });
-
-  const rows = [
-    ...monthCenter.map((g) => {
-      const exam = centerExams.find((e) => e.id === g.center_exam_id);
-      return { id: `c-${g.id}`, title: exam?.title ?? 'امتحان', sub: exam?.exam_date ? formatArabicDate(exam.exam_date) : 'غير مسجل', score: g.score, max: exam?.max_score ?? 0 };
+  const rows: GradeRow[] = [
+    ...centerGrades.flatMap((grade) => {
+      const exam = centerExams.find((item) => item.id === grade.center_exam_id);
+      if (!exam || !exam.exam_date || exam.exam_date.slice(0, 7) !== selectedMonth) return [];
+      return [{ id: `c-${grade.id}`, title: exam.title ?? 'امتحان', sub: formatArabicDate(exam.exam_date), score: grade.score, max: exam.max_score, category: (exam.category === 'recitation' ? 'recitation' : exam.category === 'sheet' ? 'sheet' : 'exam') as GradeCategory }];
     }),
-    ...monthOnline.map((og) => {
-      const exam = onlineExams.find((e) => e.id === og.exam_id);
-      return { id: `o-${og.id}`, title: exam?.title ?? 'امتحان إلكتروني', sub: exam?.subject ?? 'امتحان إلكتروني', score: og.score, max: og.max_score };
+    ...onlineGrades.flatMap((grade) => {
+      const exam = onlineExams.find((item) => item.id === grade.exam_id);
+      const when = exam?.open_at ?? exam?.created_at ?? '';
+      if (!exam || !when || when.slice(0, 7) !== selectedMonth) return [];
+      return [{ id: `o-${grade.id}`, title: exam.title ?? 'امتحان إلكتروني', sub: exam.subject ?? 'امتحان إلكتروني', score: grade.score, max: grade.max_score, category: 'exam' as const }];
     }),
   ];
-
   return (
-    <section className={`${CARD} scroll-mt-32`}>
-      <SectionTitle icon={<Award className="h-4 w-4" />}>الدرجات</SectionTitle>
-      {rows.length === 0 ? (
-        <EmptyNote>لا توجد درجات امتحانات مسجلة لهذا الشهر</EmptyNote>
-      ) : (
-        <div className="space-y-2.5">
-          {rows.map((r) => {
-            const rating = getGradeRating(r.score, r.max);
-            const pct = r.max > 0 ? Math.round((r.score / r.max) * 100) : 0;
-            return (
-              <div key={r.id} className={`${TILE} flex items-center justify-between gap-3 p-3`}>
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-bold text-[#24332D]">{r.title}</p>
-                  <p className="mt-0.5 text-[10px] text-[#5F6B65]">{r.sub}</p>
-                </div>
-                <div className="shrink-0 text-left">
-                  <p className="text-sm font-black text-[#24332D]">{r.score}<span className="text-[10px] font-bold text-[#5F6B65]"> / {r.max}</span></p>
-                  <div className="mt-1 flex justify-end">
-                    <Pill tone={gradeTone(pct)}>{pct}% · {rating.label}</Pill>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
+    <section id="grades-homework" className={`${CARD} scroll-mt-32`}>
+      <SectionTitle icon={<Award className="h-4 w-4" />}>الدرجات المسجلة</SectionTitle>
+      <div className="space-y-3">
+        <GradeRows title="التلاوة" rows={rows.filter((row) => row.category === 'recitation')} />
+        <GradeRows title="الورق" rows={rows.filter((row) => row.category === 'sheet')} />
+        <GradeRows title="الدرجات والامتحانات" rows={rows.filter((row) => row.category === 'exam')} />
+      </div>
     </section>
   );
 }
@@ -361,6 +370,9 @@ export function AttendanceList({ records }: { records: (AttendanceRecord & { ses
   return (
     <section id="attendance" className={`${CARD} scroll-mt-32`}>
       <SectionTitle icon={<Calendar className="h-4 w-4" />}>سجل الحضور</SectionTitle>
+      <div className="mb-4 flex flex-wrap gap-2">
+        {Object.entries(ATTENDANCE_BADGE).filter(([key]) => key !== 'excused_absence').map(([key, badge]) => <Pill key={key} tone={badge.tone}><span className="h-2 w-2 rounded-full" style={{ backgroundColor: badge.dot }} />{badge.label}</Pill>)}
+      </div>
       {records.length === 0 ? (
         <EmptyNote>لا توجد سجلات حضور محفوظة لهذا الشهر</EmptyNote>
       ) : (

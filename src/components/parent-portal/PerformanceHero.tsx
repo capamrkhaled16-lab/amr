@@ -12,6 +12,13 @@ export interface HeroMetric {
   wide?: boolean;
 }
 
+export interface GradeBreakdown {
+  recitation: { score: number; max: number; rate: number | null };
+  sheet: { score: number; max: number; rate: number | null };
+  exams: { score: number; max: number; rate: number | null };
+  combined: number | null;
+}
+
 interface Tone {
   stroke: string;
   text: string;
@@ -136,7 +143,7 @@ function MetricCard({ metric }: { metric: HeroMetric }) {
   );
 }
 
-export function PerformanceHero({ overall, monthLabel, metrics }: { overall: number | null; monthLabel: string; metrics: HeroMetric[] }) {
+export function PerformanceHero({ overall, monthLabel, metrics, gradeBreakdown }: { overall: number | null; monthLabel: string; metrics: HeroMetric[]; gradeBreakdown: GradeBreakdown }) {
   const mounted = useMounted();
   const hasOverall = overall !== null;
   const pct = hasOverall ? Math.min(100, Math.max(0, overall)) : 0;
@@ -154,8 +161,32 @@ export function PerformanceHero({ overall, monthLabel, metrics }: { overall: num
           <p className="mt-3 text-sm font-bold" style={{ color: tone.text }}>{tone.label}</p>
         </div>
       </div>
-      <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-3">
+      <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
         {metrics.map((m) => <MetricCard key={m.label} metric={m} />)}
+      </div>
+      <div className="mt-5 rounded-2xl border border-[#E6EAE5] bg-white/75 p-4">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <p className="text-xs font-black text-[#24332D]">تفاصيل نسبة الدرجات والامتحانات</p>
+          <span className="text-[10px] font-bold text-[#5F6B65]">التجميع من إجمالي الدرجات المسجلة</span>
+        </div>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+          {[
+            { label: 'التلاوة', part: gradeBreakdown.recitation, color: '#C69B35' },
+            { label: 'الورق', part: gradeBreakdown.sheet, color: '#087F5B' },
+            { label: 'الدرجات والامتحانات', part: gradeBreakdown.exams, color: '#2B7BB9' },
+          ].map(({ label, part, color }) => (
+            <div key={label} className="rounded-xl border border-[#E6EAE5] bg-[#F7F8F5] p-3">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[11px] font-bold text-[#5F6B65]">{label}</span>
+                <span className="text-sm font-black text-[#24332D]">{part.rate === null ? 'غير مسجل' : `${part.rate}%`}</span>
+              </div>
+              <p className="mt-1 text-[10px] text-[#77847D]">{part.max > 0 ? `${part.score} من ${part.max} درجة` : 'لا توجد درجات مسجلة'}</p>
+              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#E6EAE5]">
+                <div className="h-full rounded-full" style={{ width: `${part.rate ?? 0}%`, backgroundColor: color }} />
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
       {hasOverall && (
         <div className="mt-6 flex items-start gap-3 rounded-2xl border border-[#E6EAE5] bg-white p-4">
