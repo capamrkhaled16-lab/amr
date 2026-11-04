@@ -1,22 +1,52 @@
-import type { ReactNode } from 'react';
-import { Award, Calendar, CheckCircle2, ChevronLeft, ChevronRight, Clock, AlertCircle, Receipt, Star, Target, Wallet } from 'lucide-react';
+import { useEffect, useState, type ReactNode } from 'react';
+import type { LucideIcon } from 'lucide-react';
+import { AlertCircle, Award, Calendar, CheckCircle2, ChevronLeft, ChevronRight, Clock, Phone, Receipt, Target, Wallet } from 'lucide-react';
 import { formatArabicDate, formatCurrency, getGradeRating, getMonthLabel } from '@/lib/format';
 import type { AttendanceRecord, BehaviorEval, CenterExam, CenterGrade, Homework, HomeworkStatus, OnlineExam, OnlineGrade, Payment } from '@/lib/types';
 
-export const CARD = 'rounded-[24px] border border-[#d4af37]/25 bg-[#0c1210]/95 p-5 sm:p-6 shadow-[0_18px_50px_rgba(0,0,0,0.45)]';
-export const TILE = 'rounded-2xl border border-white/[0.06] bg-[#111815] p-3';
+export const CARD = 'rounded-[24px] border border-[#E6EAE5] bg-white p-5 shadow-[0_8px_30px_rgba(36,51,45,0.06)] transition duration-300 ease-out hover:-translate-y-0.5 hover:shadow-[0_14px_40px_rgba(36,51,45,0.10)] active:scale-[0.995] motion-reduce:transform-none motion-reduce:transition-none sm:p-6';
+export const TILE = 'rounded-2xl border border-[#E6EAE5] bg-[#F7F8F5] transition duration-300 ease-out hover:-translate-y-0.5 hover:border-[#087F5B]/30 active:scale-[0.99] motion-reduce:transform-none motion-reduce:transition-none';
+
+export const REPORT_SECTIONS = [
+  { id: 'performance', label: 'الأداء' },
+  { id: 'grades-homework', label: 'الواجبات والدرجات' },
+  { id: 'attendance', label: 'الحضور' },
+  { id: 'payments', label: 'المدفوعات' },
+  { id: 'comparison', label: 'المقارنة' },
+  { id: 'achievements', label: 'الإنجازات' },
+];
+
+const PILL_TONES = {
+  green: 'border-[#087F5B]/20 bg-[#E8F5EF] text-[#087F5B]',
+  sky: 'border-[#2B7BB9]/20 bg-[#EAF4FC] text-[#1D5E8C]',
+  gold: 'border-[#C69B35]/30 bg-[#FBF3DF] text-[#8A6A1F]',
+  red: 'border-[#EF4444]/25 bg-[#FEF2F2] text-[#B91C1C]',
+  blue: 'border-[#2B7BB9]/20 bg-[#EAF4FC] text-[#1D5E8C]',
+  muted: 'border-[#E6EAE5] bg-[#F7F8F5] text-[#5F6B65]',
+} as const;
+
+type PillTone = keyof typeof PILL_TONES;
+
+export function Pill({ tone, children }: { tone: PillTone; children: ReactNode }) {
+  return <span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-bold ${PILL_TONES[tone]}`}>{children}</span>;
+}
 
 export function SectionTitle({ icon, children }: { icon: ReactNode; children: ReactNode }) {
   return (
-    <div className="mb-4 flex items-center gap-2 text-sm font-black text-white">
-      <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#d4af37]/10 text-[#d4af37]">{icon}</span>
+    <div className="mb-4 flex items-center gap-2.5 text-sm font-black text-[#24332D]">
+      <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#E8F5EF] text-[#087F5B]">{icon}</span>
       {children}
     </div>
   );
 }
 
+function EmptyNote({ children }: { children: ReactNode }) {
+  return <p className="rounded-2xl border border-dashed border-[#D8DED9] bg-[#F7F8F5] p-4 text-center text-xs text-[#5F6B65]">{children}</p>;
+}
+
 export interface StudentInfo {
   name: string;
+  phone?: string | null;
   status?: string;
   grade_name?: string;
   stage_name?: string;
@@ -24,63 +54,54 @@ export interface StudentInfo {
   group_schedule?: string | null;
 }
 
-export function ProfileCard({ student, rank, totalInGroup, monthLabel }: { student: StudentInfo; rank: number | null; totalInGroup: number; monthLabel: string }) {
-  const rankText = rank !== null && totalInGroup > 0 ? rankLabel(rank) : null;
-  return (
-    <section className={`${CARD} relative overflow-hidden`}>
-      <div className="pointer-events-none absolute -top-20 left-0 h-48 w-48 rounded-full bg-[#10b981]/10 blur-3xl" />
-      <div className="relative flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-[10px] font-bold tracking-[0.18em] text-[#d4af37]">ملف الطالب</p>
-          <h2 className="mt-1 truncate text-2xl font-black text-white">{student.name}</h2>
-          {rankText && <p className="mt-1 text-[11px] font-bold text-[#d4af37]">{rankText} في المجموعة</p>}
-        </div>
-        <div className="shrink-0 rounded-xl border border-[#d4af37]/25 bg-[#d4af37]/[0.06] px-3 py-2 text-center">
-          <p className="text-[9px] text-slate-400">الشهر المستهدف</p>
-          <p className="mt-0.5 text-xs font-black text-[#f0d27a]">{monthLabel}</p>
-        </div>
-      </div>
-      <div className="relative mt-5 flex flex-wrap gap-2">
-        {student.stage_name && <Pill tone="cyan">{student.stage_name}</Pill>}
-        {student.grade_name && <Pill tone="gold">{student.grade_name}</Pill>}
-        {student.group_name && <Pill tone="green">{student.group_name}</Pill>}
-        {student.group_schedule && <Pill tone="green">{student.group_schedule}</Pill>}
-        <Pill tone={student.status === 'active' ? 'green' : 'muted'}>{student.status === 'active' ? 'نشط' : 'غير نشط'}</Pill>
-      </div>
-    </section>
-  );
-}
-
 function rankLabel(rank: number): string {
   const labels = ['المركز الأول', 'المركز الثاني', 'المركز الثالث', 'المركز الرابع', 'المركز الخامس', 'المركز السادس', 'المركز السابع', 'المركز الثامن', 'المركز التاسع', 'المركز العاشر'];
   return labels[rank - 1] ?? 'المركز الرسمي غير متاح';
 }
 
-const PILL_TONES = {
-  green: 'border-[#10b981]/30 bg-[#10b981]/10 text-[#34d399]',
-  cyan: 'border-[#06b6d4]/30 bg-[#06b6d4]/10 text-[#67e8f9]',
-  gold: 'border-[#d4af37]/30 bg-[#d4af37]/10 text-[#f0d27a]',
-  red: 'border-[#ef4444]/30 bg-[#ef4444]/10 text-[#fca5a5]',
-  blue: 'border-[#3b82f6]/30 bg-[#3b82f6]/10 text-[#93c5fd]',
-  muted: 'border-white/10 bg-white/[0.04] text-slate-400',
-} as const;
-
-export function Pill({ tone, children }: { tone: keyof typeof PILL_TONES; children: ReactNode }) {
-  return <span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-bold ${PILL_TONES[tone]}`}>{children}</span>;
+export function ProfileCard({ student, rank, totalInGroup, monthLabel }: { student: StudentInfo; rank: number | null; totalInGroup: number; monthLabel: string }) {
+  const rankText = rank !== null && totalInGroup > 0 ? rankLabel(rank) : null;
+  return (
+    <section className={`${CARD} relative overflow-hidden`} style={{ backgroundImage: 'linear-gradient(135deg,#FFFFFF 0%,#E8F5EF 100%)' }}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[10px] font-bold tracking-[0.18em] text-[#087F5B]">ملف الطالب</p>
+          <h2 className="mt-1.5 truncate text-2xl font-black text-[#24332D] sm:text-3xl">{student.name}</h2>
+          {rankText && <p className="mt-1.5 text-xs font-bold text-[#8A6A1F]">{rankText} في المجموعة</p>}
+        </div>
+        <div className="shrink-0 rounded-2xl border border-[#E6EAE5] bg-white px-3 py-2 text-center shadow-sm">
+          <p className="text-[10px] text-[#77847D]">الشهر المستهدف</p>
+          <p className="mt-0.5 text-xs font-black text-[#24332D]">{monthLabel}</p>
+        </div>
+      </div>
+      <div className="mt-5 flex flex-wrap gap-2">
+        {student.stage_name && <Pill tone="sky">{student.stage_name}</Pill>}
+        {student.grade_name && <Pill tone="gold">{student.grade_name}</Pill>}
+        {student.group_name && <Pill tone="green">{student.group_name}</Pill>}
+        {student.group_schedule && <Pill tone="green">{student.group_schedule}</Pill>}
+        <Pill tone={student.status === 'active' ? 'green' : 'muted'}>{student.status === 'active' ? 'نشط' : 'غير نشط'}</Pill>
+      </div>
+      <div className="mt-4 flex items-center gap-2 text-xs text-[#5F6B65]">
+        <Phone className="h-3.5 w-3.5 text-[#087F5B]" />
+        <span>رقم الهاتف:</span>
+        <span className="font-bold text-[#24332D]">{student.phone ? student.phone : 'غير مسجل'}</span>
+      </div>
+    </section>
+  );
 }
 
 export function MonthSelector({ selectedMonth, onMonthChange, availableMonths }: { selectedMonth: string; onMonthChange: (m: string) => void; availableMonths: string[] }) {
   const currentIndex = availableMonths.indexOf(selectedMonth);
   const canGoBack = currentIndex < availableMonths.length - 1;
   const canGoForward = currentIndex > 0;
-  const btn = 'flex h-9 w-9 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.03] text-slate-300 transition hover:border-[#d4af37]/40 hover:text-white disabled:opacity-30';
+  const btn = 'flex h-11 w-11 items-center justify-center rounded-xl border border-[#E6EAE5] bg-white text-[#24332D] transition hover:border-[#087F5B]/40 hover:text-[#087F5B] active:scale-95 disabled:opacity-30 motion-reduce:transition-none';
   return (
-    <div className="flex items-center justify-between rounded-2xl border border-[#d4af37]/20 bg-[#0c1210] px-3 py-2.5">
+    <div className="flex items-center justify-between rounded-2xl border border-[#E6EAE5] bg-white px-3 py-2 shadow-sm">
       <button type="button" aria-label="الشهر السابق" disabled={!canGoBack} onClick={() => canGoBack && onMonthChange(availableMonths[currentIndex + 1])} className={btn}>
         <ChevronRight className="h-4 w-4" />
       </button>
-      <div className="flex items-center gap-2 text-sm font-black text-white">
-        <Calendar className="h-4 w-4 text-[#10b981]" />
+      <div className="flex items-center gap-2 text-sm font-black text-[#24332D]">
+        <Calendar className="h-4 w-4 text-[#087F5B]" />
         {getMonthLabel(selectedMonth)}
       </div>
       <button type="button" aria-label="الشهر التالي" disabled={!canGoForward} onClick={() => canGoForward && onMonthChange(availableMonths[currentIndex - 1])} className={btn}>
@@ -90,42 +111,47 @@ export function MonthSelector({ selectedMonth, onMonthChange, availableMonths }:
   );
 }
 
-export function FinanceCard({ isExempt, feesDue, feesPaid, feesRemaining, collectionRate }: {
-  isExempt: boolean;
+export type FinanceStatus = 'exempt' | 'missing' | 'unpaid' | 'partial' | 'paid';
+
+const FINANCE_STATUS: Record<FinanceStatus, { label: string; tone: PillTone; icon: LucideIcon | null }> = {
+  exempt: { label: 'معفى من الرسوم', tone: 'green', icon: CheckCircle2 },
+  missing: { label: 'لا توجد رسوم مسجلة لهذا الشهر', tone: 'muted', icon: null },
+  unpaid: { label: 'غير مسدد', tone: 'red', icon: AlertCircle },
+  partial: { label: 'مسدد جزئياً', tone: 'gold', icon: Clock },
+  paid: { label: 'مسدد بالكامل', tone: 'green', icon: CheckCircle2 },
+};
+
+export function FinanceCard({ status, feesDue, feesPaid, feesRemaining, collectionRate }: {
+  status: FinanceStatus;
   feesDue: number;
   feesPaid: number;
   feesRemaining: number;
   collectionRate: number;
 }) {
-  const hasFees = !isExempt && feesDue > 0;
+  const info = FINANCE_STATUS[status];
+  const Icon = info.icon;
+  const showAmounts = status === 'unpaid' || status === 'partial' || status === 'paid';
   return (
     <section className={CARD}>
       <SectionTitle icon={<Wallet className="h-4 w-4" />}>الملخص المالي وحالة السداد</SectionTitle>
-      {isExempt ? (
-        <Pill tone="green">معفى من الرسوم</Pill>
-      ) : feesDue === 0 ? (
-        <p className="text-sm text-slate-400">لا توجد رسوم مسجلة لهذا الشهر</p>
-      ) : feesRemaining === 0 ? (
-        <Pill tone="green"><CheckCircle2 className="h-3.5 w-3.5" /> مسدّد بالكامل</Pill>
-      ) : feesPaid > 0 ? (
-        <Pill tone="gold"><Clock className="h-3.5 w-3.5" /> مسدّد جزئياً</Pill>
-      ) : (
-        <Pill tone="red"><AlertCircle className="h-3.5 w-3.5" /> لم يُسدَّد</Pill>
-      )}
-      {hasFees && (
+      <Pill tone={info.tone}>
+        {Icon && <Icon className="h-3.5 w-3.5" />}
+        {info.label}
+      </Pill>
+      {showAmounts && (
         <>
           <div className="mt-5 grid grid-cols-3 gap-2.5">
-            <FinanceTile label="إجمالي الرسوم" value={formatCurrency(feesDue)} tone="text-white" />
-            <FinanceTile label="المدفوع" value={formatCurrency(feesPaid)} tone="text-[#34d399]" />
-            <FinanceTile label="المتبقي" value={formatCurrency(feesRemaining)} tone={feesRemaining > 0 ? 'text-[#fca5a5]' : 'text-[#34d399]'} />
+            <FinanceTile label="إجمالي الرسوم" value={formatCurrency(feesDue)} tone="text-[#24332D]" />
+            <FinanceTile label="المدفوع" value={formatCurrency(feesPaid)} tone="text-[#087F5B]" />
+            <FinanceTile label="المتبقي" value={formatCurrency(feesRemaining)} tone={feesRemaining > 0 ? 'text-[#B91C1C]' : 'text-[#087F5B]'} />
           </div>
           <div className="mt-5">
-            <div className="mb-2 flex justify-between text-[11px] text-slate-400">
+            <div className="mb-2 flex justify-between text-[11px] text-[#5F6B65]">
               <span>نسبة التحصيل</span>
-              <span className="font-black text-[#34d399]">{collectionRate}%</span>
+              <span className="font-black text-[#087F5B]">{collectionRate}%</span>
             </div>
-            <div className="h-2.5 overflow-hidden rounded-full bg-white/[0.06]">
-              <div className="h-full rounded-full bg-gradient-to-r from-[#10b981] to-[#06b6d4] transition-all duration-700" style={{ width: `${collectionRate}%` }} />
+            <div className="h-2.5 overflow-hidden rounded-full bg-[#E6EAE5]">
+              <div className="h-full rounded-full bg-gradient-to-r from-[#087F5B] to-[#C69B35] transition-all duration-700 motion-reduce:transition-none" style={{ width: `${collectionRate}%` }} />
             </div>
           </div>
         </>
@@ -136,34 +162,38 @@ export function FinanceCard({ isExempt, feesDue, feesPaid, feesRemaining, collec
 
 function FinanceTile({ label, value, tone }: { label: string; value: string; tone: string }) {
   return (
-    <div className={TILE + ' text-center'}>
-      <p className="mb-1 text-[10px] text-slate-400">{label}</p>
-      <p className={`text-sm font-black ${tone}`}>{value} <span className="text-[9px] font-bold text-slate-500">ج.م</span></p>
+    <div className={`${TILE} p-3 text-center`}>
+      <p className="mb-1 text-[10px] text-[#5F6B65]">{label}</p>
+      <p className={`text-sm font-black ${tone}`}>{value} <span className="text-[9px] font-bold text-[#77847D]">ج.م</span></p>
     </div>
   );
 }
 
-export function ReceiptCard({ payments }: { payments: Payment[] }) {
+export function ReceiptCard({ payments, feesRemaining }: { payments: Payment[]; feesRemaining: number | null }) {
   return (
     <section className={CARD}>
-      <SectionTitle icon={<Receipt className="h-4 w-4" />}>تفاصيل الإيصالات</SectionTitle>
+      <SectionTitle icon={<Receipt className="h-4 w-4" />}>إيصالات الدفع</SectionTitle>
       {payments.length === 0 ? (
-        <p className={TILE + ' text-center text-xs text-slate-500'}>لا يوجد إيصال مسجل لهذا الشهر</p>
+        <EmptyNote>لا توجد دفعات مسجلة لهذا الشهر</EmptyNote>
       ) : (
         <div className="space-y-3">
           {payments.map((p) => (
-            <article key={p.id} className={TILE}>
+            <article key={p.id} className="relative overflow-hidden rounded-2xl border border-dashed border-[#C69B35]/50 bg-white p-4">
+              <span className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-[#087F5B] to-[#C69B35]" />
               <div className="flex items-start justify-between gap-3">
-                <p className="text-lg font-black text-white">{formatCurrency(p.amount)} <span className="text-xs text-slate-400">ج.م</span></p>
+                <div>
+                  <p className="text-[10px] font-bold text-[#8A6A1F]">المبلغ المدفوع</p>
+                  <p className="mt-1 text-xl font-black text-[#24332D]">{formatCurrency(p.amount)} <span className="text-xs font-bold text-[#5F6B65]">ج.م</span></p>
+                </div>
                 <Pill tone="green">مسجل</Pill>
               </div>
-              <dl className="mt-3 grid grid-cols-1 gap-2 text-[11px] sm:grid-cols-2">
-                <ReceiptField label="التاريخ" value={p.payment_date ? formatArabicDate(p.payment_date) : 'غير مسجل'} />
+              <dl className="mt-4 grid grid-cols-1 gap-2 text-[11px] sm:grid-cols-2">
                 <ReceiptField label="رقم الإيصال" value={p.receipt_number ?? 'غير مسجل'} />
+                <ReceiptField label="تاريخ الدفع" value={p.payment_date ? formatArabicDate(p.payment_date) : 'غير مسجل'} />
                 <ReceiptField label="المستلم" value={p.recorded_by ?? 'غير مسجل'} />
-                <ReceiptField label="واتساب" value="غير مسجل" />
+                <ReceiptField label="المتبقي من الرسوم" value={feesRemaining === null ? 'غير مسجل' : formatCurrency(feesRemaining) + ' ج.م'} />
               </dl>
-              {p.note && <p className="mt-3 border-t border-white/[0.06] pt-3 text-[11px] text-slate-300">{p.note}</p>}
+              {p.note && <p className="mt-3 border-t border-[#E6EAE5] pt-3 text-[11px] text-[#5F6B65]">{p.note}</p>}
             </article>
           ))}
         </div>
@@ -174,139 +204,10 @@ export function ReceiptCard({ payments }: { payments: Payment[] }) {
 
 function ReceiptField({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex justify-between gap-2 rounded-lg bg-white/[0.03] px-2.5 py-1.5">
-      <dt className="text-slate-500">{label}</dt>
-      <dd className="font-bold text-slate-200">{value}</dd>
+    <div className="flex justify-between gap-2 rounded-xl bg-[#F7F8F5] px-3 py-2">
+      <dt className="text-[#5F6B65]">{label}</dt>
+      <dd className="font-bold text-[#24332D]">{value}</dd>
     </div>
-  );
-}
-
-export interface HeroMetric {
-  label: string;
-  value: number | null;
-  previous: number | null;
-  color: string;
-}
-
-const PERFORMANCE_BORDER = (pct: number) => (pct >= 90 ? '#10b981' : pct >= 50 ? '#d4af37' : '#ef4444');
-
-const PRAISE_MESSAGES = [
-  'برافو عليك يا بطل! مستواك ممتاز، حافظ على قوتك وخلينا نشوف إنجاز أكبر الشهر الجاي!',
-  'أداء رائع وتعبك واضح! كمل بنفس الحماس، والقمة مستنياك!',
-  'نتيجة تفرح، وفخور باجتهادك. مستني منك الأفضل دايمًا!',
-];
-const POSITIVE_MESSAGES = [
-  'شاطر يا بطل! مستواك كويس، ومع شوية تركيز هتوصل لمستوى أعلى بكتير!',
-  'أنت ماشي في الطريق الصح، كمل واجتهد، ومستني منك نتيجة أقوى المرة الجاية!',
-  'تقدم جميل، وعندك فرصة تحقق أكتر. أنا واثق إنك تقدر!',
-];
-const ENCOURAGEMENT_MESSAGES = [
-  'ولا يهمك يا بطل، لسه قدامك فرصة كبيرة تتحسن، وأنا مستني أشوف منك نتيجة تفرحك!',
-  'أنت تقدر تعمل أحسن من كده، ابدأ خطوة خطوة وركز في اللي جاي، وأنا واثق فيك!',
-  'النتيجة دي مش نهاية الطريق، شد حيلك، والشهر الجاي بإذن الله نشوف تقدم يفرحنا!',
-];
-
-function motivationFor(pct: number): string {
-  if (pct >= 100) return 'مليون مبروك يا بطل! جبت الدرجة النهائية 100%، إنجاز يستحق الفخر والتقدير. حافظ على تفوقك، والقمة دايمًا مستنياك!';
-  const pool = pct >= 85 ? PRAISE_MESSAGES : pct >= 50 ? POSITIVE_MESSAGES : ENCOURAGEMENT_MESSAGES;
-  return pool[Math.round(pct) % pool.length];
-}
-
-export function PerformanceHero({ overall, monthLabel, metrics, trend }: {
-  overall: number;
-  monthLabel: string;
-  metrics: HeroMetric[];
-  trend: (number | null)[];
-}) {
-  const pct = Math.min(100, Math.max(0, Math.round(overall)));
-  const radius = 54;
-  const circumference = 2 * Math.PI * radius;
-  const accent = PERFORMANCE_BORDER(pct);
-  return (
-    <section className={CARD} style={{ borderColor: `${accent}99`, boxShadow: `0 0 36px ${accent}22, 0 18px 50px rgba(0,0,0,0.45)` }}>
-      <div className="flex flex-col items-center gap-5 sm:flex-row sm:items-center">
-        <div className="relative h-36 w-36 shrink-0">
-          <svg viewBox="0 0 128 128" className="h-full w-full -rotate-90">
-            <defs>
-              <linearGradient id="hero-ring" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0%" stopColor="#10b981" />
-                <stop offset="100%" stopColor="#06b6d4" />
-              </linearGradient>
-            </defs>
-            <circle cx="64" cy="64" r={radius} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="10" />
-            <circle
-              cx="64" cy="64" r={radius} fill="none" stroke="url(#hero-ring)" strokeWidth="10" strokeLinecap="round"
-              strokeDasharray={circumference} strokeDashoffset={circumference - (pct / 100) * circumference}
-              style={{ transition: 'stroke-dashoffset 1.2s ease', filter: 'drop-shadow(0 0 8px rgba(16,185,129,0.5))' }}
-            />
-          </svg>
-          <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <span className="text-3xl font-black text-white">{pct}<span className="text-base text-slate-400">%</span></span>
-            <span className="mt-1 text-[10px] text-slate-400">المستوى العام</span>
-          </div>
-        </div>
-        <div className="w-full min-w-0 flex-1">
-          <p className="text-[11px] font-bold text-[#d4af37]">{monthLabel}</p>
-          <h3 className="mt-1 text-lg font-black text-white">المستوى العام للشهر</h3>
-          <p className="mt-1 text-[11px] text-slate-400">مقارنة كل مؤشر بالشهر السابق</p>
-          <div className="mt-4 grid grid-cols-2 gap-2.5">
-            {metrics.map((m) => <MetricCard key={m.label} metric={m} />)}
-          </div>
-        </div>
-      </div>
-      <div className="mt-5 border-t border-white/[0.06] pt-4">
-        <div className="mb-2 flex items-center justify-between text-[11px] text-slate-400">
-          <span>منحنى الحضور</span>
-          <span>آخر {trend.length} أشهر</span>
-        </div>
-        <Sparkline values={trend} />
-      </div>
-      <div className="mt-5 flex items-start gap-3 rounded-2xl border border-[#10b981]/25 bg-[#10b981]/[0.06] p-4">
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#10b981]/15 text-[#34d399]">
-          <Star className="h-4 w-4" />
-        </span>
-        <div className="min-w-0">
-          <p className="text-[10px] font-bold tracking-wider text-[#34d399]">رسالة تشجيع</p>
-          <p className="mt-1 text-sm leading-relaxed text-slate-100">{motivationFor(pct)}</p>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function MetricCard({ metric }: { metric: HeroMetric }) {
-  const { label, value, previous, color } = metric;
-  const diff = value !== null && previous !== null ? Math.round(value - previous) : null;
-  const deltaText = diff === null ? 'لا توجد مقارنة' : diff > 0 ? `تحسن بنسبة +${diff}%` : diff < 0 ? `تراجع بنسبة ${diff}%` : 'بدون تغيير عن الشهر السابق';
-  const deltaTone = diff === null || diff === 0 ? 'text-slate-400' : diff > 0 ? 'text-[#34d399]' : 'text-[#fca5a5]';
-  return (
-    <div className={TILE}>
-      <p className="text-[10px] text-slate-400">{label}</p>
-      <p className="mt-1 text-xl font-black" style={{ color: value === null ? '#64748b' : color }}>
-        {value === null ? '—' : `${value}%`}
-      </p>
-      <p className={`mt-1 text-[10px] font-bold ${deltaTone}`}>{deltaText}</p>
-    </div>
-  );
-}
-
-function Sparkline({ values }: { values: (number | null)[] }) {
-  const points = values.map((v, i) => ({ v, i })).filter((p): p is { v: number; i: number } => p.v !== null);
-  if (points.length < 2) return <p className="py-3 text-center text-[11px] text-slate-500">لا توجد بيانات كافية للمقارنة</p>;
-  const last = values.length - 1 || 1;
-  const coords = points.map((p) => `${(p.i / last) * 100},${40 - (Math.min(100, p.v) / 100) * 36}`).join(' ');
-  const area = `0,40 ${coords} ${(points[points.length - 1].i / last) * 100},40`;
-  return (
-    <svg viewBox="0 0 100 40" preserveAspectRatio="none" className="h-16 w-full overflow-visible" aria-label="منحنى الحضور">
-      <defs>
-        <linearGradient id="spark-fill" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#10b981" stopOpacity="0.35" />
-          <stop offset="100%" stopColor="#10b981" stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      <polygon points={area} fill="url(#spark-fill)" />
-      <polyline points={coords} fill="none" stroke="#10b981" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ filter: 'drop-shadow(0 0 4px rgba(16,185,129,0.7))' }} />
-    </svg>
   );
 }
 
@@ -319,23 +220,34 @@ export function CalcNotesCard({ children }: { children: ReactNode }) {
   );
 }
 
-export function AchievementsCard({ badges }: { badges: { label: string; achieved: boolean }[] }) {
+export function AchievementsCard({ badges }: { badges: { label: string; criteria: string; achieved: boolean }[] }) {
   return (
-    <section className={CARD}>
-      <SectionTitle icon={<Target className="h-4 w-4" />}>بطاقة الإنجاز</SectionTitle>
-      <div className="grid grid-cols-2 gap-2.5">
+    <section id="achievements" className={`${CARD} scroll-mt-32`}>
+      <SectionTitle icon={<Target className="h-4 w-4" />}>الإنجازات</SectionTitle>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {badges.map((b) => (
           <div
             key={b.label}
-            className={`flex items-center gap-2 rounded-2xl border px-3 py-2.5 text-[11px] font-bold ${b.achieved ? 'border-[#d4af37]/35 bg-[#d4af37]/10 text-[#f0d27a]' : 'border-white/[0.06] bg-[#111815] text-slate-600'}`}
+            className={`flex items-start gap-3 rounded-2xl border p-3.5 transition duration-300 motion-reduce:transition-none ${b.achieved ? 'border-[#C69B35]/40 bg-[#FBF3DF] hover:-translate-y-0.5' : 'border-[#E6EAE5] bg-[#F7F8F5] opacity-80'}`}
           >
-            <span className={`h-2 w-2 rounded-full ${b.achieved ? 'bg-[#d4af37] shadow-[0_0_8px_#d4af37]' : 'bg-slate-700'}`} />
-            {b.label}
+            <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${b.achieved ? 'bg-[#C69B35] text-white' : 'bg-[#E6EAE5] text-[#77847D]'}`}>
+              <Award className="h-4 w-4" />
+            </span>
+            <div className="min-w-0">
+              <p className={`text-xs font-black ${b.achieved ? 'text-[#8A6A1F]' : 'text-[#5F6B65]'}`}>{b.label}</p>
+              <p className="mt-0.5 text-[10px] leading-relaxed text-[#5F6B65]">{b.achieved ? b.criteria : `لم يتحقق بعد: ${b.criteria}`}</p>
+            </div>
           </div>
         ))}
       </div>
     </section>
   );
+}
+
+function gradeTone(pct: number): PillTone {
+  if (pct >= 85) return 'green';
+  if (pct >= 50) return 'gold';
+  return 'red';
 }
 
 export function GradesList({ centerGrades, centerExams, onlineGrades, onlineExams, selectedMonth }: {
@@ -353,7 +265,6 @@ export function GradesList({ centerGrades, centerExams, onlineGrades, onlineExam
     const ex = onlineExams.find((e) => e.id === og.exam_id);
     return ex && (ex.open_at ?? ex.created_at)?.slice(0, 7) === selectedMonth;
   });
-  if (monthCenter.length === 0 && monthOnline.length === 0) return null;
 
   const rows = [
     ...monthCenter.map((g) => {
@@ -367,33 +278,38 @@ export function GradesList({ centerGrades, centerExams, onlineGrades, onlineExam
   ];
 
   return (
-    <section className={CARD}>
+    <section className={`${CARD} scroll-mt-32`}>
       <SectionTitle icon={<Award className="h-4 w-4" />}>الدرجات</SectionTitle>
-      <div className="space-y-2.5">
-        {rows.map((r) => {
-          const rating = getGradeRating(r.score, r.max);
-          const pct = r.max > 0 ? Math.round((r.score / r.max) * 100) : 0;
-          return (
-            <div key={r.id} className={`${TILE} flex items-center justify-between gap-3`}>
-              <div className="min-w-0">
-                <p className="truncate text-sm font-bold text-white">{r.title}</p>
-                <p className="mt-0.5 text-[10px] text-slate-400">{r.sub}</p>
+      {rows.length === 0 ? (
+        <EmptyNote>لا توجد درجات امتحانات مسجلة لهذا الشهر</EmptyNote>
+      ) : (
+        <div className="space-y-2.5">
+          {rows.map((r) => {
+            const rating = getGradeRating(r.score, r.max);
+            const pct = r.max > 0 ? Math.round((r.score / r.max) * 100) : 0;
+            return (
+              <div key={r.id} className={`${TILE} flex items-center justify-between gap-3 p-3`}>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-bold text-[#24332D]">{r.title}</p>
+                  <p className="mt-0.5 text-[10px] text-[#5F6B65]">{r.sub}</p>
+                </div>
+                <div className="shrink-0 text-left">
+                  <p className="text-sm font-black text-[#24332D]">{r.score}<span className="text-[10px] font-bold text-[#5F6B65]"> / {r.max}</span></p>
+                  <div className="mt-1 flex justify-end">
+                    <Pill tone={gradeTone(pct)}>{pct}% · {rating.label}</Pill>
+                  </div>
+                </div>
               </div>
-              <div className="shrink-0 text-left">
-                <p className="text-sm font-black text-white">{r.score}<span className="text-[10px] text-slate-400"> / {r.max}</span></p>
-                <p className={`text-[10px] font-bold ${rating.color}`}>{pct}% · {rating.label}</p>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </section>
   );
 }
 
 export function HomeworkList({ homework, statuses, studentId }: { homework: Homework[]; statuses: HomeworkStatus[]; studentId: string }) {
-  if (homework.length === 0) return null;
-  const statusLabel: Record<string, { label: string; tone: 'green' | 'red' | 'gold' | 'blue' | 'muted' }> = {
+  const statusLabel: Record<string, { label: string; tone: PillTone }> = {
     done: { label: 'تم', tone: 'green' },
     complete: { label: 'تم', tone: 'green' },
     completed: { label: 'تم', tone: 'green' },
@@ -403,87 +319,76 @@ export function HomeworkList({ homework, statuses, studentId }: { homework: Home
     excused: { label: 'بعذر', tone: 'blue' },
   };
   return (
-    <section className={CARD}>
+    <section className={`${CARD} scroll-mt-32`}>
       <SectionTitle icon={<Receipt className="h-4 w-4" />}>الواجبات</SectionTitle>
-      <div className="space-y-2.5">
-        {homework.map((hw) => {
-          const status = statuses.find((s) => s.homework_id === hw.id && s.student_id === studentId);
-          const cfg = status ? statusLabel[status.status] : undefined;
-          return (
-            <div key={hw.id} className={TILE}>
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-bold text-white">{hw.title}</p>
-                  {hw.description && <p className="mt-1 line-clamp-2 text-xs text-slate-400">{hw.description}</p>}
-                  <p className="mt-1.5 text-[10px] text-slate-500">التسليم: {formatArabicDate(hw.due_date)}</p>
-                  {status?.teacher_note && <p className="mt-1.5 rounded-lg bg-white/[0.04] px-2 py-1 text-[10px] text-slate-300">ملاحظة المعلم: {status.teacher_note}</p>}
+      {homework.length === 0 ? (
+        <EmptyNote>لا توجد واجبات مسجلة لهذا الشهر</EmptyNote>
+      ) : (
+        <div className="space-y-2.5">
+          {homework.map((hw) => {
+            const status = statuses.find((s) => s.homework_id === hw.id && s.student_id === studentId);
+            const cfg = status ? statusLabel[status.status] : undefined;
+            return (
+              <div key={hw.id} className={`${TILE} p-3`}>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-bold text-[#24332D]">{hw.title}</p>
+                    {hw.description && <p className="mt-1 line-clamp-2 text-xs text-[#5F6B65]">{hw.description}</p>}
+                    <p className="mt-1.5 text-[10px] text-[#77847D]">التسليم: {formatArabicDate(hw.due_date)}</p>
+                    {status?.teacher_note && <p className="mt-1.5 rounded-lg bg-white px-2 py-1 text-[10px] text-[#24332D]">ملاحظة المعلم: {status.teacher_note}</p>}
+                  </div>
+                  <Pill tone={cfg?.tone ?? 'muted'}>{cfg?.label ?? 'لم يسجل'}</Pill>
                 </div>
-                <Pill tone={cfg?.tone ?? 'muted'}>{cfg?.label ?? 'لم يسجل'}</Pill>
               </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </section>
   );
 }
 
+const ATTENDANCE_BADGE: Record<string, { label: string; dot: string; tone: PillTone }> = {
+  present: { label: 'حاضر', dot: '#087F5B', tone: 'green' },
+  absent: { label: 'غائب', dot: '#EF4444', tone: 'red' },
+  excused: { label: 'عذر', dot: '#2B7BB9', tone: 'blue' },
+  excused_absence: { label: 'عذر', dot: '#2B7BB9', tone: 'blue' },
+  late: { label: 'متأخر', dot: '#C69B35', tone: 'gold' },
+};
+const ATTENDANCE_FALLBACK = { label: 'لم يسجل', dot: '#A9B3AD', tone: 'muted' as PillTone };
+
 export function AttendanceList({ records }: { records: (AttendanceRecord & { sessions?: { id: string; title: string } | null })[] }) {
-  const count = (...statuses: string[]) => records.filter((r) => statuses.includes(r.status)).length;
-  const summary = [
-    { label: 'حاضر', value: count('present'), cls: 'border-[#10b981]/30 bg-[#10b981]/10 text-[#34d399]' },
-    { label: 'غائب', value: count('absent'), cls: 'border-[#ef4444]/30 bg-[#ef4444]/10 text-[#fca5a5]' },
-    { label: 'بعذر', value: count('excused', 'excused_absence'), cls: 'border-[#3b82f6]/30 bg-[#3b82f6]/10 text-[#93c5fd]' },
-    { label: 'متأخر', value: count('late'), cls: 'border-[#d4af37]/30 bg-[#d4af37]/10 text-[#f0d27a]' },
-  ];
-  if (records.length === 0) {
-    return (
-      <section className={CARD}>
-        <SectionTitle icon={<Calendar className="h-4 w-4" />}>سجل الحضور</SectionTitle>
-        <p className={TILE + ' text-center text-xs text-slate-500'}>لا توجد سجلات حضور محفوظة لهذا الشهر</p>
-      </section>
-    );
-  }
-  const statusLabel: Record<string, { label: string; tone: 'green' | 'red' | 'gold' | 'blue' | 'muted' }> = {
-    present: { label: 'حاضر', tone: 'green' },
-    absent: { label: 'غائب', tone: 'red' },
-    excused: { label: 'بعذر', tone: 'blue' },
-    excused_absence: { label: 'بعذر', tone: 'blue' },
-    late: { label: 'متأخر', tone: 'gold' },
-  };
   return (
-    <section className={CARD}>
+    <section id="attendance" className={`${CARD} scroll-mt-32`}>
       <SectionTitle icon={<Calendar className="h-4 w-4" />}>سجل الحضور</SectionTitle>
-      <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
-        {summary.map((s) => (
-          <div key={s.label} className={`rounded-2xl border px-3 py-2.5 text-center ${s.cls}`}>
-            <p className="text-[10px] font-bold">{s.label}</p>
-            <p className="mt-0.5 text-lg font-black">{s.value}</p>
-          </div>
-        ))}
-      </div>
-      <div className="space-y-2">
-        {records.map((rec) => {
-          const cfg = statusLabel[rec.status] ?? { label: 'لم يسجل', tone: 'muted' as const };
-          return (
-            <div key={rec.id} className={`${TILE} flex items-center justify-between gap-3`}>
-              <div className="min-w-0">
-                <p className="text-sm font-bold text-white">{formatArabicDate(rec.attendance_date)}</p>
-                {rec.sessions?.title && <p className="mt-0.5 text-[10px] text-slate-400">{rec.sessions.title}</p>}
-                {rec.notes && <p className="mt-0.5 text-[10px] text-slate-500">{rec.notes}</p>}
-              </div>
-              <Pill tone={cfg.tone}>{cfg.label}</Pill>
-            </div>
-          );
-        })}
-      </div>
+      {records.length === 0 ? (
+        <EmptyNote>لا توجد سجلات حضور محفوظة لهذا الشهر</EmptyNote>
+      ) : (
+        <ol className="ms-2 space-y-3 border-s-2 border-[#E6EAE5] ps-6">
+          {records.map((rec) => {
+            const cfg = ATTENDANCE_BADGE[rec.status] ?? ATTENDANCE_FALLBACK;
+            return (
+              <li key={rec.id} className="relative">
+                <span className="absolute -start-[31px] top-5 h-3 w-3 rounded-full ring-4 ring-white" style={{ backgroundColor: cfg.dot }} />
+                <div className={`${TILE} flex items-center justify-between gap-3 p-3`}>
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-[#24332D]">{formatArabicDate(rec.attendance_date)}</p>
+                    {rec.sessions?.title && <p className="mt-0.5 text-[10px] text-[#5F6B65]">{rec.sessions.title}</p>}
+                    {rec.notes && <p className="mt-0.5 text-[10px] text-[#77847D]">{rec.notes}</p>}
+                  </div>
+                  <Pill tone={cfg.tone}>{cfg.label}</Pill>
+                </div>
+              </li>
+            );
+          })}
+        </ol>
+      )}
     </section>
   );
 }
 
 export function BehaviorList({ records }: { records: BehaviorEval[] }) {
-  if (records.length === 0) return null;
-  const ratingLabel: Record<string, { label: string; tone: 'green' | 'red' | 'gold' | 'blue' | 'muted' }> = {
+  const ratingLabel: Record<string, { label: string; tone: PillTone }> = {
     excellent: { label: 'ممتاز', tone: 'green' },
     participatory: { label: 'مشارك', tone: 'green' },
     quiet: { label: 'هادئ', tone: 'blue' },
@@ -491,25 +396,29 @@ export function BehaviorList({ records }: { records: BehaviorEval[] }) {
     disruptive: { label: 'مزعج', tone: 'red' },
   };
   return (
-    <section className={CARD}>
+    <section className={`${CARD} scroll-mt-32`}>
       <SectionTitle icon={<Target className="h-4 w-4" />}>السلوك</SectionTitle>
-      <div className="space-y-2.5">
-        {records.map((rec) => {
-          const cfg = rec.rating ? ratingLabel[rec.rating] ?? { label: rec.rating, tone: 'muted' as const } : null;
-          return (
-            <div key={rec.id} className={TILE}>
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-bold text-white">{formatArabicDate(rec.eval_date)}</p>
-                  {rec.note && <p className="mt-1 text-xs text-slate-400">{rec.note}</p>}
-                  <p className="mt-1.5 text-[10px] text-slate-500">{rec.scope === 'session' ? 'تقييم حصة' : rec.scope === 'monthly' ? 'تقييم شهري' : 'تقييم يومي'}</p>
+      {records.length === 0 ? (
+        <EmptyNote>لا توجد تقييمات سلوك لهذا الشهر</EmptyNote>
+      ) : (
+        <div className="space-y-2.5">
+          {records.map((rec) => {
+            const cfg = rec.rating ? ratingLabel[rec.rating] ?? { label: rec.rating, tone: 'muted' as PillTone } : null;
+            return (
+              <div key={rec.id} className={`${TILE} p-3`}>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-bold text-[#24332D]">{formatArabicDate(rec.eval_date)}</p>
+                    {rec.note && <p className="mt-1 text-xs text-[#5F6B65]">{rec.note}</p>}
+                    <p className="mt-1.5 text-[10px] text-[#77847D]">{rec.scope === 'session' ? 'تقييم حصة' : rec.scope === 'monthly' ? 'تقييم شهري' : 'تقييم يومي'}</p>
+                  </div>
+                  {cfg && <Pill tone={cfg.tone}>{cfg.label}</Pill>}
                 </div>
-                {cfg && <Pill tone={cfg.tone}>{cfg.label}</Pill>}
               </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </section>
   );
 }
@@ -522,14 +431,15 @@ export function UpcomingExamsCard({ exams }: { exams: { title: string; date: str
       <div className="space-y-2.5">
         {exams.map((ex, i) => {
           const daysLeft = Math.ceil((new Date(ex.date).getTime() - Date.now()) / 86400000);
+          const tone = daysLeft <= 3 ? 'bg-[#FEF2F2] text-[#B91C1C]' : daysLeft <= 7 ? 'bg-[#FBF3DF] text-[#8A6A1F]' : 'bg-[#E8F5EF] text-[#087F5B]';
           return (
-            <div key={i} className={`${TILE} flex items-center gap-3`}>
-              <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-black ${daysLeft <= 3 ? 'bg-red-500/15 text-red-300' : daysLeft <= 7 ? 'bg-[#d4af37]/15 text-[#f0d27a]' : 'bg-[#10b981]/15 text-[#34d399]'}`}>
+            <div key={i} className={`${TILE} flex items-center gap-3 p-3`}>
+              <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-black ${tone}`}>
                 {daysLeft <= 0 ? '!' : daysLeft}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-bold text-white">{ex.title}</p>
-                <p className="mt-0.5 text-[10px] text-slate-400">{formatArabicDate(ex.date)}</p>
+                <p className="truncate text-sm font-bold text-[#24332D]">{ex.title}</p>
+                <p className="mt-0.5 text-[10px] text-[#5F6B65]">{formatArabicDate(ex.date)}</p>
               </div>
               <Pill tone="muted">{ex.type === 'online' ? 'إلكتروني' : 'مركز'}</Pill>
             </div>
@@ -540,17 +450,65 @@ export function UpcomingExamsCard({ exams }: { exams: { title: string; date: str
   );
 }
 
+export function SectionNav({ items }: { items: { id: string; label: string }[] }) {
+  const [active, setActive] = useState(items[0]?.id ?? '');
+
+  useEffect(() => {
+    if (typeof IntersectionObserver === 'undefined') return;
+    const targets = items.map((i) => document.getElementById(i.id)).filter((el): el is HTMLElement => el !== null);
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries
+          .filter((e) => e.isIntersecting)
+          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+        if (visible[0]) setActive(visible[0].target.id);
+      },
+      { rootMargin: '-30% 0px -60% 0px' },
+    );
+    targets.forEach((el) => observer.observe(el));
+    return () => observer.disconnect();
+  }, [items]);
+
+  const jump = (id: string) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    el.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+    setActive(id);
+  };
+
+  return (
+    <nav aria-label="أقسام التقرير" className="sticky top-16 z-20 -mx-4 bg-[#F7F8F5]/95 px-4 py-2 backdrop-blur-md">
+      <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {items.map((item) => {
+          const isActive = active === item.id;
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => jump(item.id)}
+              aria-current={isActive ? 'true' : undefined}
+              className={`shrink-0 rounded-full border px-4 py-2 text-xs font-bold transition duration-200 active:scale-95 motion-reduce:transition-none ${isActive ? 'border-[#087F5B] bg-[#087F5B] text-white shadow-sm' : 'border-[#E6EAE5] bg-white text-[#24332D] hover:border-[#087F5B]/40'}`}
+            >
+              {item.label}
+            </button>
+          );
+        })}
+      </div>
+    </nav>
+  );
+}
+
 export function TeacherMessage() {
   return (
-    <section className="relative overflow-hidden rounded-[24px] border border-[#d4af37]/35 bg-[#0c1210] p-6 text-center shadow-[0_18px_50px_rgba(0,0,0,0.45)] sm:p-8">
-      <div className="pointer-events-none absolute -top-16 left-1/2 h-40 w-64 -translate-x-1/2 rounded-full bg-[#d4af37]/10 blur-3xl" />
-      <p className="relative text-[10px] font-bold tracking-[0.2em] text-[#d4af37]">رسالة الختام</p>
-      <p className="relative mt-4 text-sm leading-[2] text-slate-200">
+    <section className="relative overflow-hidden rounded-[24px] border border-[#C69B35]/35 bg-white p-6 text-center shadow-[0_8px_30px_rgba(36,51,45,0.06)] sm:p-8" style={{ backgroundImage: 'linear-gradient(180deg,#FFFFFF 0%,#E8F5EF 100%)' }}>
+      <p className="text-[10px] font-bold tracking-[0.2em] text-[#8A6A1F]">رسالة الختام</p>
+      <p className="mt-4 text-sm leading-[2] text-[#24332D]">
         وفي النهاية، افتكر دايمًا إن النجاح مش خطوة واحدة، النجاح مشوار، وكل يوم بتتقدم فيه هو إنجاز جديد. ربنا يوفقك ويفرحنا بيك.
       </p>
-      <div className="relative mt-6 border-t border-white/10 pt-5">
-        <p className="text-base font-black text-[#d4af37]">مستر عمرو خالد</p>
-        <p className="mt-1 text-[11px] text-slate-400">مدرس ومؤسس المنصة</p>
+      <div className="mt-6 border-t border-[#E6EAE5] pt-5">
+        <p className="text-base font-black text-[#087F5B]">مستر عمرو خالد</p>
+        <p className="mt-1 text-[11px] text-[#5F6B65]">مدرس ومؤسس المنصة</p>
       </div>
     </section>
   );

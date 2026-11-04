@@ -32,7 +32,7 @@ import type {
   HomeworkStatus,
   BehaviorEval,
 } from '@/lib/types';
-import { GraduationCap, CircleAlert as AlertCircle, Loader as Loader2 } from 'lucide-react';
+import { Award, CalendarCheck, ClipboardCheck, GraduationCap, CircleAlert as AlertCircle, Loader as Loader2, Sparkles } from 'lucide-react';
 import { PDFButton } from '@/components/ui/PDFButton';
 import { exportParentPortalPDF } from '@/lib/pdfExport';
 import { computeMonthStats, previousMonthKey } from '@/lib/parentPortalStats';
@@ -379,19 +379,11 @@ function PortalContent({
     return Math.round((gradeRate * 0.35 + attendanceRate * 0.25 + hwRate * 0.2 + behaviorRate * 0.2) * 10) / 10;
   }, [attendanceRate, examAvg, hwRate, behaviorRate]);
 
-  const trendPoints = useMemo(() => {
-    const keys = Array.from(new Set([...availableMonths, selectedMonth, prevKey])).sort().slice(-6);
-    return keys.map((k) => {
-      const s = computeMonthStats(recordsForStats, k);
-      return { monthKey: k, attendance: s.attendance.rate, exams: s.exams.average };
-    });
-  }, [recordsForStats, availableMonths, selectedMonth, prevKey]);
-
   const heroMetrics: HeroMetric[] = [
-    { label: 'الحضور', value: totalAttendance > 0 ? attendanceRate : null, previous: previousStats.attendance.rate ?? null, color: '#10b981' },
-    { label: 'الواجبات', value: hwTotal > 0 ? hwRate : null, previous: previousStats.homework.rate ?? null, color: '#06b6d4' },
-    { label: 'الدرجات', value: examAvg, previous: previousStats.exams.average ?? null, color: '#d4af37' },
-    { label: 'السلوك', value: currentStats.behavior.rated > 0 ? behaviorRate : null, previous: previousStats.behavior.rate ?? null, color: '#34d399' },
+    { label: 'نسبة الواجبات', value: hwTotal > 0 ? hwRate : null, previous: previousStats.homework.rate ?? null, color: '#06b6d4', icon: ClipboardCheck },
+    { label: 'نسبة الحضور', value: totalAttendance > 0 ? attendanceRate : null, previous: previousStats.attendance.rate ?? null, color: '#10b981', icon: CalendarCheck },
+    { label: 'نسبة الدرجات والامتحانات', value: examAvg, previous: previousStats.exams.average ?? null, color: '#d4af37', icon: Award },
+    { label: 'نسبة السلوك', value: currentStats.behavior.rated > 0 ? behaviorRate : null, previous: previousStats.behavior.rate ?? null, color: '#34d399', icon: Sparkles },
   ];
 
   if (data.monthKey !== selectedMonth) return <FullScreenLoader label="جاري تحميل بيانات الشهر..." />;
@@ -457,7 +449,6 @@ function PortalContent({
           overall={overallPercentage}
           monthLabel={getMonthLabel(selectedMonth)}
           metrics={heroMetrics}
-          trend={trendPoints.map((p) => p.attendance)}
         />
 
         <div className="grid gap-5 lg:grid-cols-2">
