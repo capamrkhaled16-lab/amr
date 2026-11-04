@@ -24,13 +24,13 @@ export function PerformanceRadar({ data, theme }: { data: RadarPoint[]; theme: P
   return (
     <section className={CARD}>
       <SectionTitle icon={<Activity className="h-4 w-4" />}>رسم راداري للأداء</SectionTitle>
-      <div className="h-64 w-full">
+      <div className="h-48 w-full">
         <ResponsiveContainer width="100%" height="100%">
-          <RadarChart data={chartData} outerRadius="72%">
-            <PolarGrid stroke={gridColor} />
-            <PolarAngleAxis dataKey="axis" tick={{ fill: axisColor, fontSize: 11 }} />
-            <Radar dataKey="value" stroke="#C69B35" fill="#C69B35" fillOpacity={0.22} strokeWidth={2} />
-            <Tooltip formatter={(v) => `${v}%`} contentStyle={{ borderRadius: 12, direction: 'rtl' }} />
+          <RadarChart data={chartData} outerRadius="62%">
+            <PolarGrid stroke={gridColor} strokeDasharray="2 4" />
+            <PolarAngleAxis dataKey="axis" tick={{ fill: axisColor, fontSize: 10 }} />
+            <Radar dataKey="value" stroke="#C69B35" fill="#C69B35" fillOpacity={0.18} strokeWidth={1.5} />
+            <Tooltip formatter={(v) => `${v}%`} contentStyle={{ borderRadius: 8, direction: 'rtl', fontSize: 12 }} />
           </RadarChart>
         </ResponsiveContainer>
       </div>
@@ -69,18 +69,18 @@ export function AttendanceDonut({ counts }: { counts: { present: number; absent:
     <section className={CARD}>
       <SectionTitle icon={<PieIcon className="h-4 w-4" />}>توزيع الحضور</SectionTitle>
       <div className="flex flex-col items-center gap-4 sm:flex-row">
-        <div className="relative h-44 w-44 shrink-0">
+        <div className="relative h-36 w-36 shrink-0">
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
-              <Pie data={segments} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={48} outerRadius={72} paddingAngle={2} stroke="none">
+              <Pie data={segments} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={38} outerRadius={60} paddingAngle={2} stroke="none">
                 {segments.map((s) => <Cell key={s.key} fill={s.fill} />)}
               </Pie>
               <Tooltip formatter={(v) => `${v} حصة`} contentStyle={{ borderRadius: 12, direction: 'rtl' }} />
             </PieChart>
           </ResponsiveContainer>
           <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <span className="text-2xl font-black tabular-nums text-[#24332D]">{total}</span>
-            <span className="text-[10px] font-bold text-[#77847D]">إجمالي الحصص</span>
+            <span className="text-xl font-black tabular-nums text-[#24332D]">{total}</span>
+            <span className="text-[9px] font-bold text-[#77847D]">حصة</span>
           </div>
         </div>
         <div className="grid w-full grid-cols-2 gap-2">
@@ -117,11 +117,11 @@ export function AcademicBars({ data }: { data: BarPoint[] }) {
   return (
     <section className={CARD}>
       <SectionTitle icon={<BarChart3 className="h-4 w-4" />}>مقارنة المؤشرات الأكاديمية</SectionTitle>
-      <div className="h-56 w-full">
+      <div className="h-40 w-full">
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={chartData} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
-            <Tooltip formatter={(v) => `${v}%`} contentStyle={{ borderRadius: 12, direction: 'rtl' }} cursor={{ fill: 'rgba(8,127,91,0.06)' }} />
-            <Bar dataKey="value" radius={[8, 8, 0, 0]} maxBarSize={64}>
+          <BarChart data={chartData} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
+            <Tooltip formatter={(v) => `${v}%`} contentStyle={{ borderRadius: 8, direction: 'rtl', fontSize: 12 }} cursor={{ fill: 'rgba(8,127,91,0.06)' }} />
+            <Bar dataKey="value" radius={[6, 6, 0, 0]} maxBarSize={48}>
               {chartData.map((d, i) => <Cell key={i} fill={d.color} />)}
             </Bar>
           </BarChart>

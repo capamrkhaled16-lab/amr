@@ -12,8 +12,8 @@ export function portalBackground(theme: PortalTheme) {
 
 export const PORTAL_THEME_CSS = String.raw`
 .pp-dark { color: #F4F7F4; }
-.pp-dark .bg-white, .pp-dark .bg-white\/70, .pp-dark .bg-white\/75, .pp-dark .bg-white\/80 { background-color: rgba(20, 32, 27, 0.82) !important; }
-.pp-dark .bg-\[\#F7F8F5\] { background-color: #101A16 !important; }
+.pp-dark .bg-white, .pp-dark .bg-white\/70, .pp-dark .bg-white\/75, .pp-dark .bg-white\/80, .pp-dark .bg-white\/60 { background-color: rgba(20, 32, 27, 0.82) !important; }
+.pp-dark .bg-\[\#F7F8F5\], .pp-dark .bg-\[\#F2F4F1\] { background-color: #101A16 !important; }
 .pp-dark .bg-\[\#E8F5EF\] { background-color: #173A2C !important; }
 .pp-dark .bg-\[\#FBF3DF\] { background-color: #3A311B !important; }
 .pp-dark .bg-\[\#EAF4FC\] { background-color: #172C3A !important; }
@@ -27,6 +27,7 @@ export const PORTAL_THEME_CSS = String.raw`
 .pp-dark .text-\[\#8A6A1F\] { color: #E7C65E !important; }
 .pp-dark .text-\[\#1D5E8C\] { color: #7DD3FC !important; }
 .pp-dark .text-\[\#B91C1C\] { color: #F87171 !important; }
+.pp-dark .text-\[\#D9483B\] { color: #F87171 !important; }
 .pp-dark nav { background-color: rgba(9, 13, 11, 0.94) !important; }
 .pp-aura { background: radial-gradient(circle, rgba(212, 175, 55, 0.28) 0%, rgba(16, 185, 129, 0.12) 45%, transparent 70%); filter: blur(28px); animation: pp-aura 8s ease-in-out infinite; }
 .pp-alert { animation: pp-alert 2.4s ease-in-out infinite; }

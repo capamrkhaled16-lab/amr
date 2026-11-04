@@ -1,4 +1,4 @@
-import { Area, AreaChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { TrendingUp } from 'lucide-react';
 import { CARD, SectionTitle } from '@/components/parent-portal/ReportWidgets';
 import type { PortalTheme } from '@/components/parent-portal/portalTheme';
@@ -47,22 +47,21 @@ export function PerformanceTrendChart({ data, theme }: { data: TrendPoint[]; the
         </div>
       )}
       {hasEnoughMonths ? (
-        <div className="h-64 w-full sm:h-72">
+        <div className="h-48 w-full sm:h-56">
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={data} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
+            <AreaChart data={data} margin={{ top: 6, right: 8, left: -16, bottom: 0 }}>
               <defs>
                 {SERIES.map((series) => (
                   <linearGradient key={series.key} id={`pp-trend-${series.key}`} x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor={series.color} stopOpacity={0.3} />
+                    <stop offset="0%" stopColor={series.color} stopOpacity={0.2} />
                     <stop offset="100%" stopColor={series.color} stopOpacity={0} />
                   </linearGradient>
                 ))}
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke={gridColor} vertical={false} />
-              <XAxis dataKey="month" tick={{ fill: axisColor, fontSize: 11 }} axisLine={false} tickLine={false} />
-              <YAxis domain={[0, 100]} unit="%" tick={{ fill: axisColor, fontSize: 11 }} axisLine={false} tickLine={false} />
-              <Tooltip formatter={(value) => `${value}%`} contentStyle={{ borderRadius: 12, direction: 'rtl' }} />
-              <Legend wrapperStyle={{ color: axisColor, fontSize: 12 }} />
+              <CartesianGrid strokeDasharray="2 6" stroke={gridColor} vertical={false} horizontal={false} />
+              <XAxis dataKey="month" tick={{ fill: axisColor, fontSize: 10 }} axisLine={false} tickLine={false} />
+              <YAxis domain={[0, 100]} unit="%" tick={{ fill: axisColor, fontSize: 10 }} axisLine={false} tickLine={false} width={32} />
+              <Tooltip formatter={(value) => `${value}%`} contentStyle={{ borderRadius: 8, direction: 'rtl', fontSize: 12 }} />
               {SERIES.map((series) => (
                 <Area
                   key={series.key}
@@ -70,11 +69,11 @@ export function PerformanceTrendChart({ data, theme }: { data: TrendPoint[]; the
                   dataKey={series.key}
                   name={series.label}
                   stroke={series.color}
-                  strokeWidth={2.5}
+                  strokeWidth={2}
                   fill={`url(#pp-trend-${series.key})`}
                   connectNulls={false}
-                  dot={{ r: 3 }}
-                  activeDot={{ r: 5 }}
+                  dot={{ r: 2 }}
+                  activeDot={{ r: 4 }}
                 />
               ))}
             </AreaChart>

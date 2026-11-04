@@ -103,16 +103,19 @@ export function MonthSelector({ selectedMonth, onMonthChange, availableMonths }:
   const canGoForward = currentIndex > 0;
   const btn = 'flex h-11 w-11 items-center justify-center rounded-xl border border-[#E6EAE5] bg-white text-[#24332D] transition hover:border-[#087F5B]/40 hover:text-[#087F5B] active:scale-95 disabled:opacity-30 motion-reduce:transition-none';
   return (
-    <div className="flex items-center justify-between rounded-2xl border border-[#E6EAE5] bg-white px-3 py-2 shadow-sm">
+    <div className="flex items-center justify-between rounded-2xl border border-[#E6EAE5] bg-white px-4 py-3 shadow-sm">
       <button type="button" aria-label="الشهر السابق" disabled={!canGoBack} onClick={() => canGoBack && onMonthChange(availableMonths[currentIndex + 1])} className={btn}>
-        <ChevronRight className="h-4 w-4" />
+        <ChevronRight className="h-5 w-5" />
       </button>
-      <div className="flex items-center gap-2 text-sm font-black text-[#24332D]">
-        <Calendar className="h-4 w-4 text-[#087F5B]" />
-        {getMonthLabel(selectedMonth)}
+      <div className="flex flex-col items-center gap-0.5">
+        <span className="text-[9px] font-bold tracking-wide text-[#77847D]">الشهر المحدد</span>
+        <div className="flex items-center gap-2 text-base font-black text-[#24332D]">
+          <Calendar className="h-4 w-4 text-[#087F5B]" />
+          {getMonthLabel(selectedMonth)}
+        </div>
       </div>
       <button type="button" aria-label="الشهر التالي" disabled={!canGoForward} onClick={() => canGoForward && onMonthChange(availableMonths[currentIndex - 1])} className={btn}>
-        <ChevronLeft className="h-4 w-4" />
+        <ChevronLeft className="h-5 w-5" />
       </button>
     </div>
   );
@@ -141,7 +144,7 @@ const FINANCE_VISUAL: Record<FinanceStatus, FinanceVisual> = {
     gradient: 'linear-gradient(160deg,#FFFFFF 0%,#E8F5EF 100%)',
   },
   missing: {
-    label: 'لم يُسجَّل الرسوم بعد',
+    label: 'لا يوجد سجل رسوم',
     bannerClass: 'bg-[#F2F4F1] text-[#5F6B65] border-[#D8DED9]',
     ringStroke: '#A9B3AD',
     ringTrack: '#E6EAE5',
@@ -168,7 +171,7 @@ const FINANCE_VISUAL: Record<FinanceStatus, FinanceVisual> = {
     gradient: 'linear-gradient(160deg,#FFFFFF 0%,#FBF3DF 100%)',
   },
   paid: {
-    label: 'مُسدّد بالكامل',
+    label: 'مسدد بالكامل',
     bannerClass: 'bg-[#E8F5EF] text-[#087F5B] border-[#087F5B]/25',
     ringStroke: '#087F5B',
     ringTrack: '#D8E8DF',
@@ -234,7 +237,7 @@ export function FinanceCard({ status, feesDue, feesPaid, feesRemaining, collecti
         </div>
       </div>
       {status === 'missing' && (
-        <p className="mt-5 rounded-2xl border border-dashed border-[#D8DED9] bg-white/60 p-4 text-center text-xs font-bold text-[#5F6B65]">لا يوجد سجل رسوم لهذا الشهر</p>
+        <p className="mt-5 rounded-2xl border border-dashed border-[#D8DED9] bg-[#F7F8F5] p-4 text-center text-xs font-bold text-[#5F6B65]">لا يوجد سجل رسوم لهذا الشهر — لا يوجد مبلغ مستحق حاليًا</p>
       )}
       {status === 'exempt' && (
         <p className="mt-5 rounded-2xl border border-[#087F5B]/20 bg-[#E8F5EF] p-4 text-center text-sm font-bold text-[#087F5B]">الطالب معفى من الرسوم لهذا الشهر</p>
