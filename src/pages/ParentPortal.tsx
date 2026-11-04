@@ -210,22 +210,22 @@ export default function ParentPortal() {
 function WelcomeScreen({ studentName, onEnter }: { studentName: string; onEnter: () => void }) {
   const { settings } = useSettings();
   return (
-    <div className="min-h-screen bg-[#F7F8F5] text-[#24332D] flex flex-col items-center justify-center px-6 py-10" dir="rtl" lang="ar">
+    <div className="min-h-screen bg-[#090d0b] text-[#E6EAE5] flex flex-col items-center justify-center px-6 py-10" dir="rtl" lang="ar">
       <div className="flex flex-col items-center gap-6 max-w-md w-full text-center">
-        <div className="w-20 h-20 rounded-2xl bg-white border border-[#C69B35]/40 flex items-center justify-center overflow-hidden shadow-sm">
-          {settings.logo_url ? <img src={settings.logo_url} alt="شعار المنصة" className="w-full h-full object-cover" /> : <GraduationCap className="w-9 h-9 text-[#087F5B]" />} 
+        <div className="w-20 h-20 rounded-2xl bg-[#0f1714] border border-[#1f2b25] flex items-center justify-center overflow-hidden shadow-sm">
+          {settings.logo_url ? <img src={settings.logo_url} alt="شعار المنصة" className="w-full h-full object-cover" /> : <GraduationCap className="w-9 h-9 text-[#C69B35]" />}
         </div>
         <div className="space-y-2">
-          <h1 className="text-2xl font-black leading-tight">مرحباً بكم في منصة الخالد التعليمية</h1>
-          <p className="text-sm text-[#77847D] leading-relaxed">نتابع معكم رحلة أبنائنا التعليمية خطوة بخطوة</p>
-          <p className="text-sm text-[#087F5B] font-semibold mt-1">صَلِّ على النبي محمد ﷺ</p>
+          <h1 className="text-2xl font-black leading-tight text-white">مرحباً بكم في منصة الخالد التعليمية</h1>
+          <p className="text-sm text-[#91A39A] leading-relaxed">نتابع معكم رحلة أبنائنا التعليمية خطوة بخطوة</p>
+          <p className="text-sm text-[#C69B35] font-semibold mt-1">صَلِّ على النبي محمد ﷺ</p>
         </div>
         {settings.teacher_photo_url ? (
           <img src={settings.teacher_photo_url} alt={settings.teacher_name} className="w-28 h-28 rounded-full object-cover border border-[#C69B35]/40" />
         ) : null}
-        <div className="text-xs text-[#77847D]">
+        <div className="text-xs text-[#91A39A]">
           <p>تقرير الطالب</p>
-          <p className="text-base font-bold text-[#24332D] mt-1">{studentName}</p>
+          <p className="text-base font-bold text-white mt-1">{studentName}</p>
         </div>
         <button
           type="button"
@@ -241,12 +241,12 @@ function WelcomeScreen({ studentName, onEnter }: { studentName: string; onEnter:
 
 function FullScreenLoader({ label }: { label: string }) {
   return (
-    <div className="min-h-screen bg-[#F7F8F5] flex flex-col items-center justify-center px-6" dir="rtl">
+    <div className="min-h-screen bg-[#090d0b] flex flex-col items-center justify-center px-6" dir="rtl">
       <div className="flex flex-col items-center gap-4">
-        <div className="w-16 h-16 rounded-2xl bg-[#E8F5EF] border border-[#E6EAE5] flex items-center justify-center animate-pulse">
-          <GraduationCap className="w-8 h-8 text-[#087F5B]" />
+        <div className="w-16 h-16 rounded-2xl bg-[#0f1714] border border-[#1f2b25] flex items-center justify-center animate-pulse">
+          <GraduationCap className="w-8 h-8 text-[#C69B35]" />
         </div>
-        <div className="flex items-center gap-2 text-[#77847D]">
+        <div className="flex items-center gap-2 text-[#91A39A]">
           <Loader2 className="w-4 h-4 animate-spin" />
           <span className="text-sm">{label}</span>
         </div>
@@ -257,10 +257,10 @@ function FullScreenLoader({ label }: { label: string }) {
 
 function FullScreenError({ icon, message }: { icon: React.ReactNode; message: string }) {
   return (
-    <div className="min-h-screen bg-[#F7F8F5] flex flex-col items-center justify-center px-6" dir="rtl">
+    <div className="min-h-screen bg-[#090d0b] flex flex-col items-center justify-center px-6" dir="rtl">
       <div className="flex flex-col items-center gap-4 max-w-sm text-center">
-        <div className="w-20 h-20 rounded-full border border-[#E6EAE5] bg-white flex items-center justify-center">{icon}</div>
-        <p className="text-[#5F6B65] text-sm leading-relaxed">{message}</p>
+        <div className="w-20 h-20 rounded-full border border-[#1f2b25] bg-[#0f1714] flex items-center justify-center">{icon}</div>
+        <p className="text-[#91A39A] text-sm leading-relaxed">{message}</p>
       </div>
     </div>
   );
@@ -603,13 +603,14 @@ function PortalContent({
           <ReceiptCard payments={monthFilteredPayments} feesRemaining={monthSubscription ? feesRemaining : null} />
         </div>
 
-        <div className="lg:col-span-3">
+        <div className="lg:col-span-3 space-y-5">
           <PerformanceHero
             overall={overallPercentage}
             monthLabel={getMonthLabel(selectedMonth)}
             metrics={heroMetrics}
             gradeBreakdown={gradeBreakdown}
           />
+          <MotivationBox overall={overallPercentage} metrics={heroMetrics} />
         </div>
         </div>
 
@@ -654,8 +655,6 @@ function PortalContent({
           />
           <HomeworkList homework={monthFilteredHomework} statuses={data.homeworkStatuses} studentId={student.id} />
         </div>
-
-        <MotivationBox overall={overallPercentage} metrics={heroMetrics} />
 
         <div className="grid gap-5 lg:grid-cols-5">
           <div className="lg:col-span-3">

@@ -141,7 +141,7 @@ const FINANCE_VISUAL: Record<FinanceStatus, FinanceVisual> = {
     gradient: 'linear-gradient(160deg,#FFFFFF 0%,#E8F5EF 100%)',
   },
   missing: {
-    label: 'في انتظار تسجيل الرسوم',
+    label: 'لم يُسجَّل الرسوم بعد',
     bannerClass: 'bg-[#F2F4F1] text-[#5F6B65] border-[#D8DED9]',
     ringStroke: '#A9B3AD',
     ringTrack: '#E6EAE5',
@@ -159,7 +159,7 @@ const FINANCE_VISUAL: Record<FinanceStatus, FinanceVisual> = {
     gradient: 'linear-gradient(160deg,#FFFFFF 0%,#FEF2F2 100%)',
   },
   partial: {
-    label: 'غير مسدد',
+    label: 'مسدد جزئيًا',
     bannerClass: 'bg-[#FBF3DF] text-[#8A6A1F] border-[#C69B35]/35',
     ringStroke: '#C69B35',
     ringTrack: '#F0E4C0',
@@ -229,11 +229,12 @@ export function FinanceCard({ status, feesDue, feesPaid, feesRemaining, collecti
         <div className="min-w-0">
           <p className="text-sm font-black leading-tight">{visual.label}</p>
           {status === 'partial' && <p className="mt-0.5 text-[11px] font-bold opacity-80">تم سداد جزء من الرسوم</p>}
+          {status === 'unpaid' && <p className="mt-0.5 text-[11px] font-bold opacity-80">لم يتم سداد أي مبلغ بعد</p>}
           {showAmounts && <p className="mt-0.5 text-[11px] font-bold opacity-80">{formatCurrency(feesDue)} ج.م إجمالي مطلوب</p>}
         </div>
       </div>
       {status === 'missing' && (
-        <p className="mt-5 rounded-2xl border border-dashed border-[#D8DED9] bg-white/60 p-4 text-center text-sm font-bold text-[#5F6B65]">لم يُسجَّل سعر الرسوم لهذا الشهر بعد، وستظهر الأرقام فور تحديثها</p>
+        <p className="mt-5 rounded-2xl border border-dashed border-[#D8DED9] bg-white/60 p-4 text-center text-xs font-bold text-[#5F6B65]">لا يوجد سجل رسوم لهذا الشهر</p>
       )}
       {status === 'exempt' && (
         <p className="mt-5 rounded-2xl border border-[#087F5B]/20 bg-[#E8F5EF] p-4 text-center text-sm font-bold text-[#087F5B]">الطالب معفى من الرسوم لهذا الشهر</p>

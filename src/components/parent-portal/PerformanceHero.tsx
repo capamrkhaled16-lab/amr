@@ -172,21 +172,26 @@ export function PerformanceHero({ overall, monthLabel, metrics, gradeBreakdown }
         </div>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
           {[
-            { label: 'التسميع', part: gradeBreakdown.recitation, color: '#C69B35' },
-            { label: 'الشيتات', part: gradeBreakdown.sheet, color: '#087F5B' },
-            { label: 'الامتحانات', part: gradeBreakdown.exams, color: '#2B7BB9' },
-          ].map(({ label, part, color }) => (
-            <div key={label} className="rounded-xl border border-[#E6EAE5] bg-[#F7F8F5] p-3">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-[11px] font-bold text-[#5F6B65]">{label}</span>
-                <span className="text-sm font-black text-[#24332D]">{part.rate === null ? 'غير مسجل' : `${part.rate}%`}</span>
+            { label: 'التسميع', part: gradeBreakdown.recitation },
+            { label: 'الشيتات', part: gradeBreakdown.sheet },
+            { label: 'الامتحانات', part: gradeBreakdown.exams },
+          ].map(({ label, part }) => {
+            const rate = part.rate;
+            const barColor = rate === null ? '#D8DED9' : rate >= 85 ? '#10B981' : rate >= 50 ? '#D4AF37' : '#FF6B5B';
+            const textColor = rate === null ? '#5F6B65' : rate >= 85 ? '#087F5B' : rate >= 50 ? '#8A6A1F' : '#D9483B';
+            return (
+              <div key={label} className="rounded-xl border border-[#E6EAE5] bg-[#F7F8F5] p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[11px] font-bold text-[#5F6B65]">{label}</span>
+                  <span className="text-sm font-black tabular-nums" style={{ color: textColor }}>{rate === null ? 'غير مسجل' : `${rate}%`}</span>
+                </div>
+                <p className="mt-1 text-[10px] text-[#77847D]">{part.max > 0 ? `${part.score} من ${part.max} درجة` : 'لا توجد درجات مسجلة'}</p>
+                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#E6EAE5]">
+                  <div className="h-full rounded-full transition-[width] duration-1000 ease-out motion-reduce:transition-none" style={{ width: `${rate ?? 0}%`, backgroundColor: barColor }} />
+                </div>
               </div>
-              <p className="mt-1 text-[10px] text-[#77847D]">{part.max > 0 ? `${part.score} من ${part.max} درجة` : 'لا توجد درجات مسجلة'}</p>
-              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#E6EAE5]">
-                <div className="h-full rounded-full" style={{ width: `${part.rate ?? 0}%`, backgroundColor: color }} />
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </section>
