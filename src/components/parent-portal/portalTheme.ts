@@ -18,6 +18,8 @@ export const PORTAL_THEME_CSS = String.raw`
 .pp-dark .bg-\[\#FBF3DF\] { background-color: #3A311B !important; }
 .pp-dark .bg-\[\#EAF4FC\] { background-color: #172C3A !important; }
 .pp-dark .bg-\[\#FEF2F2\] { background-color: #3A1B1B !important; }
+.pp-dark .bg-\[\#E6EAE5\] { background-color: #24352D !important; }
+.pp-dark .pp-ring-track { stroke: #24352D; }
 .pp-dark .border-\[\#E6EAE5\] { border-color: #2B3B34 !important; }
 .pp-dark .border-\[\#D8DED9\] { border-color: #405248 !important; }
 .pp-dark .text-\[\#24332D\] { color: #F4F7F4 !important; }

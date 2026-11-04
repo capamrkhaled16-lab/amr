@@ -22,18 +22,18 @@ export interface GradeBreakdown {
 
 interface Tone {
   stroke: string;
-  text: string;
+  textClass: string;
   tint: string;
   label: string;
 }
 
-const NO_DATA_TONE: Tone = { stroke: '#D8DED9', text: '#5F6B65', tint: 'linear-gradient(160deg,#F7F8F5 0%,#FFFFFF 60%)', label: 'لا توجد بيانات كافية لحساب النسبة' };
+const NO_DATA_TONE: Tone = { stroke: '#D8DED9', textClass: 'text-[#5F6B65]', tint: 'linear-gradient(160deg, rgba(95,107,101,0.10) 0%, transparent 60%)', label: 'لا توجد بيانات كافية لحساب النسبة' };
 
 function performanceTone(pct: number): Tone {
-  if (pct >= 100) return { stroke: 'url(#pp-ring-full)', text: '#087F5B', tint: 'linear-gradient(160deg,#FBF3DF 0%,#E8F5EF 100%)', label: 'بطل الشهر — الدرجة الكاملة' };
-  if (pct >= 85) return { stroke: '#10B981', text: '#087F5B', tint: 'linear-gradient(160deg,#E8F5EF 0%,#FFFFFF 60%)', label: 'أداء ممتاز' };
-  if (pct >= 50) return { stroke: '#D4AF37', text: '#8A6A1F', tint: 'linear-gradient(160deg,#FBF3DF 0%,#FFFFFF 60%)', label: 'أداء جيد، واصل التقدم' };
-  return { stroke: '#FF6B5B', text: '#D9483B', tint: 'linear-gradient(160deg,#FEF2F2 0%,#FFFFFF 60%)', label: 'يحتاج متابعة ودعم' };
+  if (pct >= 100) return { stroke: 'url(#pp-ring-full)', textClass: 'text-[#087F5B]', tint: 'linear-gradient(160deg, rgba(212,175,55,0.16) 0%, rgba(16,185,129,0.10) 100%)', label: 'بطل الشهر — الدرجة الكاملة' };
+  if (pct >= 85) return { stroke: '#10B981', textClass: 'text-[#087F5B]', tint: 'linear-gradient(160deg, rgba(16,185,129,0.14) 0%, transparent 60%)', label: 'أداء ممتاز' };
+  if (pct >= 50) return { stroke: '#D4AF37', textClass: 'text-[#8A6A1F]', tint: 'linear-gradient(160deg, rgba(212,175,55,0.14) 0%, transparent 60%)', label: 'أداء جيد، واصل التقدم' };
+  return { stroke: '#FF6B5B', textClass: 'text-[#D9483B]', tint: 'linear-gradient(160deg, rgba(255,107,91,0.14) 0%, transparent 60%)', label: 'يحتاج متابعة ودعم' };
 }
 
 const PRAISE_MESSAGES = [
@@ -93,7 +93,7 @@ function ScoreRing({ pct, label, stroke, mounted }: { pct: number; label: string
             <stop offset="100%" stopColor="#10B981" />
           </linearGradient>
         </defs>
-        <circle cx="64" cy="64" r={radius} fill="none" stroke="#E6EAE5" strokeWidth="10" />
+        <circle cx="64" cy="64" r={radius} fill="none" stroke="#E6EAE5" strokeWidth="10" className="pp-ring-track" />
         <circle
           cx="64" cy="64" r={radius} fill="none" stroke={stroke} strokeWidth="10" strokeLinecap="round"
           strokeDasharray={circumference} strokeDashoffset={offset}
@@ -157,9 +157,9 @@ export function PerformanceHero({ overall, monthLabel, metrics, gradeBreakdown }
         <ScoreRing pct={pct} label={valueText} stroke={tone.stroke} mounted={mounted} />
         <div className="w-full min-w-0 flex-1 text-center sm:text-start">
           <p className="text-[11px] font-bold text-[#5F6B65]">النسبة العامة للشهر</p>
-          <p className="mt-1 text-5xl font-black tabular-nums" style={{ color: tone.text }}>{valueText}</p>
+          <p className={`mt-1 text-5xl font-black tabular-nums ${tone.textClass}`}>{valueText}</p>
           <span className="mt-3 inline-flex rounded-full border border-[#E6EAE5] bg-white px-3 py-1 text-[11px] font-bold text-[#24332D] shadow-sm">{monthLabel}</span>
-          <p className="mt-3 text-sm font-bold" style={{ color: tone.text }}>{tone.label}</p>
+          <p className={`mt-3 text-sm font-bold ${tone.textClass}`}>{tone.label}</p>
         </div>
       </div>
       <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -178,12 +178,12 @@ export function PerformanceHero({ overall, monthLabel, metrics, gradeBreakdown }
           ].map(({ label, part }) => {
             const rate = part.rate;
             const barColor = rate === null ? '#D8DED9' : rate >= 85 ? '#10B981' : rate >= 50 ? '#D4AF37' : '#FF6B5B';
-            const textColor = rate === null ? '#5F6B65' : rate >= 85 ? '#087F5B' : rate >= 50 ? '#8A6A1F' : '#D9483B';
+            const textClass = rate === null ? 'text-[#5F6B65]' : rate >= 85 ? 'text-[#087F5B]' : rate >= 50 ? 'text-[#8A6A1F]' : 'text-[#D9483B]';
             return (
               <div key={label} className="rounded-xl border border-[#E6EAE5] bg-[#F7F8F5] p-3">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-[11px] font-bold text-[#5F6B65]">{label}</span>
-                  <span className="text-sm font-black tabular-nums" style={{ color: textColor }}>{rate === null ? 'غير مسجل' : `${rate}%`}</span>
+                  <span className={`text-sm font-black tabular-nums ${textClass}`}>{rate === null ? 'غير مسجل' : `${rate}%`}</span>
                 </div>
                 <p className="mt-1 text-[10px] text-[#77847D]">{part.max > 0 ? `${part.score} من ${part.max} درجة` : 'لا توجد درجات مسجلة'}</p>
                 <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#E6EAE5]">

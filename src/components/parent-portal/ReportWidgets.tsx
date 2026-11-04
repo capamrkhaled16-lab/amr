@@ -575,7 +575,7 @@ export function PortalSkeleton() {
 
 export function TeacherMessage() {
   return (
-    <section className="relative overflow-hidden rounded-[24px] border border-[#C69B35]/35 bg-white p-6 text-center shadow-[0_8px_30px_rgba(36,51,45,0.06)] sm:p-8" style={{ backgroundImage: 'linear-gradient(180deg,#FFFFFF 0%,#E8F5EF 100%)' }}>
+    <section className="relative overflow-hidden rounded-[24px] border border-[#C69B35]/35 bg-white p-6 text-center shadow-[0_8px_30px_rgba(36,51,45,0.06)] sm:p-8">
       <p className="text-[10px] font-bold tracking-[0.2em] text-[#8A6A1F]">رسالة الختام</p>
       <p className="mt-4 text-sm leading-[2] text-[#24332D]">
         وفي النهاية، افتكر دايمًا إن النجاح مش خطوة واحدة، النجاح مشوار، وكل يوم بتتقدم فيه هو إنجاز جديد. ربنا يوفقك ويفرحنا بيك.
