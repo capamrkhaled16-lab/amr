@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import { Sparkles } from 'lucide-react';
+import { useCountUp } from '@/components/parent-portal/useCountUp';
 import { CARD, TILE } from '@/components/parent-portal/ReportWidgets';
 
 export interface HeroMetric {
@@ -32,7 +33,7 @@ function performanceTone(pct: number): Tone {
   if (pct >= 100) return { stroke: 'url(#pp-ring-full)', text: '#087F5B', tint: 'linear-gradient(160deg,#FBF3DF 0%,#E8F5EF 100%)', label: 'بطل الشهر — الدرجة الكاملة' };
   if (pct >= 85) return { stroke: '#10B981', text: '#087F5B', tint: 'linear-gradient(160deg,#E8F5EF 0%,#FFFFFF 60%)', label: 'أداء ممتاز' };
   if (pct >= 50) return { stroke: '#D4AF37', text: '#8A6A1F', tint: 'linear-gradient(160deg,#FBF3DF 0%,#FFFFFF 60%)', label: 'أداء جيد، واصل التقدم' };
-  return { stroke: '#EF4444', text: '#B91C1C', tint: 'linear-gradient(160deg,#FEF2F2 0%,#FFFFFF 60%)', label: 'يحتاج متابعة ودعم' };
+  return { stroke: '#FF6B5B', text: '#D9483B', tint: 'linear-gradient(160deg,#FEF2F2 0%,#FFFFFF 60%)', label: 'يحتاج متابعة ودعم' };
 }
 
 const PRAISE_MESSAGES = [
@@ -148,8 +149,8 @@ export function PerformanceHero({ overall, monthLabel, metrics, gradeBreakdown }
   const hasOverall = overall !== null;
   const pct = hasOverall ? Math.min(100, Math.max(0, overall)) : 0;
   const tone = hasOverall ? performanceTone(pct) : NO_DATA_TONE;
-  const valueText = hasOverall ? `${overall}%` : '—';
-  const focus = hasOverall && pct < 100 ? lowestWeakMetric(metrics) : null;
+  const shownPct = useCountUp(pct);
+  const valueText = hasOverall ? `${Math.round(shownPct)}%` : '—';
   return (
     <section id="performance" className={`${CARD} scroll-mt-32`} style={{ backgroundImage: tone.tint }}>
       <div className="flex flex-col items-center gap-6 sm:flex-row">
@@ -171,9 +172,9 @@ export function PerformanceHero({ overall, monthLabel, metrics, gradeBreakdown }
         </div>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
           {[
-            { label: 'التلاوة', part: gradeBreakdown.recitation, color: '#C69B35' },
-            { label: 'الورق', part: gradeBreakdown.sheet, color: '#087F5B' },
-            { label: 'الدرجات والامتحانات', part: gradeBreakdown.exams, color: '#2B7BB9' },
+            { label: 'التسميع', part: gradeBreakdown.recitation, color: '#C69B35' },
+            { label: 'الشيتات', part: gradeBreakdown.sheet, color: '#087F5B' },
+            { label: 'الامتحانات', part: gradeBreakdown.exams, color: '#2B7BB9' },
           ].map(({ label, part, color }) => (
             <div key={label} className="rounded-xl border border-[#E6EAE5] bg-[#F7F8F5] p-3">
               <div className="flex items-center justify-between gap-2">
@@ -188,14 +189,20 @@ export function PerformanceHero({ overall, monthLabel, metrics, gradeBreakdown }
           ))}
         </div>
       </div>
-      {hasOverall && (
-        <div className="mt-6 flex items-start gap-3 rounded-2xl border border-[#E6EAE5] bg-white p-4">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#FBF3DF] text-[#8A6A1F]">
-            <Sparkles className="h-4 w-4" />
-          </span>
-          <p className="min-w-0 text-sm leading-relaxed text-[#24332D]">{motivationFor(pct, focus)}</p>
-        </div>
-      )}
+    </section>
+  );
+}
+
+export function MotivationBox({ overall, metrics }: { overall: number | null; metrics: HeroMetric[] }) {
+  if (overall === null) return null;
+  const pct = Math.min(100, Math.max(0, overall));
+  const focus = pct < 100 ? lowestWeakMetric(metrics) : null;
+  return (
+    <section className={`${CARD} flex items-start gap-3`}>
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#FBF3DF] text-[#8A6A1F]">
+        <Sparkles className="h-4 w-4" />
+      </span>
+      <p className="min-w-0 text-sm leading-relaxed text-[#24332D]">{motivationFor(pct, focus)}</p>
     </section>
   );
 }

@@ -52,25 +52,14 @@ import {
   TeacherMessage,
   SectionNav,
   REPORT_SECTIONS,
+  PortalSkeleton,
+  type FinanceStatus,
 } from '@/components/parent-portal/ReportWidgets';
-import { PerformanceHero, type HeroMetric } from '@/components/parent-portal/PerformanceHero';
-
-const PORTAL_THEME_STYLES = `
-  .pp-dark { background: #0B1210 !important; color: #F4F7F4 !important; }
-  .pp-dark .bg-white { background-color: #14201B !important; }
-  .pp-dark .bg-\\[\\#F7F8F5\\] { background-color: #101A16 !important; }
-  .pp-dark .bg-\\[\\#E8F5EF\\] { background-color: #173A2C !important; }
-  .pp-dark .bg-\\[\\#FBF3DF\\] { background-color: #3A311B !important; }
-  .pp-dark .bg-\\[\\#EAF4FC\\] { background-color: #172C3A !important; }
-  .pp-dark .border-\\[\\#E6EAE5\\] { border-color: #2B3B34 !important; }
-  .pp-dark .border-\\[\\#D8DED9\\] { border-color: #405248 !important; }
-  .pp-dark [class*=\\"text-\\[\\#24332D\\]\\"] { color: #F4F7F4 !important; }
-  .pp-dark [class*=\\"text-\\[\\#5F6B65\\]\\"] { color: #B4C2BA !important; }
-  .pp-dark [class*=\\"text-\\[\\#77847D\\"] { color: #91A39A !important; }
-  .pp-dark .shadow-\\[0_8px_30px_rgba\\(36\\,51\\,45\\,0.06\\)\\] { box-shadow: 0 12px 36px rgba(0,0,0,.24) !important; }
-  .pp-dark nav { background-color: rgba(11,18,16,.94) !important; }
-  .pp-dark .pp-dark-control { background-color: #1B2A23 !important; color: #F4F7F4 !important; border-color: #405248 !important; }
-`;
+import { MotivationBox, PerformanceHero, type HeroMetric } from '@/components/parent-portal/PerformanceHero';
+import { PerformanceTrendChart } from '@/components/parent-portal/PerformanceTrendChart';
+import { PerformanceRadar, AttendanceDonut, AcademicBars } from '@/components/parent-portal/PortalCharts';
+import { MonthlyJourney, type JourneyEvent } from '@/components/parent-portal/MonthlyJourney';
+import { PORTAL_THEME_CSS, portalBackground } from '@/components/parent-portal/portalTheme';
 
 type LoadState = 'loading' | 'success' | 'error' | 'notfound';
 
@@ -292,9 +281,9 @@ function PortalContent({
   const { settings } = useSettings();
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     try {
-      return localStorage.getItem('parent-portal-theme') === 'dark' ? 'dark' : 'light';
+      return localStorage.getItem('parent-portal-theme') === 'light' ? 'light' : 'dark';
     } catch {
-      return 'light';
+      return 'dark';
     }
   });
 
@@ -389,6 +378,15 @@ function PortalContent({
   const feesRemaining = Math.max(0, feesDue - feesPaid);
   const isExempt = monthSubscription?.is_exempt ?? false;
   const collectionRate = feesDue > 0 ? Math.min(100, Math.round((feesPaid / feesDue) * 100)) : 0;
+  const financeStatus: FinanceStatus = isExempt
+    ? 'exempt'
+    : !monthSubscription || feesDue <= 0
+      ? 'missing'
+      : feesPaid <= 0
+        ? 'unpaid'
+        : feesRemaining > 0
+          ? 'partial'
+          : 'paid';
 
   const upcomingExams = useMemo(() => {
     const now = new Date().toISOString().slice(0, 10);
@@ -431,6 +429,30 @@ function PortalContent({
   const prevKey = previousMonthKey(selectedMonth);
   const currentStats = useMemo(() => computeMonthStats(recordsForStats, selectedMonth), [recordsForStats, selectedMonth]);
   const previousStats = useMemo(() => computeMonthStats(recordsForStats, prevKey), [recordsForStats, prevKey]);
+  const trendMonths = useMemo(() => {
+    const keys = new Set<string>();
+    for (const a of data.attendance) keys.add(a.attendance_date.slice(0, 7));
+    for (const h of data.homework) if (h.due_date) keys.add(h.due_date.slice(0, 7));
+    for (const e of data.centerExams) if (e.exam_date) keys.add(e.exam_date.slice(0, 7));
+    for (const e of data.onlineExams) {
+      const when = e.open_at ?? e.created_at;
+      if (when) keys.add(when.slice(0, 7));
+    }
+    return Array.from(keys).filter((key) => key <= selectedMonth).sort().slice(-6);
+  }, [data.attendance, data.homework, data.centerExams, data.onlineExams, selectedMonth]);
+  const trendData = useMemo(
+    () =>
+      trendMonths.map((key) => {
+        const stats = computeMonthStats(recordsForStats, key);
+        return {
+          month: getMonthLabel(key),
+          attendance: stats.attendance.total > 0 ? stats.attendance.rate : null,
+          homework: stats.homework.total > 0 ? stats.homework.rate : null,
+          exams: stats.exams.count > 0 ? stats.exams.average : null,
+        };
+      }),
+    [trendMonths, recordsForStats],
+  );
 
   const behaviorRate = currentStats.behavior.rate ?? 0;
   const hasOverallData = examAvg !== null || totalAttendance > 0 || hwTotal > 0 || currentStats.behavior.rated > 0;
@@ -447,12 +469,74 @@ function PortalContent({
     { label: 'نسبة السلوك', value: currentStats.behavior.rated > 0 ? behaviorRate : null, previous: previousStats.behavior.rate ?? null, color: '#2B7BB9', icon: Sparkles },
   ];
 
-  if (data.monthKey !== selectedMonth) return <FullScreenLoader label="جاري تحميل بيانات الشهر..." />;
+  const journeyEvents = useMemo((): JourneyEvent[] => {
+    const events: JourneyEvent[] = [];
+    for (const cg of data.centerGrades) {
+      const exam = data.centerExams.find((e) => e.id === cg.center_exam_id);
+      if (exam && exam.exam_date?.slice(0, 7) === selectedMonth) {
+        const pct = exam.max_score > 0 ? Math.round((cg.score / exam.max_score) * 100) : 0;
+        events.push({ date: exam.exam_date, title: exam.title ?? 'امتحان', kind: 'exam', detail: `${pct}% — ${cg.score} من ${exam.max_score} درجة` });
+      }
+    }
+    for (const og of data.onlineGrades) {
+      const exam = data.onlineExams.find((e) => e.id === og.exam_id);
+      const when = exam?.open_at ?? exam?.created_at ?? '';
+      if (when.slice(0, 7) === selectedMonth && og.max_score > 0) {
+        const pct = Math.round((og.score / og.max_score) * 100);
+        events.push({ date: when.slice(0, 10), title: exam?.title ?? 'امتحان إلكتروني', kind: 'exam', detail: `${pct}% — ${og.score} من ${og.max_score} درجة` });
+      }
+    }
+    for (const rec of monthFilteredAttendance) {
+      const isPresent = rec.status === 'present';
+      const isLate = rec.status === 'late';
+      if (!isPresent && !isLate) {
+        events.push({ date: rec.attendance_date, title: rec.status === 'absent' ? 'غياب عن حصة' : 'غيب بعذر', kind: 'attendance', detail: rec.sessions?.title });
+      }
+    }
+    for (const ev of monthFilteredBehavior) {
+      if (ev.rating === 'excellent' || ev.rating === 'participatory') {
+        events.push({ date: ev.eval_date, title: 'تقييم سلوك إيجابي', kind: 'behavior', detail: ev.note });
+      } else if (ev.rating === 'disruptive' || ev.rating === 'needs_attention') {
+        events.push({ date: ev.eval_date, title: 'تنبيه سلوك', kind: 'behavior', detail: ev.note });
+      }
+    }
+    if (hasOverallData && overallPercentage !== null) {
+      const prevOverall = previousStats.attendance.rate !== null || previousStats.exams.average !== null || previousStats.homework.rate !== null || previousStats.behavior.rate !== null
+        ? Math.round((previousStats.exams.average ?? 0) * 0.35 + (previousStats.attendance.rate ?? 0) * 0.25 + (previousStats.homework.rate ?? 0) * 0.2 + (previousStats.behavior.rate ?? 0) * 0.2)
+        : null;
+      events.push({
+        date: `${selectedMonth}-15`,
+        title: 'النسبة العامة للشهر',
+        kind: 'milestone',
+        detail: `${overallPercentage}%`,
+        trend: prevOverall !== null ? Math.round((overallPercentage - prevOverall) * 10) / 10 : null,
+      });
+    }
+    return events;
+  }, [data.centerGrades, data.centerExams, data.onlineGrades, data.onlineExams, monthFilteredAttendance, monthFilteredBehavior, selectedMonth, hasOverallData, overallPercentage, previousStats]);
+
+  const radarData = [
+    { axis: 'التسميع', value: gradeBreakdown.recitation.rate },
+    { axis: 'الشيتات', value: gradeBreakdown.sheet.rate },
+    { axis: 'الامتحانات', value: gradeBreakdown.exams.rate },
+    { axis: 'الحضور', value: totalAttendance > 0 ? attendanceRate : null },
+    { axis: 'الواجبات', value: hwTotal > 0 ? hwRate : null },
+    { axis: 'السلوك', value: currentStats.behavior.rated > 0 ? behaviorRate : null },
+  ];
+
+  const academicBars = [
+    { label: 'التسميع', value: gradeBreakdown.recitation.rate, color: '#C69B35' },
+    { label: 'الشيتات', value: gradeBreakdown.sheet.rate, color: '#087F5B' },
+    { label: 'الامتحانات', value: gradeBreakdown.exams.rate, color: '#2B7BB9' },
+  ];
+
+  if (data.monthKey !== selectedMonth) return <PortalSkeleton />;
 
   return (
-    <div className={`pp-portal min-h-screen ${theme === 'dark' ? 'pp-dark' : 'pp-light'} bg-[#F7F8F5] text-[#24332D]`} dir="rtl" lang="ar">
-      <style>{PORTAL_THEME_STYLES}</style>
-      <header className="sticky top-0 z-30 border-b border-[#E6EAE5] bg-white/95 backdrop-blur-md">
+    <div className={`pp-portal relative min-h-screen overflow-x-hidden ${theme === 'dark' ? 'pp-dark' : 'pp-light'} text-[#24332D]`} style={portalBackground(theme)} dir="rtl" lang="ar">
+      <style>{PORTAL_THEME_CSS}</style>
+      <div aria-hidden="true" className="pp-aura pointer-events-none absolute -top-32 left-1/2 h-96 w-96 rounded-full" />
+      <header className="sticky top-0 z-30 border-b border-[#E6EAE5] bg-white/70 backdrop-blur-md">
         <div className="mx-auto flex max-w-2xl items-center justify-between px-4 py-3 lg:max-w-5xl">
           <div className="flex items-center gap-2.5">
             <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-xl bg-[#E8F5EF]">
@@ -507,9 +591,10 @@ function PortalContent({
 
         <MonthSelector selectedMonth={selectedMonth} onMonthChange={onMonthChange} availableMonths={availableMonths} />
 
-        <div id="payments" className="scroll-mt-32 space-y-5">
+        <div className="space-y-5 lg:grid lg:grid-cols-5 lg:items-start lg:gap-5 lg:space-y-0">
+        <div id="payments" className="scroll-mt-32 space-y-5 lg:col-span-2">
           <FinanceCard
-            status={isExempt ? 'exempt' : !monthSubscription ? 'missing' : feesDue > 0 && feesPaid === 0 ? 'unpaid' : feesRemaining > 0 ? 'partial' : 'paid'}
+            status={financeStatus}
             feesDue={feesDue}
             feesPaid={feesPaid}
             feesRemaining={feesRemaining}
@@ -518,12 +603,15 @@ function PortalContent({
           <ReceiptCard payments={monthFilteredPayments} feesRemaining={monthSubscription ? feesRemaining : null} />
         </div>
 
-        <PerformanceHero
-          overall={overallPercentage}
-          monthLabel={getMonthLabel(selectedMonth)}
-          metrics={heroMetrics}
-          gradeBreakdown={gradeBreakdown}
-        />
+        <div className="lg:col-span-3">
+          <PerformanceHero
+            overall={overallPercentage}
+            monthLabel={getMonthLabel(selectedMonth)}
+            metrics={heroMetrics}
+            gradeBreakdown={gradeBreakdown}
+          />
+        </div>
+        </div>
 
         <div className="grid gap-5 lg:grid-cols-2">
           <CalcNotesCard>
@@ -567,10 +655,27 @@ function PortalContent({
           <HomeworkList homework={monthFilteredHomework} statuses={data.homeworkStatuses} studentId={student.id} />
         </div>
 
-        <div className="grid gap-5 lg:grid-cols-2">
-          <AttendanceList records={monthFilteredAttendance} />
-          <BehaviorList records={monthFilteredBehavior} />
+        <MotivationBox overall={overallPercentage} metrics={heroMetrics} />
+
+        <div className="grid gap-5 lg:grid-cols-5">
+          <div className="lg:col-span-3">
+            <AttendanceList records={monthFilteredAttendance} />
+          </div>
+          <div className="lg:col-span-2">
+            <BehaviorList records={monthFilteredBehavior} />
+          </div>
         </div>
+
+        <div className="grid gap-5 lg:grid-cols-2">
+          <PerformanceRadar data={radarData} theme={theme} />
+          <AttendanceDonut counts={{ present: presentCount, absent: absentCount, excused: excusedCount, late: lateCount }} />
+        </div>
+
+        <AcademicBars data={academicBars} />
+
+        <PerformanceTrendChart data={trendData} theme={theme} />
+
+        <MonthlyJourney monthKey={selectedMonth} events={journeyEvents} hasOverall={hasOverallData} overall={overallPercentage} />
 
         <MonthComparison current={currentStats} previous={previousStats} currentKey={selectedMonth} previousKey={prevKey} />
 

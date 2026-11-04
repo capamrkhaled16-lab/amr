@@ -2,9 +2,10 @@ import { useEffect, useState, type ReactNode } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import { AlertCircle, Award, Calendar, CheckCircle2, ChevronLeft, ChevronRight, Clock, Phone, Receipt, Target, Wallet, TrendingDown, TrendingUp } from 'lucide-react';
 import { formatArabicDate, formatCurrency, getGradeRating, getMonthLabel } from '@/lib/format';
+import { useCountUp } from '@/components/parent-portal/useCountUp';
 import type { AttendanceRecord, BehaviorEval, CenterExam, CenterGrade, Homework, HomeworkStatus, OnlineExam, OnlineGrade, Payment } from '@/lib/types';
 
-export const CARD = 'rounded-[24px] border border-[#E6EAE5] bg-white p-5 shadow-[0_8px_30px_rgba(36,51,45,0.06)] transition duration-300 ease-out hover:-translate-y-0.5 hover:shadow-[0_14px_40px_rgba(36,51,45,0.10)] active:scale-[0.995] motion-reduce:transform-none motion-reduce:transition-none sm:p-6';
+export const CARD = 'pp-flow-border rounded-[24px] border border-[#E6EAE5] bg-white/80 backdrop-blur-md p-5 shadow-[0_8px_30px_rgba(36,51,45,0.06)] transition duration-300 ease-out hover:-translate-y-0.5 hover:shadow-[0_14px_40px_rgba(36,51,45,0.10)] active:scale-[0.995] motion-reduce:transform-none motion-reduce:transition-none sm:p-6';
 export const TILE = 'rounded-2xl border border-[#E6EAE5] bg-[#F7F8F5] transition duration-300 ease-out hover:-translate-y-0.5 hover:border-[#087F5B]/30 active:scale-[0.99] motion-reduce:transform-none motion-reduce:transition-none';
 
 export const REPORT_SECTIONS = [
@@ -61,30 +62,36 @@ function rankLabel(rank: number): string {
 
 export function ProfileCard({ student, rank, totalInGroup, monthLabel }: { student: StudentInfo; rank: number | null; totalInGroup: number; monthLabel: string }) {
   const rankText = rank !== null && totalInGroup > 0 ? rankLabel(rank) : null;
+  const details = [
+    { label: 'المرحلة', value: student.stage_name },
+    { label: 'الصف', value: student.grade_name },
+    { label: 'الموعد', value: student.group_schedule },
+    { label: 'المجموعة', value: student.group_name },
+    { label: 'الهاتف', value: student.phone || 'غير مسجل' },
+  ];
   return (
-    <section className={`${CARD} relative overflow-hidden`} style={{ backgroundImage: 'linear-gradient(135deg,#FFFFFF 0%,#E8F5EF 100%)' }}>
+    <section
+      className="pp-flow-border relative overflow-hidden rounded-[24px] p-5 text-white shadow-[0_18px_50px_rgba(0,0,0,0.22)] transition duration-300 ease-out hover:shadow-[0_18px_50px_rgba(212,175,55,0.18)] sm:p-6"
+      style={{ background: 'rgba(15, 23, 20, 0.75)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)' }}
+    >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-[10px] font-bold tracking-[0.18em] text-[#087F5B]">ملف الطالب</p>
-          <h2 className="mt-1.5 truncate text-2xl font-black text-[#24332D] sm:text-3xl">{student.name}</h2>
-          {rankText && <p className="mt-1.5 text-xs font-bold text-[#8A6A1F]">{rankText} في المجموعة</p>}
+          <p className="text-[10px] font-bold tracking-[0.18em] text-[#E7C65E]">ملف الطالب</p>
+          <h2 className="mt-1.5 truncate text-2xl font-black text-white sm:text-3xl">{student.name}</h2>
+          {rankText && <p className="mt-1.5 text-xs font-bold text-[#E7C65E]">{rankText} في المجموعة</p>}
         </div>
-        <div className="shrink-0 rounded-2xl border border-[#E6EAE5] bg-white px-3 py-2 text-center shadow-sm">
-          <p className="text-[10px] text-[#77847D]">الشهر المستهدف</p>
-          <p className="mt-0.5 text-xs font-black text-[#24332D]">{monthLabel}</p>
+        <div className="shrink-0 rounded-2xl border border-white/15 bg-white/10 px-3 py-2 text-center">
+          <p className="text-[10px] text-white/70">الشهر المستهدف</p>
+          <p className="mt-0.5 text-xs font-black text-white">{monthLabel}</p>
         </div>
       </div>
       <div className="mt-5 flex flex-wrap gap-2">
-        {student.stage_name && <Pill tone="sky">{student.stage_name}</Pill>}
-        {student.grade_name && <Pill tone="gold">{student.grade_name}</Pill>}
-        {student.group_name && <Pill tone="green">{student.group_name}</Pill>}
-        {student.group_schedule && <Pill tone="green">{student.group_schedule}</Pill>}
-        <Pill tone={student.status === 'active' ? 'green' : 'muted'}>{student.status === 'active' ? 'نشط' : 'غير نشط'}</Pill>
-      </div>
-      <div className="mt-4 flex items-center gap-2 text-xs text-[#5F6B65]">
-        <Phone className="h-3.5 w-3.5 text-[#087F5B]" />
-        <span>رقم الهاتف:</span>
-        <span className="font-bold text-[#24332D]">{student.phone ? student.phone : 'غير مسجل'}</span>
+        {details.filter((detail) => detail.value).map((detail) => (
+          <span key={detail.label} className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-[11px] font-bold text-white">
+            <span className="text-[#E7C65E]">{detail.label}:</span>
+            <span>{detail.value}</span>
+          </span>
+        ))}
       </div>
     </section>
   );
@@ -134,7 +141,7 @@ const FINANCE_VISUAL: Record<FinanceStatus, FinanceVisual> = {
     gradient: 'linear-gradient(160deg,#FFFFFF 0%,#E8F5EF 100%)',
   },
   missing: {
-    label: 'بيانات الرسوم غير متاحة',
+    label: 'في انتظار تسجيل الرسوم',
     bannerClass: 'bg-[#F2F4F1] text-[#5F6B65] border-[#D8DED9]',
     ringStroke: '#A9B3AD',
     ringTrack: '#E6EAE5',
@@ -152,7 +159,7 @@ const FINANCE_VISUAL: Record<FinanceStatus, FinanceVisual> = {
     gradient: 'linear-gradient(160deg,#FFFFFF 0%,#FEF2F2 100%)',
   },
   partial: {
-    label: 'مسدد جزئياً',
+    label: 'غير مسدد',
     bannerClass: 'bg-[#FBF3DF] text-[#8A6A1F] border-[#C69B35]/35',
     ringStroke: '#C69B35',
     ringTrack: '#F0E4C0',
@@ -161,7 +168,7 @@ const FINANCE_VISUAL: Record<FinanceStatus, FinanceVisual> = {
     gradient: 'linear-gradient(160deg,#FFFFFF 0%,#FBF3DF 100%)',
   },
   paid: {
-    label: 'مسدد بالكامل',
+    label: 'مُسدّد بالكامل',
     bannerClass: 'bg-[#E8F5EF] text-[#087F5B] border-[#087F5B]/25',
     ringStroke: '#087F5B',
     ringTrack: '#D8E8DF',
@@ -172,6 +179,7 @@ const FINANCE_VISUAL: Record<FinanceStatus, FinanceVisual> = {
 };
 
 function CollectionRing({ pct, stroke, track, mounted }: { pct: number; stroke: string; track: string; mounted: boolean }) {
+  const shownPct = Math.round(useCountUp(pct));
   const radius = 40;
   const circumference = 2 * Math.PI * radius;
   const offset = mounted ? circumference - (Math.min(100, pct) / 100) * circumference : circumference;
@@ -186,7 +194,7 @@ function CollectionRing({ pct, stroke, track, mounted }: { pct: number; stroke: 
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-2xl font-black tabular-nums text-[#24332D]">{pct}%</span>
+        <span className="text-2xl font-black tabular-nums text-[#24332D]">{shownPct}%</span>
         <span className="text-[9px] font-bold text-[#77847D]">نسبة التحصيل</span>
       </div>
     </div>
@@ -216,15 +224,16 @@ export function FinanceCard({ status, feesDue, feesPaid, feesRemaining, collecti
   return (
     <section className={`${CARD} relative overflow-hidden`} style={{ backgroundImage: visual.gradient }}>
       <SectionTitle icon={<Wallet className="h-4 w-4" />}>الملخص المالي وحالة السداد</SectionTitle>
-      <div className={`flex items-center gap-2.5 rounded-2xl border p-3.5 ${visual.bannerClass}`}>
+      <div className={`flex items-center gap-2.5 rounded-2xl border p-3.5 ${visual.bannerClass} ${status === 'unpaid' || status === 'partial' ? 'pp-alert' : ''}`} style={status === 'paid' ? { boxShadow: '0 0 24px rgba(16,185,129,0.35)' } : undefined}>
         {Icon && <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${visual.iconClass}`}><Icon className="h-5 w-5" /></span>}
         <div className="min-w-0">
           <p className="text-sm font-black leading-tight">{visual.label}</p>
+          {status === 'partial' && <p className="mt-0.5 text-[11px] font-bold opacity-80">تم سداد جزء من الرسوم</p>}
           {showAmounts && <p className="mt-0.5 text-[11px] font-bold opacity-80">{formatCurrency(feesDue)} ج.م إجمالي مطلوب</p>}
         </div>
       </div>
       {status === 'missing' && (
-        <p className="mt-5 rounded-2xl border border-dashed border-[#D8DED9] bg-white/60 p-4 text-center text-sm font-bold text-[#5F6B65]">لا يوجد سجل رسوم محدد لهذا الشهر؛ تعذر تحديد حالة السداد</p>
+        <p className="mt-5 rounded-2xl border border-dashed border-[#D8DED9] bg-white/60 p-4 text-center text-sm font-bold text-[#5F6B65]">لم يُسجَّل سعر الرسوم لهذا الشهر بعد، وستظهر الأرقام فور تحديثها</p>
       )}
       {status === 'exempt' && (
         <p className="mt-5 rounded-2xl border border-[#087F5B]/20 bg-[#E8F5EF] p-4 text-center text-sm font-bold text-[#087F5B]">الطالب معفى من الرسوم لهذا الشهر</p>
@@ -233,9 +242,9 @@ export function FinanceCard({ status, feesDue, feesPaid, feesRemaining, collecti
         <div className="mt-5 flex flex-col items-center gap-5 sm:flex-row sm:items-center">
           <CollectionRing pct={collectionRate} stroke={visual.ringStroke} track={visual.ringTrack} mounted={mounted} />
           <div className="grid w-full grid-cols-1 gap-2.5 sm:grid-cols-3">
-            <FinanceAmountTile icon={<Target className="h-4 w-4" />} label="إجمالي المطلوب" value={formatCurrency(feesDue)} iconColor="text-[#24332D]" iconBg="bg-[#E6EAE5]" />
-            <FinanceAmountTile icon={<TrendingUp className="h-4 w-4" />} label="إجمالي المدفوع" value={formatCurrency(feesPaid)} iconColor="text-[#087F5B]" iconBg="bg-[#E8F5EF]" />
-            <FinanceAmountTile icon={<TrendingDown className="h-4 w-4" />} label="المتبقي" value={formatCurrency(feesRemaining)} iconColor={feesRemaining > 0 ? 'text-[#B91C1C]' : 'text-[#087F5B]'} iconBg={feesRemaining > 0 ? 'bg-[#FEF2F2]' : 'bg-[#E8F5EF]'} />
+            <FinanceAmountTile icon={<Target className="h-4 w-4" />} label="إجمالي المطلوب" amount={feesDue} iconColor="text-[#24332D]" iconBg="bg-[#E6EAE5]" />
+            <FinanceAmountTile icon={<TrendingUp className="h-4 w-4" />} label="إجمالي المدفوع" amount={feesPaid} iconColor="text-[#087F5B]" iconBg="bg-[#E8F5EF]" />
+            <FinanceAmountTile icon={<TrendingDown className="h-4 w-4" />} label="المتبقي" amount={feesRemaining} iconColor={feesRemaining > 0 ? 'text-[#B91C1C]' : 'text-[#087F5B]'} iconBg={feesRemaining > 0 ? 'bg-[#FEF2F2]' : 'bg-[#E8F5EF]'} />
           </div>
         </div>
       )}
@@ -243,13 +252,14 @@ export function FinanceCard({ status, feesDue, feesPaid, feesRemaining, collecti
   );
 }
 
-function FinanceAmountTile({ icon, label, value, iconColor, iconBg }: { icon: ReactNode; label: string; value: string; iconColor: string; iconBg: string }) {
+function FinanceAmountTile({ icon, label, amount, iconColor, iconBg }: { icon: ReactNode; label: string; amount: number; iconColor: string; iconBg: string }) {
+  const shown = useCountUp(amount);
   return (
     <div className="flex items-center gap-3 rounded-2xl border border-[#E6EAE5] bg-white/80 p-3">
       <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${iconBg} ${iconColor}`}>{icon}</span>
       <div className="min-w-0">
         <p className="text-[10px] font-bold text-[#5F6B65]">{label}</p>
-        <p className={`mt-0.5 text-base font-black tabular-nums ${iconColor}`}>{value} <span className="text-[9px] font-bold text-[#77847D]">ج.م</span></p>
+        <p className={`mt-0.5 text-base font-black tabular-nums ${iconColor}`}>{formatCurrency(Math.round(shown))} <span className="text-[9px] font-bold text-[#77847D]">ج.م</span></p>
       </div>
     </div>
   );
@@ -394,9 +404,9 @@ export function GradesList({ centerGrades, centerExams, onlineGrades, onlineExam
     <section id="grades-homework" className={`${CARD} scroll-mt-32`}>
       <SectionTitle icon={<Award className="h-4 w-4" />}>الدرجات المسجلة</SectionTitle>
       <div className="space-y-3">
-        <GradeRows title="التلاوة" rows={rows.filter((row) => row.category === 'recitation')} />
-        <GradeRows title="الورق" rows={rows.filter((row) => row.category === 'sheet')} />
-        <GradeRows title="الدرجات والامتحانات" rows={rows.filter((row) => row.category === 'exam')} />
+        <GradeRows title="التسميع" rows={rows.filter((row) => row.category === 'recitation')} />
+        <GradeRows title="الشيتات" rows={rows.filter((row) => row.category === 'sheet')} />
+        <GradeRows title="الامتحانات" rows={rows.filter((row) => row.category === 'exam')} />
       </div>
     </section>
   );
@@ -461,16 +471,17 @@ export function AttendanceList({ records }: { records: (AttendanceRecord & { ses
       {records.length === 0 ? (
         <EmptyNote>لا توجد سجلات حضور محفوظة لهذا الشهر</EmptyNote>
       ) : (
-        <ol className="ms-2 space-y-3 border-s-2 border-[#E6EAE5] ps-6">
+        <ol className="relative ps-8">
+          <span aria-hidden="true" className="absolute bottom-3 top-3 start-[11px] w-px bg-[#D8DED9]" />
           {records.map((rec) => {
             const cfg = ATTENDANCE_BADGE[rec.status] ?? ATTENDANCE_FALLBACK;
             return (
-              <li key={rec.id} className="relative">
-                <span className="absolute -start-[31px] top-5 h-3 w-3 rounded-full ring-4 ring-white" style={{ backgroundColor: cfg.dot }} />
+              <li key={rec.id} className="relative pb-3 last:pb-0">
+                <span className="absolute -start-8 top-4 h-6 w-6 rounded-full ring-4 ring-white/80" style={{ backgroundColor: cfg.dot }} />
                 <div className={`${TILE} flex items-center justify-between gap-3 p-3`}>
                   <div className="min-w-0">
                     <p className="text-sm font-bold text-[#24332D]">{formatArabicDate(rec.attendance_date)}</p>
-                    {rec.sessions?.title && <p className="mt-0.5 text-[10px] text-[#5F6B65]">{rec.sessions.title}</p>}
+                    {rec.sessions?.title && <p className="mt-0.5 truncate text-[10px] text-[#5F6B65]">{rec.sessions.title}</p>}
                     {rec.notes && <p className="mt-0.5 text-[10px] text-[#77847D]">{rec.notes}</p>}
                   </div>
                   <Pill tone={cfg.tone}>{cfg.label}</Pill>
@@ -593,6 +604,23 @@ export function SectionNav({ items }: { items: { id: string; label: string }[] }
         })}
       </div>
     </nav>
+  );
+}
+
+export function PortalSkeleton() {
+  return (
+    <div className="mx-auto max-w-2xl space-y-5 px-4 py-6 pb-28 lg:max-w-5xl" dir="rtl" lang="ar">
+      <div className="h-10 animate-pulse rounded-2xl bg-[#E6EAE5]/60" />
+      <div className="h-40 animate-pulse rounded-[24px] bg-[#E6EAE5]/50" />
+      <div className="grid gap-5 lg:grid-cols-5">
+        <div className="h-64 animate-pulse rounded-[24px] bg-[#E6EAE5]/50 lg:col-span-2" />
+        <div className="h-64 animate-pulse rounded-[24px] bg-[#E6EAE5]/50 lg:col-span-3" />
+      </div>
+      <div className="grid gap-5 lg:grid-cols-2">
+        <div className="h-48 animate-pulse rounded-[24px] bg-[#E6EAE5]/50" />
+        <div className="h-48 animate-pulse rounded-[24px] bg-[#E6EAE5]/50" />
+      </div>
+    </div>
   );
 }
 

@@ -31,7 +31,7 @@ function describeChange(row: ComparableRow): { text: string; improved: boolean |
   const diff = Math.round((row.current - row.previous) * 10) / 10;
   if (diff === 0) return { text: 'بدون تغيير عن الشهر السابق', improved: null };
   const improved = row.higherIsBetter ? diff > 0 : diff < 0;
-  const text = improved ? `تحسن بنسبة +${Math.abs(diff)}%` : `تراجع بنسبة -${Math.abs(diff)}%`;
+  const text = improved ? `+${Math.abs(diff)}% تحسن عن الشهر السابق` : `-${Math.abs(diff)}% تراجع عن الشهر السابق`;
   return { text, improved };
 }
 
