@@ -126,108 +126,56 @@ export type FinanceStatus = 'exempt' | 'missing' | 'unpaid' | 'partial' | 'paid'
 type FinanceVisual = {
   label: string;
   bannerClass: string;
-  ringStroke: string;
-  ringTrack: string;
   iconClass: string;
   icon: LucideIcon | null;
-  gradient: string;
 };
 
 const FINANCE_VISUAL: Record<FinanceStatus, FinanceVisual> = {
   exempt: {
     label: 'معفى من الرسوم',
     bannerClass: 'bg-[#E8F5EF] text-[#087F5B] border-[#087F5B]/25',
-    ringStroke: '#087F5B',
-    ringTrack: '#D8E8DF',
     iconClass: 'bg-[#087F5B] text-white',
     icon: CheckCircle2,
-    gradient: 'linear-gradient(160deg,#FFFFFF 0%,#E8F5EF 100%)',
   },
   missing: {
     label: 'لا يوجد سجل رسوم',
     bannerClass: 'bg-[#F2F4F1] text-[#5F6B65] border-[#D8DED9]',
-    ringStroke: '#A9B3AD',
-    ringTrack: '#E6EAE5',
     iconClass: 'bg-[#77847D] text-white',
     icon: null,
-    gradient: 'linear-gradient(160deg,#FFFFFF 0%,#F7F8F5 100%)',
   },
   unpaid: {
     label: 'غير مسدد',
     bannerClass: 'bg-[#FEF2F2] text-[#B91C1C] border-[#EF4444]/25',
-    ringStroke: '#EF4444',
-    ringTrack: '#FECACA',
     iconClass: 'bg-[#EF4444] text-white',
     icon: AlertCircle,
-    gradient: 'linear-gradient(160deg,#FFFFFF 0%,#FEF2F2 100%)',
   },
   partial: {
     label: 'مسدد جزئيًا',
     bannerClass: 'bg-[#FBF3DF] text-[#8A6A1F] border-[#C69B35]/35',
-    ringStroke: '#C69B35',
-    ringTrack: '#F0E4C0',
     iconClass: 'bg-[#C69B35] text-white',
     icon: Clock,
-    gradient: 'linear-gradient(160deg,#FFFFFF 0%,#FBF3DF 100%)',
   },
   paid: {
     label: 'مسدد بالكامل',
     bannerClass: 'bg-[#E8F5EF] text-[#087F5B] border-[#087F5B]/25',
-    ringStroke: '#087F5B',
-    ringTrack: '#D8E8DF',
     iconClass: 'bg-[#087F5B] text-white',
     icon: CheckCircle2,
-    gradient: 'linear-gradient(160deg,#FFFFFF 0%,#E8F5EF 100%)',
   },
 };
 
-function CollectionRing({ pct, stroke, track, mounted }: { pct: number; stroke: string; track: string; mounted: boolean }) {
-  const shownPct = Math.round(useCountUp(pct));
-  const radius = 40;
-  const circumference = 2 * Math.PI * radius;
-  const offset = mounted ? circumference - (Math.min(100, pct) / 100) * circumference : circumference;
-  return (
-    <div className="relative h-28 w-28 shrink-0">
-      <svg viewBox="0 0 100 100" className="h-full w-full -rotate-90" aria-hidden="true">
-        <circle cx="50" cy="50" r={radius} fill="none" stroke={track} strokeWidth="8" />
-        <circle
-          cx="50" cy="50" r={radius} fill="none" stroke={stroke} strokeWidth="8" strokeLinecap="round"
-          strokeDasharray={circumference} strokeDashoffset={offset}
-          className="transition-[stroke-dashoffset] duration-[1200ms] ease-out motion-reduce:transition-none"
-        />
-      </svg>
-      <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-2xl font-black tabular-nums text-[#24332D]">{shownPct}%</span>
-        <span className="text-[9px] font-bold text-[#77847D]">نسبة التحصيل</span>
-      </div>
-    </div>
-  );
-}
-
-function useMountedFlag(): boolean {
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => {
-    const id = requestAnimationFrame(() => setMounted(true));
-    return () => cancelAnimationFrame(id);
-  }, []);
-  return mounted;
-}
-
-export function FinanceCard({ status, feesDue, feesPaid, feesRemaining, collectionRate }: {
+export function FinanceCard({ status, feesDue, feesPaid, feesRemaining }: {
   status: FinanceStatus;
   feesDue: number;
   feesPaid: number;
   feesRemaining: number;
-  collectionRate: number;
 }) {
   const visual = FINANCE_VISUAL[status];
   const Icon = visual.icon;
-  const mounted = useMountedFlag();
   const showAmounts = status === 'unpaid' || status === 'partial' || status === 'paid';
   return (
-    <section className={`${CARD} relative overflow-hidden`} style={{ backgroundImage: visual.gradient }}>
+    <section className={`${CARD} relative overflow-hidden`}>
       <SectionTitle icon={<Wallet className="h-4 w-4" />}>الملخص المالي وحالة السداد</SectionTitle>
-      <div className={`flex items-center gap-2.5 rounded-2xl border p-3.5 ${visual.bannerClass} ${status === 'unpaid' || status === 'partial' ? 'pp-alert' : ''}`} style={status === 'paid' ? { boxShadow: '0 0 24px rgba(16,185,129,0.35)' } : undefined}>
+      <div className={`flex items-center gap-2.5 rounded-2xl border p-3 ${visual.bannerClass} ${status === 'unpaid' || status === 'partial' ? 'pp-alert' : ''}`}>
         {Icon && <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${visual.iconClass}`}><Icon className="h-5 w-5" /></span>}
         <div className="min-w-0">
           <p className="text-sm font-black leading-tight">{visual.label}</p>
@@ -243,13 +191,10 @@ export function FinanceCard({ status, feesDue, feesPaid, feesRemaining, collecti
         <p className="mt-5 rounded-2xl border border-[#087F5B]/20 bg-[#E8F5EF] p-4 text-center text-sm font-bold text-[#087F5B]">الطالب معفى من الرسوم لهذا الشهر</p>
       )}
       {showAmounts && (
-        <div className="mt-5 flex flex-col items-center gap-5 sm:flex-row sm:items-center">
-          <CollectionRing pct={collectionRate} stroke={visual.ringStroke} track={visual.ringTrack} mounted={mounted} />
-          <div className="grid w-full grid-cols-1 gap-2.5 sm:grid-cols-3">
-            <FinanceAmountTile icon={<Target className="h-4 w-4" />} label="إجمالي المطلوب" amount={feesDue} iconColor="text-[#24332D]" iconBg="bg-[#E6EAE5]" />
-            <FinanceAmountTile icon={<TrendingUp className="h-4 w-4" />} label="إجمالي المدفوع" amount={feesPaid} iconColor="text-[#087F5B]" iconBg="bg-[#E8F5EF]" />
-            <FinanceAmountTile icon={<TrendingDown className="h-4 w-4" />} label="المتبقي" amount={feesRemaining} iconColor={feesRemaining > 0 ? 'text-[#B91C1C]' : 'text-[#087F5B]'} iconBg={feesRemaining > 0 ? 'bg-[#FEF2F2]' : 'bg-[#E8F5EF]'} />
-          </div>
+        <div className="mt-4 grid w-full grid-cols-3 gap-2">
+          <FinanceAmountTile icon={<Target className="h-3.5 w-3.5" />} label="المطلوب" amount={feesDue} iconColor="text-[#24332D]" iconBg="bg-[#E6EAE5]" />
+          <FinanceAmountTile icon={<TrendingUp className="h-3.5 w-3.5" />} label="المدفوع" amount={feesPaid} iconColor="text-[#087F5B]" iconBg="bg-[#E8F5EF]" />
+          <FinanceAmountTile icon={<TrendingDown className="h-3.5 w-3.5" />} label="المتبقي" amount={feesRemaining} iconColor={feesRemaining > 0 ? 'text-[#B91C1C]' : 'text-[#087F5B]'} iconBg={feesRemaining > 0 ? 'bg-[#FEF2F2]' : 'bg-[#E8F5EF]'} />
         </div>
       )}
     </section>
@@ -289,8 +234,8 @@ export function ReceiptCard({ payments, feesRemaining }: { payments: Payment[]; 
               </div>
               <dl className="mt-4 grid grid-cols-1 gap-2 text-[11px] sm:grid-cols-2">
                 <ReceiptField label="رقم الإيصال" value={p.receipt_number ?? 'غير مسجل'} />
-                <ReceiptField label="تاريخ الدفع" value={p.payment_date ? formatArabicDate(p.payment_date) : 'غير مسجل'} />
-                <ReceiptField label="المستلم" value={p.recorded_by ?? 'غير مسجل'} />
+                <ReceiptField label="اليوم والتاريخ" value={p.payment_date ? formatArabicDate(p.payment_date) : 'غير مسجل'} />
+                <ReceiptField label="استلم بواسطة" value={p.recorded_by ?? 'غير مسجل'} />
                 <ReceiptField label="المتبقي من الرسوم" value={feesRemaining === null ? 'غير مسجل' : formatCurrency(feesRemaining) + ' ج.م'} />
               </dl>
               {p.note && <p className="mt-3 border-t border-[#E6EAE5] pt-3 text-[11px] text-[#5F6B65]">{p.note}</p>}

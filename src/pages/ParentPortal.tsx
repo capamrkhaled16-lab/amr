@@ -598,7 +598,6 @@ function PortalContent({
             feesDue={feesDue}
             feesPaid={feesPaid}
             feesRemaining={feesRemaining}
-            collectionRate={collectionRate}
           />
           <ReceiptCard payments={monthFilteredPayments} feesRemaining={monthSubscription ? feesRemaining : null} />
         </div>
