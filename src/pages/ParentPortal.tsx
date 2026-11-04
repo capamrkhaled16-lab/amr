@@ -42,7 +42,6 @@ import {
   MonthSelector,
   FinanceCard,
   ReceiptCard,
-  PerformanceHero,
   CalcNotesCard,
   AchievementsCard,
   GradesList,
@@ -51,8 +50,10 @@ import {
   BehaviorList,
   UpcomingExamsCard,
   TeacherMessage,
-  type HeroMetric,
+  SectionNav,
+  REPORT_SECTIONS,
 } from '@/components/parent-portal/ReportWidgets';
+import { PerformanceHero, type HeroMetric } from '@/components/parent-portal/PerformanceHero';
 
 type LoadState = 'loading' | 'success' | 'error' | 'notfound';
 
@@ -203,27 +204,27 @@ export default function ParentPortal() {
 function WelcomeScreen({ studentName, onEnter }: { studentName: string; onEnter: () => void }) {
   const { settings } = useSettings();
   return (
-    <div className="min-h-screen bg-[#090d0b] text-white flex flex-col items-center justify-center px-6 py-10" dir="rtl" lang="ar">
+    <div className="min-h-screen bg-[#F7F8F5] text-[#24332D] flex flex-col items-center justify-center px-6 py-10" dir="rtl" lang="ar">
       <div className="flex flex-col items-center gap-6 max-w-md w-full text-center">
-        <div className="w-20 h-20 rounded-2xl bg-white/[0.04] border border-[#d4af37]/30 flex items-center justify-center overflow-hidden">
-          {settings.logo_url ? <img src={settings.logo_url} alt="شعار المنصة" className="w-full h-full object-cover" /> : <GraduationCap className="w-9 h-9 text-[#d4af37]" />}
+        <div className="w-20 h-20 rounded-2xl bg-white border border-[#C69B35]/40 flex items-center justify-center overflow-hidden shadow-sm">
+          {settings.logo_url ? <img src={settings.logo_url} alt="شعار المنصة" className="w-full h-full object-cover" /> : <GraduationCap className="w-9 h-9 text-[#087F5B]" />} 
         </div>
         <div className="space-y-2">
           <h1 className="text-2xl font-black leading-tight">مرحباً بكم في منصة الخالد التعليمية</h1>
-          <p className="text-sm text-slate-400 leading-relaxed">نتابع معكم رحلة أبنائنا التعليمية خطوة بخطوة</p>
-          <p className="text-sm text-[#34d399] font-semibold mt-1">صَلِّ على النبي محمد ﷺ</p>
+          <p className="text-sm text-[#77847D] leading-relaxed">نتابع معكم رحلة أبنائنا التعليمية خطوة بخطوة</p>
+          <p className="text-sm text-[#087F5B] font-semibold mt-1">صَلِّ على النبي محمد ﷺ</p>
         </div>
         {settings.teacher_photo_url ? (
-          <img src={settings.teacher_photo_url} alt={settings.teacher_name} className="w-28 h-28 rounded-full object-cover border border-[#d4af37]/40" />
+          <img src={settings.teacher_photo_url} alt={settings.teacher_name} className="w-28 h-28 rounded-full object-cover border border-[#C69B35]/40" />
         ) : null}
-        <div className="text-xs text-slate-400">
+        <div className="text-xs text-[#77847D]">
           <p>تقرير الطالب</p>
-          <p className="text-base font-bold text-white mt-1">{studentName}</p>
+          <p className="text-base font-bold text-[#24332D] mt-1">{studentName}</p>
         </div>
         <button
           type="button"
           onClick={onEnter}
-          className="w-full sm:w-auto px-8 py-3 rounded-xl bg-[#10b981] text-black font-bold hover:bg-[#34d399] active:scale-[0.98] transition-all"
+          className="w-full sm:w-auto px-8 py-3 rounded-xl bg-[#087F5B] text-white font-bold hover:bg-[#066747] active:scale-[0.98] transition-all motion-reduce:transition-none"
         >
           عرض تقرير الطالب
         </button>
@@ -234,12 +235,12 @@ function WelcomeScreen({ studentName, onEnter }: { studentName: string; onEnter:
 
 function FullScreenLoader({ label }: { label: string }) {
   return (
-    <div className="min-h-screen bg-[#090d0b] flex flex-col items-center justify-center px-6" dir="rtl">
+    <div className="min-h-screen bg-[#F7F8F5] flex flex-col items-center justify-center px-6" dir="rtl">
       <div className="flex flex-col items-center gap-4">
-        <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#10b981] to-[#06b6d4] flex items-center justify-center animate-pulse">
-          <GraduationCap className="w-8 h-8 text-[#071010]" />
+        <div className="w-16 h-16 rounded-2xl bg-[#E8F5EF] border border-[#E6EAE5] flex items-center justify-center animate-pulse">
+          <GraduationCap className="w-8 h-8 text-[#087F5B]" />
         </div>
-        <div className="flex items-center gap-2 text-slate-400">
+        <div className="flex items-center gap-2 text-[#77847D]">
           <Loader2 className="w-4 h-4 animate-spin" />
           <span className="text-sm">{label}</span>
         </div>
@@ -250,10 +251,10 @@ function FullScreenLoader({ label }: { label: string }) {
 
 function FullScreenError({ icon, message }: { icon: React.ReactNode; message: string }) {
   return (
-    <div className="min-h-screen bg-[#090d0b] flex flex-col items-center justify-center px-6" dir="rtl">
+    <div className="min-h-screen bg-[#F7F8F5] flex flex-col items-center justify-center px-6" dir="rtl">
       <div className="flex flex-col items-center gap-4 max-w-sm text-center">
-        <div className="w-20 h-20 rounded-full bg-slate-800/50 flex items-center justify-center">{icon}</div>
-        <p className="text-slate-300 text-sm leading-relaxed">{message}</p>
+        <div className="w-20 h-20 rounded-full border border-[#E6EAE5] bg-white flex items-center justify-center">{icon}</div>
+        <p className="text-[#5F6B65] text-sm leading-relaxed">{message}</p>
       </div>
     </div>
   );
@@ -320,6 +321,20 @@ function PortalContent({
     return points.sort((a, b) => a.when.localeCompare(b.when));
   }, [data.centerGrades, data.centerExams, data.onlineGrades, data.onlineExams, selectedMonth]);
 
+  const categoryRates = useMemo(() => {
+    const categories = { recitation: [] as number[], sheet: [] as number[] };
+    for (const grade of data.centerGrades) {
+      const exam = data.centerExams.find((item) => item.id === grade.center_exam_id);
+      if (!exam || exam.max_score <= 0 || exam.exam_date?.slice(0, 7) !== selectedMonth) continue;
+      const category = exam.category === 'recitation' ? 'recitation' : exam.category === 'sheet' ? 'sheet' : null;
+      if (category) categories[category].push((grade.score / exam.max_score) * 100);
+    }
+    return {
+      recitation: categories.recitation.length > 0 ? Math.round(categories.recitation.reduce((sum, value) => sum + value, 0) / categories.recitation.length) : null,
+      sheet: categories.sheet.length > 0 ? Math.round(categories.sheet.reduce((sum, value) => sum + value, 0) / categories.sheet.length) : null,
+    };
+  }, [data.centerGrades, data.centerExams, selectedMonth]);
+
   const examAvg = useMemo(() => {
     if (examPoints.length === 0) return null;
     return Math.round(examPoints.reduce((acc, p) => acc + p.pct, 0) / examPoints.length);
@@ -374,35 +389,39 @@ function PortalContent({
   const previousStats = useMemo(() => computeMonthStats(recordsForStats, prevKey), [recordsForStats, prevKey]);
 
   const behaviorRate = currentStats.behavior.rate ?? 0;
+  const hasOverallData = examAvg !== null || totalAttendance > 0 || hwTotal > 0 || currentStats.behavior.rated > 0;
   const overallPercentage = useMemo(() => {
+    if (!hasOverallData) return null;
     const gradeRate = examAvg ?? 0;
     return Math.round((gradeRate * 0.35 + attendanceRate * 0.25 + hwRate * 0.2 + behaviorRate * 0.2) * 10) / 10;
-  }, [attendanceRate, examAvg, hwRate, behaviorRate]);
+  }, [attendanceRate, examAvg, hwRate, behaviorRate, hasOverallData]);
 
   const heroMetrics: HeroMetric[] = [
-    { label: 'نسبة الواجبات', value: hwTotal > 0 ? hwRate : null, previous: previousStats.homework.rate ?? null, color: '#06b6d4', icon: ClipboardCheck },
-    { label: 'نسبة الحضور', value: totalAttendance > 0 ? attendanceRate : null, previous: previousStats.attendance.rate ?? null, color: '#10b981', icon: CalendarCheck },
-    { label: 'نسبة الدرجات والامتحانات', value: examAvg, previous: previousStats.exams.average ?? null, color: '#d4af37', icon: Award },
-    { label: 'نسبة السلوك', value: currentStats.behavior.rated > 0 ? behaviorRate : null, previous: previousStats.behavior.rate ?? null, color: '#34d399', icon: Sparkles },
+    { label: 'نسبة الواجبات', value: hwTotal > 0 ? hwRate : null, previous: previousStats.homework.rate ?? null, color: '#2B7BB9', icon: ClipboardCheck },
+    { label: 'نسبة التلاوة', value: categoryRates.recitation, previous: null, color: '#C69B35', icon: Award },
+    { label: 'نسبة الأوراق', value: categoryRates.sheet, previous: null, color: '#087F5B', icon: ClipboardCheck },
+    { label: 'نسبة الدرجات والامتحانات', value: examAvg, previous: previousStats.exams.average ?? null, color: '#C69B35', icon: Award },
+    { label: 'نسبة الحضور', value: totalAttendance > 0 ? attendanceRate : null, previous: previousStats.attendance.rate ?? null, color: '#087F5B', icon: CalendarCheck },
+    { label: 'نسبة السلوك', value: currentStats.behavior.rated > 0 ? behaviorRate : null, previous: previousStats.behavior.rate ?? null, color: '#2B7BB9', icon: Sparkles },
   ];
 
   if (data.monthKey !== selectedMonth) return <FullScreenLoader label="جاري تحميل بيانات الشهر..." />;
 
   return (
-    <div className="min-h-screen bg-[#090d0b] text-white" dir="rtl" lang="ar">
-      <header className="sticky top-0 z-30 border-b border-[#d4af37]/15 bg-[#090d0b]/90 backdrop-blur-md">
+    <div className="min-h-screen bg-[#F7F8F5] text-[#24332D]" dir="rtl" lang="ar">
+      <header className="sticky top-0 z-30 border-b border-[#E6EAE5] bg-white/95 backdrop-blur-md">
         <div className="mx-auto flex max-w-2xl items-center justify-between px-4 py-3 lg:max-w-5xl">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-[#10b981] to-[#06b6d4]">
-              {settings.logo_url ? <img src={settings.logo_url} alt="شعار المنصة" className="h-full w-full object-cover" /> : <GraduationCap className="h-5 w-5 text-[#071010]" />}
+            <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-xl bg-[#E8F5EF]">
+              {settings.logo_url ? <img src={settings.logo_url} alt="شعار المنصة" className="h-full w-full object-cover" /> : <GraduationCap className="h-5 w-5 text-[#087F5B]" />}
             </div>
             <div>
-              <h1 className="text-sm font-black text-white">{settings.platform_name}</h1>
-              <p className="text-[10px] text-slate-400">بوابة ولي الأمر</p>
+              <h1 className="text-sm font-black text-[#24332D]">{settings.platform_name}</h1>
+              <p className="text-[10px] text-[#77847D]">بوابة ولي الأمر</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {loadingMonth && <Loader2 className="h-4 w-4 animate-spin text-[#34d399]" />}
+            {loadingMonth && <Loader2 className="h-4 w-4 animate-spin text-[#087F5B]" />}
             <PDFButton
               label="تصدير PDF"
               size="sm"
@@ -431,19 +450,21 @@ function PortalContent({
       </header>
 
       <main className="mx-auto max-w-2xl space-y-5 px-4 py-6 pb-28 lg:max-w-5xl">
+        <SectionNav items={REPORT_SECTIONS} />
         <ProfileCard student={student} rank={data.rank} totalInGroup={data.totalStudentsInGroup} monthLabel={getMonthLabel(selectedMonth)} />
 
         <MonthSelector selectedMonth={selectedMonth} onMonthChange={onMonthChange} availableMonths={availableMonths} />
 
-        <FinanceCard
-          isExempt={isExempt}
-          feesDue={feesDue}
-          feesPaid={feesPaid}
-          feesRemaining={feesRemaining}
-          collectionRate={collectionRate}
-        />
-
-        <ReceiptCard payments={monthFilteredPayments} />
+        <div id="payments" className="scroll-mt-32 space-y-5">
+          <FinanceCard
+            status={isExempt ? 'exempt' : !monthSubscription ? 'missing' : feesDue > 0 && feesPaid === 0 ? 'unpaid' : feesRemaining > 0 ? 'partial' : 'paid'}
+            feesDue={feesDue}
+            feesPaid={feesPaid}
+            feesRemaining={feesRemaining}
+            collectionRate={collectionRate}
+          />
+          <ReceiptCard payments={monthFilteredPayments} feesRemaining={monthSubscription ? feesRemaining : null} />
+        </div>
 
         <PerformanceHero
           overall={overallPercentage}
@@ -478,7 +499,6 @@ function PortalContent({
               detail={`${currentStats.behavior.positive} إيجابي، ${currentStats.behavior.warnings} تنبيه من ${currentStats.behavior.rated} تقييم`}
             />
           </CalcNotesCard>
-          <AchievementsCard badges={badges} />
         </div>
 
         <UpcomingExamsCard exams={upcomingExams} />
@@ -500,6 +520,8 @@ function PortalContent({
         </div>
 
         <MonthComparison current={currentStats} previous={previousStats} currentKey={selectedMonth} previousKey={prevKey} />
+
+        <AchievementsCard badges={badges.map((badge) => ({ ...badge, criteria: badge.label === 'حضور مثالي' ? 'حضور 90% أو أكثر' : badge.label === 'واجبات مكتملة' ? 'إكمال 80% من الواجبات' : badge.label === 'تفوق دراسي' ? 'متوسط درجات 85% أو أكثر' : badge.label === 'سلوك ممتاز' ? 'وجود تقييم سلوك ممتاز' : badge.label === 'من المتصدرين' ? 'المركز الثالث أو أفضل' : 'سداد الرسوم بالكامل' }))} />
 
         <TeacherMessage />
       </main>
