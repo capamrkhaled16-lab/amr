@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import type { LucideIcon } from 'lucide-react';
-import { AlertCircle, Award, Calendar, CheckCircle2, ChevronLeft, ChevronRight, Clock, Phone, Receipt, Target, Wallet } from 'lucide-react';
+import { AlertCircle, Award, Calendar, CheckCircle2, ChevronLeft, ChevronRight, Clock, Phone, Receipt, Target, Wallet, TrendingDown, TrendingUp } from 'lucide-react';
 import { formatArabicDate, formatCurrency, getGradeRating, getMonthLabel } from '@/lib/format';
 import type { AttendanceRecord, BehaviorEval, CenterExam, CenterGrade, Homework, HomeworkStatus, OnlineExam, OnlineGrade, Payment } from '@/lib/types';
 
@@ -113,13 +113,94 @@ export function MonthSelector({ selectedMonth, onMonthChange, availableMonths }:
 
 export type FinanceStatus = 'exempt' | 'missing' | 'unpaid' | 'partial' | 'paid';
 
-const FINANCE_STATUS: Record<FinanceStatus, { label: string; tone: PillTone; icon: LucideIcon | null }> = {
-  exempt: { label: 'معفى من الرسوم', tone: 'green', icon: CheckCircle2 },
-  missing: { label: 'غير مسجل', tone: 'muted', icon: null },
-  unpaid: { label: 'غير مسدد', tone: 'red', icon: AlertCircle },
-  partial: { label: 'مسدد جزئياً', tone: 'gold', icon: Clock },
-  paid: { label: 'مسدد بالكامل', tone: 'green', icon: CheckCircle2 },
+type FinanceVisual = {
+  label: string;
+  bannerClass: string;
+  ringStroke: string;
+  ringTrack: string;
+  iconClass: string;
+  icon: LucideIcon | null;
+  gradient: string;
 };
+
+const FINANCE_VISUAL: Record<FinanceStatus, FinanceVisual> = {
+  exempt: {
+    label: 'معفى من الرسوم',
+    bannerClass: 'bg-[#E8F5EF] text-[#087F5B] border-[#087F5B]/25',
+    ringStroke: '#087F5B',
+    ringTrack: '#D8E8DF',
+    iconClass: 'bg-[#087F5B] text-white',
+    icon: CheckCircle2,
+    gradient: 'linear-gradient(160deg,#FFFFFF 0%,#E8F5EF 100%)',
+  },
+  missing: {
+    label: 'بيانات الرسوم غير متاحة',
+    bannerClass: 'bg-[#F2F4F1] text-[#5F6B65] border-[#D8DED9]',
+    ringStroke: '#A9B3AD',
+    ringTrack: '#E6EAE5',
+    iconClass: 'bg-[#77847D] text-white',
+    icon: null,
+    gradient: 'linear-gradient(160deg,#FFFFFF 0%,#F7F8F5 100%)',
+  },
+  unpaid: {
+    label: 'غير مسدد',
+    bannerClass: 'bg-[#FEF2F2] text-[#B91C1C] border-[#EF4444]/25',
+    ringStroke: '#EF4444',
+    ringTrack: '#FECACA',
+    iconClass: 'bg-[#EF4444] text-white',
+    icon: AlertCircle,
+    gradient: 'linear-gradient(160deg,#FFFFFF 0%,#FEF2F2 100%)',
+  },
+  partial: {
+    label: 'مسدد جزئياً',
+    bannerClass: 'bg-[#FBF3DF] text-[#8A6A1F] border-[#C69B35]/35',
+    ringStroke: '#C69B35',
+    ringTrack: '#F0E4C0',
+    iconClass: 'bg-[#C69B35] text-white',
+    icon: Clock,
+    gradient: 'linear-gradient(160deg,#FFFFFF 0%,#FBF3DF 100%)',
+  },
+  paid: {
+    label: 'مسدد بالكامل',
+    bannerClass: 'bg-[#E8F5EF] text-[#087F5B] border-[#087F5B]/25',
+    ringStroke: '#087F5B',
+    ringTrack: '#D8E8DF',
+    iconClass: 'bg-[#087F5B] text-white',
+    icon: CheckCircle2,
+    gradient: 'linear-gradient(160deg,#FFFFFF 0%,#E8F5EF 100%)',
+  },
+};
+
+function CollectionRing({ pct, stroke, track, mounted }: { pct: number; stroke: string; track: string; mounted: boolean }) {
+  const radius = 40;
+  const circumference = 2 * Math.PI * radius;
+  const offset = mounted ? circumference - (Math.min(100, pct) / 100) * circumference : circumference;
+  return (
+    <div className="relative h-28 w-28 shrink-0">
+      <svg viewBox="0 0 100 100" className="h-full w-full -rotate-90" aria-hidden="true">
+        <circle cx="50" cy="50" r={radius} fill="none" stroke={track} strokeWidth="8" />
+        <circle
+          cx="50" cy="50" r={radius} fill="none" stroke={stroke} strokeWidth="8" strokeLinecap="round"
+          strokeDasharray={circumference} strokeDashoffset={offset}
+          className="transition-[stroke-dashoffset] duration-[1200ms] ease-out motion-reduce:transition-none"
+        />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span className="text-2xl font-black tabular-nums text-[#24332D]">{pct}%</span>
+        <span className="text-[9px] font-bold text-[#77847D]">نسبة التحصيل</span>
+      </div>
+    </div>
+  );
+}
+
+function useMountedFlag(): boolean {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setMounted(true));
+    return () => cancelAnimationFrame(id);
+  }, []);
+  return mounted;
+}
 
 export function FinanceCard({ status, feesDue, feesPaid, feesRemaining, collectionRate }: {
   status: FinanceStatus;
@@ -128,44 +209,48 @@ export function FinanceCard({ status, feesDue, feesPaid, feesRemaining, collecti
   feesRemaining: number;
   collectionRate: number;
 }) {
-  const info = FINANCE_STATUS[status];
-  const Icon = info.icon;
+  const visual = FINANCE_VISUAL[status];
+  const Icon = visual.icon;
+  const mounted = useMountedFlag();
   const showAmounts = status === 'unpaid' || status === 'partial' || status === 'paid';
   return (
-    <section className={CARD}>
+    <section className={`${CARD} relative overflow-hidden`} style={{ backgroundImage: visual.gradient }}>
       <SectionTitle icon={<Wallet className="h-4 w-4" />}>الملخص المالي وحالة السداد</SectionTitle>
-      <Pill tone={info.tone}>
-        {Icon && <Icon className="h-3.5 w-3.5" />}
-        {info.label}
-      </Pill>
-      {status === 'missing' && <div className="mt-5 rounded-2xl border border-dashed border-[#D8DED9] bg-[#F7F8F5] p-4 text-center text-sm font-bold text-[#5F6B65]">بيانات الرسوم لهذا الشهر غير مسجلة</div>}
+      <div className={`flex items-center gap-2.5 rounded-2xl border p-3.5 ${visual.bannerClass}`}>
+        {Icon && <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${visual.iconClass}`}><Icon className="h-5 w-5" /></span>}
+        <div className="min-w-0">
+          <p className="text-sm font-black leading-tight">{visual.label}</p>
+          {showAmounts && <p className="mt-0.5 text-[11px] font-bold opacity-80">{formatCurrency(feesDue)} ج.م إجمالي مطلوب</p>}
+        </div>
+      </div>
+      {status === 'missing' && (
+        <p className="mt-5 rounded-2xl border border-dashed border-[#D8DED9] bg-white/60 p-4 text-center text-sm font-bold text-[#5F6B65]">لا يوجد سجل رسوم محدد لهذا الشهر؛ تعذر تحديد حالة السداد</p>
+      )}
+      {status === 'exempt' && (
+        <p className="mt-5 rounded-2xl border border-[#087F5B]/20 bg-[#E8F5EF] p-4 text-center text-sm font-bold text-[#087F5B]">الطالب معفى من الرسوم لهذا الشهر</p>
+      )}
       {showAmounts && (
-        <>
-          <div className="mt-5 grid grid-cols-3 gap-2.5">
-            <FinanceTile label="إجمالي الرسوم" value={formatCurrency(feesDue)} tone="text-[#24332D]" />
-            <FinanceTile label="المدفوع" value={formatCurrency(feesPaid)} tone="text-[#087F5B]" />
-            <FinanceTile label="المتبقي" value={formatCurrency(feesRemaining)} tone={feesRemaining > 0 ? 'text-[#B91C1C]' : 'text-[#087F5B]'} />
+        <div className="mt-5 flex flex-col items-center gap-5 sm:flex-row sm:items-center">
+          <CollectionRing pct={collectionRate} stroke={visual.ringStroke} track={visual.ringTrack} mounted={mounted} />
+          <div className="grid w-full grid-cols-1 gap-2.5 sm:grid-cols-3">
+            <FinanceAmountTile icon={<Target className="h-4 w-4" />} label="إجمالي المطلوب" value={formatCurrency(feesDue)} iconColor="text-[#24332D]" iconBg="bg-[#E6EAE5]" />
+            <FinanceAmountTile icon={<TrendingUp className="h-4 w-4" />} label="إجمالي المدفوع" value={formatCurrency(feesPaid)} iconColor="text-[#087F5B]" iconBg="bg-[#E8F5EF]" />
+            <FinanceAmountTile icon={<TrendingDown className="h-4 w-4" />} label="المتبقي" value={formatCurrency(feesRemaining)} iconColor={feesRemaining > 0 ? 'text-[#B91C1C]' : 'text-[#087F5B]'} iconBg={feesRemaining > 0 ? 'bg-[#FEF2F2]' : 'bg-[#E8F5EF]'} />
           </div>
-          <div className="mt-5">
-            <div className="mb-2 flex justify-between text-[11px] text-[#5F6B65]">
-              <span>نسبة التحصيل</span>
-              <span className="font-black text-[#087F5B]">{collectionRate}%</span>
-            </div>
-            <div className="h-2.5 overflow-hidden rounded-full bg-[#E6EAE5]">
-              <div className="h-full rounded-full bg-gradient-to-r from-[#087F5B] to-[#C69B35] transition-all duration-700 motion-reduce:transition-none" style={{ width: `${collectionRate}%` }} />
-            </div>
-          </div>
-        </>
+        </div>
       )}
     </section>
   );
 }
 
-function FinanceTile({ label, value, tone }: { label: string; value: string; tone: string }) {
+function FinanceAmountTile({ icon, label, value, iconColor, iconBg }: { icon: ReactNode; label: string; value: string; iconColor: string; iconBg: string }) {
   return (
-    <div className={`${TILE} p-3 text-center`}>
-      <p className="mb-1 text-[10px] text-[#5F6B65]">{label}</p>
-      <p className={`text-sm font-black ${tone}`}>{value} <span className="text-[9px] font-bold text-[#77847D]">ج.م</span></p>
+    <div className="flex items-center gap-3 rounded-2xl border border-[#E6EAE5] bg-white/80 p-3">
+      <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${iconBg} ${iconColor}`}>{icon}</span>
+      <div className="min-w-0">
+        <p className="text-[10px] font-bold text-[#5F6B65]">{label}</p>
+        <p className={`mt-0.5 text-base font-black tabular-nums ${iconColor}`}>{value} <span className="text-[9px] font-bold text-[#77847D]">ج.م</span></p>
+      </div>
     </div>
   );
 }
