@@ -1218,6 +1218,7 @@ export async function fetchStudentByParentToken(
       .from('students')
       .select('*')
       .eq('parent_token', token)
+      .neq('is_deleted', true)
       .maybeSingle();
     if (error) {
       console.error('fetchStudentByParentToken error:', error.message);
@@ -3406,13 +3407,15 @@ export async function upsertStudentMonthlyOverride(
   }
 }
 
-export async function fetchStudentMonthlySubscriptions(studentId: string): Promise<MonthlySubscription[]> {
-  const { data } = await supabase
+export async function fetchStudentMonthlySubscriptions(studentId: string, includeArchived = false): Promise<MonthlySubscription[]> {
+  let query = supabase
     .from('monthly_subscriptions')
     .select('*')
-    .eq('student_id', studentId)
-    .eq('is_archived', false)
-    .order('month_key', { ascending: false });
+    .eq('student_id', studentId);
+  if (!includeArchived) {
+    query = query.eq('is_archived', false);
+  }
+  const { data } = await query.order('month_key', { ascending: false });
   return (data as MonthlySubscription[]) ?? [];
 }
 

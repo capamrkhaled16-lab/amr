@@ -139,7 +139,7 @@ export default function ParentPortal() {
         fetchOnlineGradesByStudent(student.id),
         fetchOnlineExamsByStudent(student.id),
         fetchPayments(student.id, monthKey),
-        fetchStudentMonthlySubscriptions(student.id),
+        fetchStudentMonthlySubscriptions(student.id, true),
         fetchHomework(groupId, true, monthKey),
         fetchHomework(groupId, true, previousMonthKey(monthKey)),
         fetchBehaviorEvals(student.id),

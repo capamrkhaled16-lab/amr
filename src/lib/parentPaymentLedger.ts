@@ -56,13 +56,13 @@ export function computeParentFinance(
   const isExempt = subscription?.is_exempt ?? false;
   const status: ParentFinanceStatus = isExempt
     ? 'exempt'
-    : !hasFees
-      ? 'missing'
-      : feesPaid <= 0
-        ? 'unpaid'
-        : feesRemaining > 0
-          ? 'partial'
-          : 'paid';
+    : feesPaid > 0
+      ? feesRemaining > 0
+        ? 'partial'
+        : 'paid'
+      : !hasFees
+        ? 'missing'
+        : 'unpaid';
 
   return { status, feesDue, feesPaid, feesRemaining, hasFees, ledger };
 }
