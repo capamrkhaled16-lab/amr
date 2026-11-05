@@ -79,6 +79,8 @@ export interface Payment {
   receipt_number: string | null;
   recorded_at?: string | null;
   is_deleted: boolean;
+  is_historical_payment?: boolean | null;
+  target_archive_month?: string | null;
   month_key: string | null;
   idempotency_key: string | null;
 }
@@ -97,6 +99,7 @@ export interface MonthlySubscription {
   receipt_number: string | null;
   is_exempt: boolean;
   exemption_note: string | null;
+  created_at?: string;
 }
 
 export interface Expense {

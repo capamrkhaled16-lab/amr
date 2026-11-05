@@ -562,36 +562,6 @@ export async function deleteStudent(
   await setStudentStatus(id, 'deleted', actorName, actorRole);
 }
 
-export async function hardDeleteStudent(
-  id: string,
-  actorName: string = 'المدرس',
-  actorRole: 'master' | 'assistant' = 'master'
-): Promise<void> {
-  const { data: student } = await supabase
-    .from('students')
-    .select('name, group_id')
-    .eq('id', id)
-    .maybeSingle();
-  // Cascade-delete child rows. Surface errors instead of silently swallowing
-  // them — a swallowed RLS denial leaves the student in the DB and the UI
-  // claims success, which is what caused deleted records to reappear.
-  const childTables = ['payments', 'attendance', 'homework_status', 'monthly_subscriptions', 'hall_of_fame'] as const;
-  for (const table of childTables) {
-    const { error } = await supabase.from(table).delete().eq('student_id', id);
-    if (error) throw new Error(`تعذّر حذف سجلات ${table}: ${error.message}`);
-  }
-  const { error: studentErr } = await supabase.from('students').delete().eq('id', id);
-  if (studentErr) throw new Error(studentErr.message);
-  // Bust every cache that may hold this student so lists, KPIs, and the
-  // dashboard re-fetch from the database instead of showing stale rows.
-  invalidateByPrefix('students_');
-  invalidateCache('all_students');
-  invalidateByPrefix('kpi_');
-  if (student) {
-    await createAuditLog(actorName, actorRole, 'student_delete', id, null, `حذف نهائي: ${student.name}`);
-  }
-}
-
 export async function fetchAttendanceForDate(
   groupId: string,
   date: string,
@@ -1479,11 +1449,16 @@ export async function fetchPayments(studentId: string, monthKey?: string): Promi
     .eq('is_deleted', false)
     .gt('amount', 0);
   if (monthKey) {
-    query = query.eq('month_key', monthKey).eq('is_historical_payment', false);
+    query = query.eq('month_key', monthKey);
   }
   const { data, error } = await withTimeout(query.order('payment_date', { ascending: false }));
   if (error) throw new Error(error.message);
-  return (data as Payment[]) ?? [];
+  const rows = (data as Payment[]) ?? [];
+  if (!monthKey) return rows;
+  return rows.filter((p) => {
+    if (!p.is_historical_payment) return true;
+    return (p.target_archive_month ?? p.month_key) === monthKey;
+  });
   });
 }
 
@@ -3436,6 +3411,7 @@ export async function fetchStudentMonthlySubscriptions(studentId: string): Promi
     .from('monthly_subscriptions')
     .select('*')
     .eq('student_id', studentId)
+    .eq('is_archived', false)
     .order('month_key', { ascending: false });
   return (data as MonthlySubscription[]) ?? [];
 }

@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { PDFButton } from '@/components/ui/PDFButton';
 import { exportStudentListPDF } from '@/lib/pdfExport';
 import type { Student, Gender, Group, MonthlySubscription } from '@/lib/types';
-import { createStudent, updateStudent, hardDeleteStudent, setStudentStatus, checkDuplicateStudentName, fetchGradeLevelBaseSubscription, fetchGroups, fetchGroupsForTransfer, transferStudent, fetchGroupMonthlyPaidMap, upsertStudentMonthlyOverride, fetchStudentMonthlySubscriptions, getMonthKey, getMonthLabel, backfillAttendanceForNewStudent } from '@/lib/data';
+import { createStudent, updateStudent, deleteStudent, setStudentStatus, checkDuplicateStudentName, fetchGradeLevelBaseSubscription, fetchGroups, fetchGroupsForTransfer, transferStudent, fetchGroupMonthlyPaidMap, upsertStudentMonthlyOverride, fetchStudentMonthlySubscriptions, getMonthKey, getMonthLabel, backfillAttendanceForNewStudent } from '@/lib/data';
 import { useToast } from '@/components/ui/Toast';
 import { useAuth } from '@/context/AuthContext';
 import { useMonth } from '@/context/MonthContext';
@@ -256,10 +256,17 @@ export default function StudentManager({
 
   async function handleDelete() {
     if (!deleteTarget) return;
+    const target = deleteTarget;
     const actorName = isMaster ? 'المدرس' : assistant?.display_name ?? assistant?.username ?? 'مساعد';
-    showToast('تم حذف الطالب', 'success');
     setDeleteTarget(null);
-    hardDeleteStudent(deleteTarget.id, actorName, isMaster ? 'master' : 'assistant').then(() => onRefresh()).catch(() => showToast('تعذّر حذف الطالب', 'error'));
+    try {
+      await deleteStudent(target.id, actorName, isMaster ? 'master' : 'assistant');
+    } catch (err) {
+      showToast(`تعذّر حذف الطالب: ${err instanceof Error ? err.message : 'خطأ غير معروف'}`, 'error');
+      return;
+    }
+    showToast('تم حذف الطالب', 'success');
+    onRefresh();
   }
 
   async function handleMarkLeft() {

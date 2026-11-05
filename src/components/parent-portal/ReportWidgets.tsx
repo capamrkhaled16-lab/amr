@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { Award, Calendar, CheckCircle2, ChevronLeft, ChevronRight, Clock, Phone, Receipt, Target } from 'lucide-react';
+import { Award, Calendar, CheckCircle2, ChevronLeft, ChevronRight, Clock, Medal, Phone, Receipt, Target, Trophy } from 'lucide-react';
 import { formatArabicDate, getGradeRating, getMonthLabel } from '@/lib/format';
 import type { AttendanceRecord, BehaviorEval, CenterExam, CenterGrade, Homework, HomeworkStatus, OnlineExam, OnlineGrade } from '@/lib/types';
 
@@ -58,8 +58,16 @@ function rankLabel(rank: number): string {
   return labels[rank - 1] ?? 'المركز الرسمي غير متاح';
 }
 
+const TOP_RANK_BADGES: Record<number, { label: string; icon: typeof Trophy; className: string }> = {
+  1: { label: 'المركز الأول', icon: Trophy, className: 'border-[#E7C65E]/60 bg-gradient-to-r from-[#D4AF37] to-[#F3D77A] text-[#3B2A05] shadow-[0_0_18px_rgba(212,175,55,0.55)]' },
+  2: { label: 'المركز الثاني', icon: Medal, className: 'border-[#E5E7EB]/60 bg-gradient-to-r from-[#CBD5E1] to-[#F1F5F9] text-[#1E293B]' },
+  3: { label: 'المركز الثالث', icon: Medal, className: 'border-[#D9A066]/60 bg-gradient-to-r from-[#B87333] to-[#E0A96D] text-[#2B1606]' },
+};
+
 export function ProfileCard({ student, rank, totalInGroup, monthLabel }: { student: StudentInfo; rank: number | null; totalInGroup: number; monthLabel: string }) {
-  const rankText = rank !== null && totalInGroup > 0 ? rankLabel(rank) : null;
+  const hasRank = rank !== null && totalInGroup > 0;
+  const topBadge = hasRank ? TOP_RANK_BADGES[rank] : undefined;
+  const rankText = hasRank && !topBadge ? rankLabel(rank) : null;
   const details = [
     { label: 'المرحلة', value: student.stage_name },
     { label: 'الصف', value: student.grade_name },
@@ -75,7 +83,15 @@ export function ProfileCard({ student, rank, totalInGroup, monthLabel }: { stude
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-[10px] font-bold tracking-[0.18em] text-[#E7C65E]">ملف الطالب</p>
-          <h2 className="mt-1.5 truncate text-2xl font-black text-white sm:text-3xl">{student.name}</h2>
+          <div className="mt-1.5 flex flex-wrap items-center gap-2">
+            <h2 className="min-w-0 truncate text-2xl font-black text-white sm:text-3xl">{student.name}</h2>
+            {topBadge && (
+              <span className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-black ${topBadge.className}`}>
+                <topBadge.icon className="h-3.5 w-3.5" />
+                {topBadge.label}
+              </span>
+            )}
+          </div>
           {rankText && <p className="mt-1.5 text-xs font-bold text-[#E7C65E]">{rankText} في المجموعة</p>}
         </div>
         <div className="shrink-0 rounded-2xl border border-white/15 bg-white/10 px-3 py-2 text-center">

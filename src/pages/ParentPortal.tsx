@@ -9,6 +9,8 @@ import {
   fetchOnlineExamsByStudent,
   fetchPayments,
   fetchStudentMonthlySubscriptions,
+  fetchGradeLevelBaseSubscription,
+  computeEffectiveFees,
   fetchHomework,
   fetchHomeworkStatuses,
   fetchBehaviorEvals,
@@ -86,6 +88,7 @@ interface ParentData {
   onlineExams: OnlineExam[];
   payments: Payment[];
   subscriptions: MonthlySubscription[];
+  configuredFee: number | null;
   homework: Homework[];
   homeworkStatuses: HomeworkStatus[];
   behavior: BehaviorEval[];
@@ -152,15 +155,23 @@ export default function ParentPortal() {
         if (studentStatus) hwStatuses.push(studentStatus);
       }
 
-      let groupData: { name?: string; schedule?: string | null; grade_level?: { name?: string; stage?: { name?: string } } } | null = null;
+      let groupData: { name?: string; schedule?: string | null; grade_level_id?: string | null; grade_level?: { name?: string; stage?: { name?: string } } } | null = null;
       try {
         const { data: gd } = await supabase
           .from('groups')
-          .select('name, schedule, grade_level:grade_levels(name, stage:academic_stages(name))')
+          .select('name, schedule, grade_level_id, grade_level:grade_levels(name, stage:academic_stages(name))')
           .eq('id', groupId)
           .maybeSingle();
-        groupData = gd as { name?: string; schedule?: string | null; grade_level?: { name?: string; stage?: { name?: string } } } | null;
+        groupData = gd as typeof groupData;
       } catch { /* ignore */ }
+
+      let configuredFee: number | null = null;
+      if (groupData?.grade_level_id) {
+        try {
+          const baseFee = await fetchGradeLevelBaseSubscription(groupData.grade_level_id);
+          configuredFee = baseFee > 0 ? computeEffectiveFees(student, baseFee) : null;
+        } catch { configuredFee = null; }
+      }
 
       const ranked = canonicalRankEntries(hofEntries ?? []);
       const studentRank = ranked.find((e) => e.id === student.id)?.rank ?? null;
@@ -184,6 +195,7 @@ export default function ParentPortal() {
           onlineExams: onlineExams ?? [],
           payments: payments ?? [],
           subscriptions: subscriptions ?? [],
+          configuredFee,
           homework: [...(homework ?? []), ...(prevHomework ?? [])],
           homeworkStatuses: hwStatuses ?? [],
           behavior: behavior ?? [],
@@ -317,7 +329,9 @@ function PortalContent({
   }, [data.subscriptions, data.payments]);
 
   const monthFilteredPayments = data.payments.filter((p) => p.month_key === selectedMonth);
-  const monthSubscription = data.subscriptions.find((s) => s.month_key === selectedMonth);
+  const monthSubscription = data.subscriptions
+    .filter((s) => s.month_key === selectedMonth)
+    .sort((a, b) => (b.created_at ?? '').localeCompare(a.created_at ?? ''))[0];
   const monthFilteredAttendance = data.attendance.filter((a) => a.attendance_date.slice(0, 7) === selectedMonth);
   const monthFilteredBehavior = data.behavior.filter((b) => b.eval_date && b.eval_date.slice(0, 7) === selectedMonth);
   const monthFilteredHomework = data.homework.filter((h) => h.due_date && h.due_date.slice(0, 7) === selectedMonth);
@@ -384,7 +398,7 @@ function PortalContent({
     return Math.round(examPoints.reduce((acc, p) => acc + p.pct, 0) / examPoints.length);
   }, [examPoints]);
 
-  const finance = computeParentFinance(monthSubscription, monthFilteredPayments);
+  const finance = computeParentFinance(monthSubscription, monthFilteredPayments, data.configuredFee);
   const { feesDue, feesPaid, feesRemaining } = finance;
   const isExempt = finance.status === 'exempt';
 

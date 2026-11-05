@@ -33,9 +33,10 @@ function transactionTime(p: Payment): number {
 export function computeParentFinance(
   subscription: MonthlySubscription | undefined,
   payments: Payment[],
+  configuredFee: number | null,
 ): ParentFinance {
-  const feesDue = toAmount(subscription?.amount_due);
-  const hasFees = subscription !== undefined && feesDue > 0;
+  const feesDue = subscription ? toAmount(subscription.amount_due) : toAmount(configuredFee);
+  const hasFees = feesDue > 0;
   const chronological = [...payments].sort((a, b) => transactionTime(a) - transactionTime(b) || a.id.localeCompare(b.id));
 
   let runningPaid = 0;

@@ -188,7 +188,7 @@ function ReceiptRow({
         <ReceiptField label="اليوم" value={p.payment_date ? weekdayOf(p.payment_date) : 'غير مسجل'} />
         <ReceiptField label="تاريخ الدفع" value={p.payment_date ? formatPaymentDay(p.payment_date) : 'غير مسجل'} />
         <ReceiptField label="وقت الدفع" value={paymentTimeOf(p.recorded_at)} />
-        <ReceiptField label="استلم بواسطة" value={p.recorded_by ?? 'غير مسجل'} />
+        <ReceiptField label="اسم المستلم" value={p.recorded_by ?? 'غير مسجل'} />
       </dl>
       {p.note && <p className="mt-3 border-t border-[#E6EAE5] pt-3 text-[11px] text-[#5F6B65]">ملاحظة: {p.note}</p>}
     </article>
@@ -199,7 +199,7 @@ export function ReceiptHistoryCard({ finance, studentName, groupName }: { financ
   const { ledger } = finance;
   return (
     <section className={CARD}>
-      <SectionTitle icon={<Receipt className="h-4 w-4" />}>سجل الإيصالات</SectionTitle>
+      <SectionTitle icon={<Receipt className="h-4 w-4" />}>تفاصيل الإيصال</SectionTitle>
       {ledger.length === 0 ? (
         <EmptyNote>لا توجد دفعات مسجلة لهذا الشهر</EmptyNote>
       ) : (

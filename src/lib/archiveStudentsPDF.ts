@@ -1,6 +1,6 @@
 import { escapeHtml } from './pdfExport';
 
-export type ArchivePaidStudent = {
+export type ArchiveListStudent = {
   id: string;
   name: string;
   phone?: string | null;
@@ -11,9 +11,16 @@ export type ArchivePaidStudent = {
   group_name?: string;
 };
 
-export type ArchivePaidMeta = {
+export type ArchiveListMeta = {
   monthLabel?: string;
   fileName?: string;
+};
+
+export type ArchiveListKind = 'paid' | 'unpaid';
+
+const TITLES: Record<ArchiveListKind, string> = {
+  paid: 'كشف الطلاب المسددين',
+  unpaid: 'كشف الطلاب غير المسددين',
 };
 
 const PAGE_CONTENT_MM = 262;
@@ -22,7 +29,7 @@ const COLUMN_HEADER_MM = 8;
 const GROUP_HEADING_MM = 9;
 const ROW_MM = 8;
 
-type GroupSection = { stage: string; grade: string; group: string; continued: boolean; firstNumber: number; students: ArchivePaidStudent[] };
+type GroupSection = { stage: string; grade: string; group: string; continued: boolean; firstNumber: number; students: ArchiveListStudent[] };
 type PageLayout = { sections: GroupSection[]; used: number };
 
 function safeNum(n: number | null | undefined): number {
@@ -65,11 +72,10 @@ function buildPages(groups: GroupSection[]): PageLayout[] {
   return pages;
 }
 
-function renderPage(page: PageLayout, pageNumber: number, pageCount: number, meta: ArchivePaidMeta): string {
+function renderPage(page: PageLayout, pageNumber: number, pageCount: number, title: string, meta: ArchiveListMeta): string {
   const bodyRows = page.sections
     .map((section) => {
-      const title = [section.stage, section.grade, section.group].filter(Boolean).map(escapeHtml).join(' — ');
-      const heading = `<tr class="group-row"><td colspan="4"><span class="group-title">${title || '—'}</span>${section.continued ? '<span class="continued">(تابع)</span>' : ''}</td></tr>`;
+      const heading = `<tr class="group-row"><td colspan="4"><span class="group-title">${[section.stage, section.grade, section.group].filter(Boolean).map(escapeHtml).join(' — ') || '—'}</span>${section.continued ? '<span class="continued">(تابع)</span>' : ''}</td></tr>`;
       const rows = section.students
         .map((student, index) => {
           const number = section.firstNumber + index;
@@ -82,7 +88,7 @@ function renderPage(page: PageLayout, pageNumber: number, pageCount: number, met
 
   return `<section class="page">
   <header class="page-title">
-    <div class="title">كشف الطلاب المسددين${meta.monthLabel ? ` لشهر ${escapeHtml(meta.monthLabel)}` : ''}</div>
+    <div class="title">${title}${meta.monthLabel ? ` لشهر ${escapeHtml(meta.monthLabel)}` : ''}</div>
     <div class="meta">صفحة ${pageNumber} من ${pageCount}</div>
   </header>
   <table>
@@ -93,13 +99,13 @@ function renderPage(page: PageLayout, pageNumber: number, pageCount: number, met
 </section>`;
 }
 
-function buildDocument(pages: PageLayout[], meta: ArchivePaidMeta): string {
-  const body = pages.map((page, i) => renderPage(page, i + 1, pages.length, meta)).join('\n');
+function buildDocument(pages: PageLayout[], title: string, meta: ArchiveListMeta): string {
+  const body = pages.map((page, i) => renderPage(page, i + 1, pages.length, title, meta)).join('\n');
   return `<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="utf-8">
-<title>${escapeHtml(meta.fileName ?? 'الطلاب_المسددون')}</title>
+<title>${escapeHtml(meta.fileName ?? title)}</title>
 <style>
   @page { size: A4 portrait; margin: 0; }
   * { box-sizing: border-box; }
@@ -150,18 +156,22 @@ function printHtml(html: string): void {
   }, 300);
 }
 
-export function exportArchivePaidStudentsPDF(
-  students: ArchivePaidStudent[],
+function isListed(kind: ArchiveListKind, student: ArchiveListStudent, paidAmount: number): boolean {
+  const fee = safeNum(student.total_fees);
+  if (fee <= 0) return false;
+  return kind === 'paid' ? paidAmount >= fee : paidAmount < fee;
+}
+
+export function exportArchiveStudentsPDF(
+  kind: ArchiveListKind,
+  students: ArchiveListStudent[],
   monthlyPaidMap: Map<string, number>,
   monthExemptMap: Set<string>,
-  meta: ArchivePaidMeta
+  meta: ArchiveListMeta
 ): boolean {
-  const paid = students.filter((s) => {
-    if (monthExemptMap.has(s.id)) return false;
-    return safeNum(s.total_fees) > 0 && safeNum(monthlyPaidMap.get(s.id)) >= safeNum(s.total_fees);
-  });
+  const listed = students.filter((s) => !monthExemptMap.has(s.id) && isListed(kind, s, safeNum(monthlyPaidMap.get(s.id))));
 
-  const sorted = [...paid].sort(
+  const sorted = [...listed].sort(
     (a, b) =>
       compareAr(a.stage_name ?? '', b.stage_name ?? '') ||
       compareAr(a.grade_name ?? '', b.grade_name ?? '') ||
@@ -183,6 +193,6 @@ export function exportArchivePaidStudentsPDF(
   }
 
   if (groups.length === 0) return false;
-  printHtml(buildDocument(buildPages(groups), meta));
+  printHtml(buildDocument(buildPages(groups), TITLES[kind], meta));
   return true;
 }

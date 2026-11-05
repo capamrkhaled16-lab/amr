@@ -49,8 +49,8 @@ import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import { formatCurrency, formatArabicDate, normalizePhoneForWhatsApp, openWhatsAppURL } from '@/lib/format';
 import { printDocument } from '@/lib/export';
 import { PDFButton } from '@/components/ui/PDFButton';
-import { exportStudentListPDF, exportMonthlyPaymentSummaryPDF, exportUnpaidStudentsPDF } from '@/lib/pdfExport';
-import { exportArchivePaidStudentsPDF } from '@/lib/archivePaidStudentsPDF';
+import { exportStudentListPDF, exportMonthlyPaymentSummaryPDF } from '@/lib/pdfExport';
+import { exportArchiveStudentsPDF } from '@/lib/archiveStudentsPDF';
 import { triggerAutoArchive, createHistoricalPayment, fetchArchiveRuns, rollbackArchive, preArchiveValidation, resolvePaymentStatusFromDB, scanHistoricalIssues, skipIssueByUser, fetchIgnoredIssues, restoreIgnoredIssue, type PreArchiveIssue, type ArchiveIssueIgnore } from '@/lib/data';
 import SmartGradeCompletion from '@/components/dashboard/SmartGradeCompletion';
 import DailyCollectionsWidget from '@/components/dashboard/DailyCollectionsWidget';
@@ -3905,9 +3905,7 @@ export default function ArchiveOverview({
                         groupName: grpName,
                         fileName: isPaid ? 'الطلاب_المسددون' : 'الطلاب_غير_المسددين',
                       };
-                      return isPaid
-                        ? exportArchivePaidStudentsPDF(studentsForExport, paidMap, exemptSet, meta)
-                        : exportUnpaidStudentsPDF(studentsForExport, paidMap, exemptSet, meta);
+                      return exportArchiveStudentsPDF(isPaid ? 'paid' : 'unpaid', studentsForExport, paidMap, exemptSet, meta);
                     }}
                   />
                 </div>
