@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import type { Group, GradeLevel, AcademicStage, Session, Student, Attendance, HallOfFameEntry, Settings } from '../types'
 import { currentMonthKey, currentMonthLabel } from '../lib/utils'
+import { canonicalRankEntries } from '../lib/leaderboardRank'
 
 // Cache to prevent redundant queries
 const cache = new Map<string, { data: unknown; timestamp: number }>()
@@ -457,8 +458,8 @@ export async function getStudentRanking(studentId: string): Promise<{ rank: numb
     return { rank: null, total: groupEntries.length, entry }
   }
 
-  const groupRank = groupEntries.findIndex(e => e.id === studentId) + 1
-  return { rank: groupRank > 0 ? groupRank : null, total: groupEntries.length, entry }
+  const ranked = canonicalRankEntries(groupEntries).find(e => e.id === studentId)
+  return { rank: ranked?.rank ?? null, total: groupEntries.length, entry }
 }
 
 // Parent portal: get student by parent_token

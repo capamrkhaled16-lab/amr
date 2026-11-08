@@ -47,12 +47,10 @@ export function canonicalRankEntries(entries: HallOfFameEntry[]): RankedEntry[] 
   const result: RankedEntry[] = [];
   let currentRank = 0;
   for (let i = 0; i < cleaned.length; i++) {
-    if (i > 0 && toNum(cleaned[i].overall_score) === toNum(cleaned[i - 1].overall_score)) {
-      result.push({ ...cleaned[i], rank: currentRank });
-    } else {
-      currentRank = i + 1;
-      result.push({ ...cleaned[i], rank: currentRank });
+    if (i === 0 || toNum(cleaned[i].overall_score) !== toNum(cleaned[i - 1].overall_score)) {
+      currentRank += 1;
     }
+    result.push({ ...cleaned[i], rank: currentRank });
   }
   return result;
 }
