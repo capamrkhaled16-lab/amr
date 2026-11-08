@@ -1442,7 +1442,10 @@ export async function incrementAssistantLogin(id: string): Promise<void> {
 
 export async function fetchPayments(studentId: string, monthKey?: string): Promise<Payment[]> {
   const cacheKey = `payments_${studentId}_${monthKey ?? 'all'}`;
-  return swrFetch(cacheKey, async () => {
+  return swrFetch(cacheKey, async () => fetchPaymentsDirect(studentId, monthKey));
+}
+
+async function fetchPaymentsDirect(studentId: string, monthKey?: string): Promise<Payment[]> {
   let query = supabase
     .from('payments')
     .select('*')
@@ -1460,7 +1463,11 @@ export async function fetchPayments(studentId: string, monthKey?: string): Promi
     if (!p.is_historical_payment) return true;
     return (p.target_archive_month ?? p.month_key) === monthKey;
   });
-  });
+}
+
+export async function fetchPaymentsLive(studentId: string, monthKey?: string): Promise<Payment[]> {
+  invalidateCache(`payments_${studentId}_${monthKey ?? 'all'}`);
+  return fetchPaymentsDirect(studentId, monthKey);
 }
 
 function minuteBucketKey(prefix: string, studentId: string, amount: number, monthKey: string): string {

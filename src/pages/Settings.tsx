@@ -1,100 +1,106 @@
-import { useEffect, useState } from "react";
-import { supabase } from "../lib/supabase";
-import { useToast } from "../lib/toast";
-import { useAuth } from "../lib/auth";
-import type { Settings as SettingsType } from "../lib/types";
+import { useState, useEffect } from 'react'
+import { useSettings, useReferenceData } from '../hooks/useData'
+import { supabase } from '../lib/supabase'
+import { PageHeader, Card, Button, Input, Spinner, Badge } from '../components/ui'
+import type { AcademicStage, GradeLevel } from '../types'
+import { Save, Check } from 'lucide-react'
 
 export default function Settings() {
-  const { assistant } = useAuth();
-  const { showSuccess, showWarning } = useToast();
-  const [settings, setSettings] = useState<SettingsType | null>(null);
-  const [saving, setSaving] = useState(false);
+  const { settings, loading: settingsLoading } = useSettings()
+  const { stages, gradeLevels, loading: refLoading } = useReferenceData()
+  const [platformName, setPlatformName] = useState('')
+  const [managementName, setManagementName] = useState('')
+  const [teacherName, setTeacherName] = useState('')
+  const [lateAlertDay, setLateAlertDay] = useState('5')
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [error, setError] = useState('')
+
+  // Stage pricing
+  const [stagePricing, setStagePricing] = useState<Record<string, string>>({})
 
   useEffect(() => {
-    supabase.from("settings").select("*").limit(1).single().then(({ data }) => {
-      if (data) setSettings(data as SettingsType);
-    });
-  }, []);
+    if (settings) {
+      setPlatformName(settings.platform_name || '')
+      setManagementName(settings.management_name || '')
+      setTeacherName(settings.teacher_name || '')
+      setLateAlertDay(String(settings.late_payment_alert_day || 5))
+    }
+  }, [settings])
+
+  useEffect(() => {
+    const map: Record<string, string> = {}
+    for (const s of stages) { map[s.id] = String(s.base_subscription) }
+    for (const gl of gradeLevels) { map[gl.id] = String(gl.base_subscription) }
+    setStagePricing(map)
+  }, [stages, gradeLevels])
 
   const handleSave = async () => {
-    if (!settings || saving) return;
-    setSaving(true);
-    try {
-      const { error } = await supabase
-        .from("settings")
-        .update({
-          platform_name: settings.platform_name,
-          management_name: settings.management_name,
-          teacher_name: settings.teacher_name,
-        })
-        .eq("id", settings.id);
-
-      if (error) throw error;
-      showSuccess("تم حفظ الإعدادات");
-    } catch (err) {
-      console.error("[settings] save error:", err);
-      showWarning("لم يتم حفظ الإعدادات");
-    } finally {
-      setSaving(false);
+    setSaving(true); setError(''); setSaved(false)
+    if (settings) {
+      const { error: e } = await supabase.from('settings').update({
+        platform_name: platformName, management_name: managementName, teacher_name: teacherName,
+        late_payment_alert_day: parseInt(lateAlertDay) || 5, updated_at: new Date().toISOString(),
+      }).eq('id', settings.id)
+      if (e) { setError(e.message); setSaving(false); return }
     }
-  };
-
-  if (!settings) {
-    return <div className="p-8 text-center text-gray-400 text-sm">جاري التحميل...</div>;
+    // Save stage pricing
+    for (const s of stages) {
+      const val = parseFloat(stagePricing[s.id])
+      if (!isNaN(val)) await supabase.from('academic_stages').update({ base_subscription: val }).eq('id', s.id)
+    }
+    for (const gl of gradeLevels) {
+      const val = parseFloat(stagePricing[gl.id])
+      if (!isNaN(val)) await supabase.from('grade_levels').update({ base_subscription: val }).eq('id', gl.id)
+    }
+    setSaved(true)
+    setSaving(false)
+    setTimeout(() => setSaved(false), 3000)
   }
 
+  if (settingsLoading || refLoading) return <Spinner label="جارٍ تحميل الإعدادات..." />
+
   return (
-    <div className="space-y-4 animate-fade-in max-w-2xl">
-      <div className="bg-white rounded-2xl shadow-sm p-5 space-y-4">
-        <h3 className="font-bold text-gray-800">إعدادات المنصة</h3>
+    <div className="space-y-4 animate-fadeIn">
+      <PageHeader title="الإعدادات" action={<Button onClick={handleSave} disabled={saving}><Save size={18} /> {saving ? 'جارٍ الحفظ...' : 'حفظ'}</Button>} />
 
-        <div>
-          <label className="block text-sm font-semibold text-gray-700 mb-1">اسم المنصة</label>
-          <input
-            type="text"
-            value={settings.platform_name}
-            onChange={(e) => setSettings({ ...settings, platform_name: e.target.value })}
-            className="w-full px-3 py-2.5 rounded-xl border border-gray-300 text-sm"
-          />
+      {error && <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-3 text-red-400 text-sm">{error}</div>}
+      {saved && <div className="bg-accent/10 border border-accent/30 rounded-xl px-4 py-3 text-accent text-sm flex items-center gap-2"><Check size={18} /> تم حفظ الإعدادات بنجاح</div>}
+
+      <Card className="p-5 space-y-4">
+        <h2 className="text-lg font-bold text-white">معلومات المنصة</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div><label className="block text-xs text-white/50 mb-1.5">اسم المنصة</label><Input value={platformName} onChange={setPlatformName} className="w-full" /></div>
+          <div><label className="block text-xs text-white/50 mb-1.5">اسم الإدارة</label><Input value={managementName} onChange={setManagementName} className="w-full" /></div>
+          <div><label className="block text-xs text-white/50 mb-1.5">اسم المعلم</label><Input value={teacherName} onChange={setTeacherName} className="w-full" /></div>
+          <div><label className="block text-xs text-white/50 mb-1.5">يوم تنبيه تأخر السداد</label><Input type="number" value={lateAlertDay} onChange={setLateAlertDay} dir="ltr" className="w-full" /></div>
         </div>
+      </Card>
 
-        <div>
-          <label className="block text-sm font-semibold text-gray-700 mb-1">اسم الإدارة</label>
-          <input
-            type="text"
-            value={settings.management_name}
-            onChange={(e) => setSettings({ ...settings, management_name: e.target.value })}
-            className="w-full px-3 py-2.5 rounded-xl border border-gray-300 text-sm"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-semibold text-gray-700 mb-1">اسم المدرس</label>
-          <input
-            type="text"
-            value={settings.teacher_name}
-            onChange={(e) => setSettings({ ...settings, teacher_name: e.target.value })}
-            className="w-full px-3 py-2.5 rounded-xl border border-gray-300 text-sm"
-          />
-        </div>
-
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="px-5 py-2.5 bg-success-600 text-white rounded-xl hover:bg-success-700 transition disabled:opacity-60 text-sm font-bold"
-        >
-          {saving ? "جاري الحفظ..." : "حفظ الإعدادات"}
-        </button>
-      </div>
-
-      <div className="bg-white rounded-2xl shadow-sm p-5">
-        <h3 className="font-bold text-gray-800 mb-3">معلومات الحساب</h3>
-        <div className="space-y-2 text-sm">
-          <div className="flex justify-between"><span className="text-gray-500">الاسم:</span><span className="font-semibold text-gray-700">{assistant?.display_name || assistant?.username}</span></div>
-          <div className="flex justify-between"><span className="text-gray-500">حالة الحساب:</span><span className="font-semibold text-success-600">نشط</span></div>
-          <div className="flex justify-between"><span className="text-gray-500">عدد مرات الدخول:</span><span className="font-semibold text-gray-700">{assistant?.logins_count}</span></div>
-        </div>
-      </div>
+      <Card className="p-5 space-y-3">
+        <h2 className="text-lg font-bold text-white">أسعار الاشتراكات</h2>
+        {stages.map((stage: AcademicStage) => (
+          <div key={stage.id} className="space-y-2">
+            <div className="flex items-center gap-2">
+              <Badge color="blue">{stage.name}</Badge>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-white/40">اشتراك المرحلة:</span>
+                <input type="number" value={stagePricing[stage.id] ?? ''} onChange={(e) => setStagePricing(prev => ({ ...prev, [stage.id]: e.target.value }))} dir="ltr" className="w-24 bg-bg-input border border-bg-border rounded-lg px-3 py-1 text-white text-sm outline-none focus:border-accent text-center" />
+                <span className="text-xs text-white/30">ج</span>
+              </div>
+            </div>
+            <div className="pr-4 space-y-1.5">
+              {gradeLevels.filter(gl => gl.stage_id === stage.id).map((gl: GradeLevel) => (
+                <div key={gl.id} className="flex items-center gap-2">
+                  <span className="text-xs text-white/50 flex-1">{gl.name}</span>
+                  <input type="number" value={stagePricing[gl.id] ?? ''} onChange={(e) => setStagePricing(prev => ({ ...prev, [gl.id]: e.target.value }))} dir="ltr" className="w-24 bg-bg-input border border-bg-border rounded-lg px-3 py-1 text-white text-xs outline-none focus:border-accent text-center" />
+                  <span className="text-xs text-white/30">ج</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </Card>
     </div>
-  );
+  )
 }

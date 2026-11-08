@@ -36,6 +36,7 @@ export interface MonthStats {
   behavior: { rated: number; positive: number; warnings: number; rate: number | null };
 }
 
+const RECORDED_ATTENDANCE_STATUSES = ['present', 'absent', 'excused', 'excused_absence', 'late'];
 const DONE_HOMEWORK_STATUSES = ['done', 'complete', 'completed'];
 const POSITIVE_BEHAVIOR = ['excellent', 'participatory'];
 const WARNING_BEHAVIOR = ['needs_attention', 'disruptive'];
@@ -51,7 +52,7 @@ export function previousMonthKey(monthKey: string): string {
 }
 
 export function computeMonthStats(records: MonthlyRecords, monthKey: string): MonthStats {
-  const attendance = records.attendance.filter((a) => a.attendance_date.slice(0, 7) === monthKey);
+  const attendance = records.attendance.filter((a) => a.attendance_date.slice(0, 7) === monthKey && RECORDED_ATTENDANCE_STATUSES.includes(a.status));
   const present = attendance.filter((a) => a.status === 'present').length;
   const absent = attendance.filter((a) => a.status === 'absent').length;
   const excused = attendance.filter((a) => ['excused', 'excused_absence'].includes(a.status)).length;
