@@ -162,7 +162,7 @@ export default function ParentPortal() {
                   </div>
                   <div className="bg-bg-input rounded-lg p-2 text-center">
                     <p className="text-xs text-white/30">الواجب</p>
-                    <p className="text-sm font-bold text-white">{entry?.homework_rate}%</p>
+                    <p className="text-sm font-bold text-white">{entry?.homework_rate != null ? `${entry.homework_rate}%` : '—'}</p>
                   </div>
                   <div className="bg-bg-input rounded-lg p-2 text-center">
                     <p className="text-xs text-white/30">الامتحانات</p>

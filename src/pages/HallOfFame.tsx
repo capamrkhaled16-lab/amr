@@ -111,7 +111,7 @@ export default function HallOfFame() {
                 </div>
                 <div className="text-center hidden md:block">
                   <p className="text-xs text-white/30">الواجب</p>
-                  <p className="text-sm font-semibold text-white">{student.homework_rate}%</p>
+                  <p className="text-sm font-semibold text-white">{student.homework_rate != null ? `${student.homework_rate}%` : '—'}</p>
                 </div>
                 <div className="text-left">
                   <p className="text-lg font-bold text-accent">{student.overall_score}</p>
