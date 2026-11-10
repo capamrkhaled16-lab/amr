@@ -1,230 +1,453 @@
-import { useState, useEffect } from 'react'
-import { useReferenceData, useGroupSessions, useGroupStudents, useSessionAttendance, saveBulkAttendance, invalidateCache } from '../hooks/useData'
-import { PageHeader, Card, Button, Select, Spinner, EmptyState, Badge } from '../components/ui'
-import { supabase } from '../lib/supabase'
-import type { Session, Student, Attendance as AttendanceType } from '../types'
-import { formatDateShort, todayISO, currentMonthLabel } from '../lib/utils'
-import { Check, AlertCircle, ClipboardCheck, Users } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from "react";
+import { supabase } from "../lib/supabase";
+import { useToast } from "../lib/toast";
+import { getArabicMonth, getTodayISO } from "../lib/dates";
+import type { AttendanceRecord, AttendanceStatus, GradeLevel, Group, Session, Student } from "../lib/types";
 
-type StatusValue = 'present' | 'absent' | 'late' | 'unrecorded'
+const ZERO_UUID = "00000000-0000-0000-0000-000000000000";
 
-const statusConfig: Record<StatusValue, { label: string; color: string; badge: 'green' | 'red' | 'gold' | 'default' }> = {
-  present: { label: 'حاضر', color: 'text-accent', badge: 'green' },
-  absent: { label: 'غائب', color: 'text-red-400', badge: 'red' },
-  late: { label: 'متأخر', color: 'text-gold', badge: 'gold' },
-  unrecorded: { label: 'غير مسجل', color: 'text-white/30', badge: 'default' },
-}
+const STATUS_CONFIG: Record<AttendanceStatus, { label: string; color: string; bg: string }> = {
+  present: { label: "حاضر", color: "text-success-700", bg: "bg-success-100 border-success-300" },
+  absent: { label: "غائب", color: "text-error-700", bg: "bg-error-100 border-error-300" },
+  late: { label: "متأخر", color: "text-warning-700", bg: "bg-warning-100 border-warning-300" },
+  excused: { label: "غياب مرخص", color: "text-blue-700", bg: "bg-blue-100 border-blue-300" },
+  unrecorded: { label: "غير مسجل", color: "text-gray-500", bg: "bg-gray-50 border-gray-200" },
+};
+
+const STATUS_ORDER: AttendanceStatus[] = ["present", "absent", "late", "excused"];
 
 export default function Attendance() {
-  const { groups, gradeLevels, stages, loading: refLoading } = useReferenceData()
-  const [selectedGroupId, setSelectedGroupId] = useState('')
-  const [selectedSessionId, setSelectedSessionId] = useState('')
-  const [saving, setSaving] = useState(false)
-  const [saveError, setSaveError] = useState('')
-  const [saveSuccess, setSaveSuccess] = useState('')
-  const [localAttendance, setLocalAttendance] = useState<Record<string, StatusValue>>({})
+  const { showSuccess, showWarning } = useToast();
+
+  const [gradeLevels, setGradeLevels] = useState<GradeLevel[]>([]);
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [students, setStudents] = useState<Student[]>([]);
+  const [attendanceMap, setAttendanceMap] = useState<Map<string, AttendanceRecord>>(new Map());
+
+  const [selectedGrade, setSelectedGrade] = useState<string>("");
+  const [selectedGroup, setSelectedGroup] = useState<string>("");
+  const [selectedSession, setSelectedSession] = useState<string>("");
+  const [sessionDate, setSessionDate] = useState<string>(getTodayISO());
+
+  const [loadingData, setLoadingData] = useState(false);
+  const [showAddSession, setShowAddSession] = useState(false);
+  const [newSessionTitle, setNewSessionTitle] = useState("");
+  const [creatingSession, setCreatingSession] = useState(false);
+  const [savingStudents, setSavingStudents] = useState<Set<string>>(new Set());
+
+  const requestIdRef = useRef(0);
 
   useEffect(() => {
-    if (!selectedGroupId && groups.length > 0) {
-      setSelectedGroupId(groups[0].id)
-    }
-  }, [groups, selectedGroupId])
+    supabase.from("grade_levels").select("*").order("sort_order").then(({ data }) => {
+      if (data) setGradeLevels(data as GradeLevel[]);
+    });
+  }, []);
 
-  const { sessions, loading: sessLoading } = useGroupSessions(selectedGroupId || null)
-  const { students, loading: stuLoading } = useGroupStudents(selectedGroupId || null)
-  const { attendance, loading: attLoading, refetch } = useSessionAttendance(selectedSessionId || null)
+  const loadGroups = useCallback((gradeId: string) => {
+    supabase
+      .from("groups")
+      .select("*")
+      .eq("grade_level_id", gradeId)
+      .order("name")
+      .then(({ data }) => {
+        setGroups(data as Group[] || []);
+      });
+  }, []);
 
-  // Auto-select latest session
-  useEffect(() => {
-    if (sessions.length > 0 && !selectedSessionId) {
-      setSelectedSessionId(sessions[0].id)
-    }
-    if (sessions.length === 0) {
-      setSelectedSessionId('')
-    }
-  }, [sessions, selectedSessionId])
+  const loadSessions = useCallback((groupId: string) => {
+    supabase
+      .from("sessions")
+      .select("*")
+      .eq("group_id", groupId)
+      .eq("is_deleted", false)
+      .order("created_at", { ascending: false })
+      .limit(30)
+      .then(({ data }) => {
+        setSessions(data as Session[] || []);
+      });
+  }, []);
 
-  // Sync attendance from DB to local state
-  useEffect(() => {
-    const map: Record<string, StatusValue> = {}
-    for (const att of attendance) {
-      map[att.student_id] = (att.status as StatusValue) || 'unrecorded'
-    }
-    setLocalAttendance(map)
-  }, [attendance])
+  const loadStudents = useCallback((groupId: string) => {
+    supabase
+      .from("students")
+      .select("*")
+      .eq("group_id", groupId)
+      .eq("is_deleted", false)
+      .eq("status", "active")
+      .order("name")
+      .then(({ data }) => {
+        setStudents(data as Student[] || []);
+      });
+  }, []);
 
-  // Clear messages
-  useEffect(() => {
-    if (saveSuccess) {
-      const timer = setTimeout(() => setSaveSuccess(''), 3000)
-      return () => clearTimeout(timer)
-    }
-  }, [saveSuccess])
+  const loadAttendance = useCallback(async (sessionId: string, groupId: string, date: string) => {
+    const myRequest = ++requestIdRef.current;
+    setLoadingData(true);
 
-  const groupOptions = stages.flatMap(st =>
-    gradeLevels
-      .filter(gl => gl.stage_id === st.id)
-      .flatMap(gl =>
-        groups
-          .filter(g => g.grade_level_id === gl.id)
-          .map(g => ({ value: g.id, label: `${st.name} — ${gl.name} — ${g.name}` }))
-      )
-  )
-
-  const sessionOptions = sessions.map(s => ({
-    value: s.id,
-    label: `${s.title} — ${formatDateShort(s.session_date)}`,
-  }))
-
-  const selectedSession = sessions.find(s => s.id === selectedSessionId)
-
-  const setStudentStatus = (studentId: string, status: StatusValue) => {
-    setLocalAttendance(prev => ({ ...prev, [studentId]: status }))
-  }
-
-  const handleSave = async () => {
-    if (!selectedSession || !selectedGroupId) return
-    setSaving(true)
-    setSaveError('')
-    setSaveSuccess('')
-
-    const records = students.map(student => ({
-      student_id: student.id,
-      group_id: selectedGroupId,
-      status: localAttendance[student.id] || 'unrecorded',
-      attendance_date: selectedSession.session_date || todayISO(),
-      session_id: selectedSession.id,
-    }))
-
-    // Only save students with a status set
-    const toSave = records.filter(r => r.status !== 'unrecorded')
-
-    if (toSave.length === 0) {
-      setSaveError('لم يتم تحديد أي حالة حضور')
-      setSaving(false)
-      return
-    }
-
-    const { errors, successCount } = await saveBulkAttendance(toSave)
-
-    if (errors.length > 0) {
-      setSaveError(`تم حفظ ${successCount} سجل، ولكن فشل ${errors.length} سجل`)
+    let query = supabase.from("attendance").select("*");
+    if (sessionId) {
+      query = query.eq("session_id", sessionId);
     } else {
-      setSaveSuccess(`تم حفظ حضور ${successCount} طالب بنجاح في قاعدة البيانات`)
+      query = query.eq("group_id", groupId).eq("attendance_date", date).is("session_id", null);
     }
 
-    // Re-fetch from DB to confirm what was actually saved
-    await refetch()
-    invalidateCache('attendance')
-    setSaving(false)
-  }
+    const { data, error } = await query;
 
-  const setAllPresent = () => {
-    const map: Record<string, StatusValue> = {}
-    for (const s of students) {
-      map[s.id] = 'present'
+    if (myRequest !== requestIdRef.current) return;
+
+    if (error) {
+      console.error("[attendance] load error:", error.message);
+      setAttendanceMap(new Map());
+    } else {
+      const map = new Map<string, AttendanceRecord>();
+      for (const rec of data as AttendanceRecord[]) {
+        map.set(rec.student_id, rec);
+      }
+      setAttendanceMap(map);
     }
-    setLocalAttendance(map)
-  }
+    setLoadingData(false);
+  }, []);
 
-  if (refLoading) {
-    return <Spinner label="جارٍ تحميل البيانات..." />
+  const handleGradeChange = (gradeId: string) => {
+    setSelectedGrade(gradeId);
+    setSelectedGroup("");
+    setSelectedSession("");
+    setSessions([]);
+    setStudents([]);
+    setAttendanceMap(new Map());
+    if (gradeId) loadGroups(gradeId);
+  };
+
+  const handleGroupChange = (groupId: string) => {
+    setSelectedGroup(groupId);
+    setSelectedSession("");
+    setAttendanceMap(new Map());
+    if (groupId) {
+      loadSessions(groupId);
+      loadStudents(groupId);
+    }
+  };
+
+  const handleSessionChange = (sessionId: string) => {
+    setSelectedSession(sessionId);
+    setAttendanceMap(new Map());
+    if (sessionId && selectedGroup) {
+      loadAttendance(sessionId, selectedGroup, sessionDate);
+    }
+  };
+
+  const handleCreateSession = async () => {
+    if (!selectedGroup || creatingSession) return;
+    setCreatingSession(true);
+
+    const month = getArabicMonth(new Date(sessionDate + "T00:00:00"));
+
+    const { data, error } = await supabase.rpc("create_session_auto", {
+      p_group_id: selectedGroup,
+      p_title: newSessionTitle.trim(),
+      p_month: month,
+      p_session_date: sessionDate,
+    });
+
+    if (error) {
+      console.error("[session] create error:", error.message);
+      showWarning("لم يتم إنشاء الحصة، تحقق من البيانات");
+      setCreatingSession(false);
+      return;
+    }
+
+    if (!data || data.length === 0) {
+      showWarning("لم يتم إنشاء الحصة");
+      setCreatingSession(false);
+      return;
+    }
+
+    const newSession = data[0] as Session;
+    setSessions((prev) => [newSession, ...prev]);
+    setSelectedSession(newSession.id);
+    setShowAddSession(false);
+    setNewSessionTitle("");
+    setCreatingSession(false);
+    showSuccess("تم إنشاء الحصة بنجاح");
+
+    loadAttendance(newSession.id, selectedGroup, sessionDate);
+  };
+
+  const handleStatusChange = async (studentId: string, newStatus: AttendanceStatus) => {
+    if (savingStudents.has(studentId)) return;
+
+    const existing = attendanceMap.get(studentId);
+    if (existing && existing.status === newStatus) return;
+
+    setSavingStudents((prev) => new Set(prev).add(studentId));
+
+    const optimisticRecord: AttendanceRecord = existing
+      ? { ...existing, status: newStatus }
+      : {
+          id: "",
+          student_id: studentId,
+          group_id: selectedGroup,
+          status: newStatus,
+          notes: null,
+          attendance_date: sessionDate,
+          recorded_at: new Date().toISOString(),
+          session_id: selectedSession || null,
+          late_minutes: newStatus === "late" ? 5 : null,
+        };
+
+    setAttendanceMap((prev) => {
+      const next = new Map(prev);
+      next.set(studentId, optimisticRecord);
+      return next;
+    });
+
+    try {
+      const { data, error } = await supabase.rpc("upsert_attendance", {
+        p_student_id: studentId,
+        p_session_id: selectedSession || null,
+        p_group_id: selectedGroup,
+        p_attendance_date: sessionDate,
+        p_status: newStatus,
+        p_late_minutes: newStatus === "late" ? 5 : null,
+      });
+
+      if (error) throw error;
+      if (!data || data.length === 0) throw new Error("empty upsert result");
+
+      const saved = data[0] as AttendanceRecord;
+      setAttendanceMap((prev) => {
+        const next = new Map(prev);
+        next.set(studentId, saved);
+        return next;
+      });
+      showSuccess("تم الحفظ");
+    } catch (err) {
+      console.error("[attendance] save error:", err);
+      setAttendanceMap((prev) => {
+        const next = new Map(prev);
+        if (existing) {
+          next.set(studentId, existing);
+        } else {
+          next.delete(studentId);
+        }
+        return next;
+      });
+      showWarning("لم يتم حفظ التغيير");
+    } finally {
+      setSavingStudents((prev) => {
+        const next = new Set(prev);
+        next.delete(studentId);
+        return next;
+      });
+    }
+  };
+
+  const handleSetAll = async (status: AttendanceStatus) => {
+    if (!students.length) return;
+    for (const student of students) {
+      await handleStatusChange(student.id, status);
+    }
+  };
+
+  const counts = {
+    present: 0,
+    absent: 0,
+    late: 0,
+    excused: 0,
+    unrecorded: 0,
+  };
+  for (const student of students) {
+    const rec = attendanceMap.get(student.id);
+    counts[rec?.status || "unrecorded"]++;
   }
 
   return (
-    <div className="space-y-4 animate-fadeIn">
-      <PageHeader
-        title="الحضور والانصراف"
-        subtitle={currentMonthLabel()}
-        action={
-          <Button onClick={handleSave} disabled={saving || !selectedSession || students.length === 0}>
-            <Check size={18} /> {saving ? 'جارٍ الحفظ...' : 'حفظ الحضور'}
-          </Button>
-        }
-      />
+    <div className="space-y-4 animate-fade-in">
+      <div className="bg-white rounded-2xl shadow-sm p-4 lg:p-5">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-1">الصف الدراسي</label>
+            <select
+              value={selectedGrade}
+              onChange={(e) => handleGradeChange(e.target.value)}
+              className="w-full px-3 py-2.5 rounded-xl border border-gray-300 focus:border-primary-500 focus:ring-2 focus:ring-primary-200 outline-none transition text-sm"
+            >
+              <option value="">اختر الصف</option>
+              {gradeLevels.map((gl) => (
+                <option key={gl.id} value={gl.id}>{gl.name}</option>
+              ))}
+            </select>
+          </div>
 
-      {saveError && (
-        <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-3 text-red-400 text-sm flex items-center gap-2">
-          <AlertCircle size={18} /> {saveError}
-        </div>
-      )}
-      {saveSuccess && (
-        <div className="bg-accent/10 border border-accent/30 rounded-xl px-4 py-3 text-accent text-sm flex items-center gap-2">
-          <Check size={18} /> {saveSuccess}
-        </div>
-      )}
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-1">المجموعة</label>
+            <select
+              value={selectedGroup}
+              onChange={(e) => handleGroupChange(e.target.value)}
+              disabled={!selectedGrade}
+              className="w-full px-3 py-2.5 rounded-xl border border-gray-300 focus:border-primary-500 focus:ring-2 focus:ring-primary-200 outline-none transition text-sm disabled:opacity-50"
+            >
+              <option value="">اختر المجموعة</option>
+              {groups.map((g) => (
+                <option key={g.id} value={g.id}>{g.name}</option>
+              ))}
+            </select>
+          </div>
 
-      <div className="flex items-center gap-3 flex-wrap">
-        <Select
-          value={selectedGroupId}
-          onChange={(v) => { setSelectedGroupId(v); setSelectedSessionId('') }}
-          options={groupOptions}
-          placeholder="اختر المجموعة"
-          className="min-w-[200px] flex-1"
-        />
-        {sessionOptions.length > 0 && (
-          <Select
-            value={selectedSessionId}
-            onChange={setSelectedSessionId}
-            options={sessionOptions}
-            placeholder="اختر الحصة"
-            className="min-w-[180px]"
-          />
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-1">الحصة</label>
+            <div className="flex gap-2">
+              <select
+                value={selectedSession}
+                onChange={(e) => handleSessionChange(e.target.value)}
+                disabled={!selectedGroup}
+                className="flex-1 px-3 py-2.5 rounded-xl border border-gray-300 focus:border-primary-500 focus:ring-2 focus:ring-primary-200 outline-none transition text-sm disabled:opacity-50"
+              >
+                <option value="">اختر الحصة</option>
+                {sessions.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.title} - {s.session_date || "بدون تاريخ"}
+                  </option>
+                ))}
+              </select>
+              <button
+                onClick={() => setShowAddSession(true)}
+                disabled={!selectedGroup}
+                className="px-3 py-2.5 bg-primary-600 text-white rounded-xl hover:bg-primary-700 transition disabled:opacity-50 text-sm font-semibold whitespace-nowrap"
+              >
+                + حصة
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {selectedSession && (
+          <div className="mt-3 flex items-center gap-3">
+            <label className="text-sm font-semibold text-gray-700">تاريخ الحصة:</label>
+            <input
+              type="date"
+              value={sessionDate}
+              onChange={(e) => setSessionDate(e.target.value)}
+              className="px-3 py-1.5 rounded-lg border border-gray-300 text-sm"
+            />
+          </div>
         )}
       </div>
 
-      {sessLoading || stuLoading || attLoading ? (
-        <Spinner label="جارٍ تحميل الحضور..." />
-      ) : students.length === 0 ? (
-        <EmptyState message="لا يوجد طلاب في هذه المجموعة" icon={<Users size={48} />} />
-      ) : !selectedSession ? (
-        <EmptyState message="لا توجد حصص لهذه المجموعة. أنشئ حصة أولاً" icon={<ClipboardCheck size={48} />} />
-      ) : (
+      {showAddSession && (
+        <div className="bg-white rounded-2xl shadow-sm p-4 lg:p-5 animate-slide-up">
+          <h3 className="text-base font-bold text-gray-800 mb-3">إضافة حصة جديدة</h3>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <input
+              type="text"
+              value={newSessionTitle}
+              onChange={(e) => setNewSessionTitle(e.target.value)}
+              placeholder="اسم الحصة (اختياري - سيتم الترقيم تلقائياً)"
+              className="flex-1 px-3 py-2.5 rounded-xl border border-gray-300 text-sm"
+            />
+            <button
+              onClick={handleCreateSession}
+              disabled={creatingSession}
+              className="px-5 py-2.5 bg-success-600 text-white rounded-xl hover:bg-success-700 transition disabled:opacity-60 text-sm font-bold"
+            >
+              {creatingSession ? "جاري الإنشاء..." : "تأكيد الإضافة"}
+            </button>
+            <button
+              onClick={() => { setShowAddSession(false); setNewSessionTitle(""); }}
+              className="px-5 py-2.5 bg-gray-100 text-gray-600 rounded-xl hover:bg-gray-200 transition text-sm font-semibold"
+            >
+              إلغاء
+            </button>
+          </div>
+        </div>
+      )}
+
+      {selectedSession && students.length > 0 && (
         <>
-          <div className="flex items-center justify-between flex-wrap gap-2">
-            <p className="text-sm text-white/40">
-              {selectedSession.title} — {formatDateShort(selectedSession.session_date)}
-            </p>
-            <Button variant="secondary" size="sm" onClick={setAllPresent}>
-              تعليم الكل حاضر
-            </Button>
+          <div className="bg-white rounded-2xl shadow-sm p-4 flex flex-wrap gap-3 items-center justify-between">
+            <div className="flex flex-wrap gap-2">
+              {(Object.keys(STATUS_CONFIG) as AttendanceStatus[]).map((status) => (
+                <div
+                  key={status}
+                  className={`px-3 py-1.5 rounded-lg border text-sm font-semibold ${STATUS_CONFIG[status].bg} ${STATUS_CONFIG[status].color}`}
+                >
+                  {STATUS_CONFIG[status].label}: {counts[status]}
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => handleSetAll("present")}
+                className="px-3 py-1.5 bg-success-50 text-success-700 rounded-lg text-sm font-semibold hover:bg-success-100 transition"
+              >
+                تعليم الكل حاضر
+              </button>
+            </div>
           </div>
 
-          <div className="space-y-2">
-            {students.map(student => {
-              const status = localAttendance[student.id] || 'unrecorded'
-              const config = statusConfig[status]
-              return (
-                <Card key={student.id} className="p-3 flex items-center gap-3">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-white truncate">{student.name}</p>
-                    <div className="flex items-center gap-1 mt-0.5">
-                      <Badge color={config.badge}>{config.label}</Badge>
+          <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+            {loadingData ? (
+              <div className="p-8 text-center text-gray-400">
+                <div className="inline-block w-8 h-8 border-3 border-primary-200 border-t-primary-600 rounded-full animate-spin mb-2" />
+                <p className="text-sm">جاري التحميل...</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-gray-100">
+                {students.map((student) => {
+                  const rec = attendanceMap.get(student.id);
+                  const currentStatus = rec?.status || "unrecorded";
+                  const isSaving = savingStudents.has(student.id);
+                  return (
+                    <div
+                      key={student.id}
+                      className="flex items-center justify-between p-3 lg:p-4 hover:bg-gray-50 transition"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-9 h-9 bg-gray-100 rounded-full flex items-center justify-center text-sm font-bold text-gray-500 flex-shrink-0">
+                          {student.name[0]}
+                        </div>
+                        <span className="text-sm font-semibold text-gray-800 truncate">{student.name}</span>
+                        {isSaving && (
+                          <div className="w-4 h-4 border-2 border-primary-200 border-t-primary-600 rounded-full animate-spin" />
+                        )}
+                      </div>
+                      <div className="flex gap-1.5 flex-shrink-0">
+                        {STATUS_ORDER.map((status) => (
+                          <button
+                            key={status}
+                            onClick={() => handleStatusChange(student.id, status)}
+                            disabled={isSaving}
+                            className={`px-2.5 py-1.5 rounded-lg text-xs font-bold border-2 transition disabled:opacity-50 ${
+                              currentStatus === status
+                                ? STATUS_CONFIG[status].bg + " " + STATUS_CONFIG[status].color
+                                : "border-gray-200 text-gray-400 hover:border-gray-300"
+                            }`}
+                          >
+                            {STATUS_CONFIG[status].label}
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex gap-1">
-                    {(['present', 'absent', 'late'] as StatusValue[]).map(s => (
-                      <button
-                        key={s}
-                        onClick={() => setStudentStatus(student.id, s)}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                          status === s
-                            ? s === 'present' ? 'bg-accent/20 text-accent border border-accent/40'
-                              : s === 'absent' ? 'bg-red-500/20 text-red-400 border border-red-500/40'
-                              : 'bg-gold/20 text-gold border border-gold/40'
-                            : 'bg-bg-input text-white/40 border border-transparent hover:bg-bg-hover'
-                        }`}
-                      >
-                        {statusConfig[s].label}
-                      </button>
-                    ))}
-                  </div>
-                </Card>
-              )
-            })}
+                  );
+                })}
+              </div>
+            )}
           </div>
         </>
       )}
+
+      {selectedGroup && !selectedSession && (
+        <div className="bg-white rounded-2xl shadow-sm p-8 text-center text-gray-400">
+          <p className="text-sm">اختر حصة لبدء تسجيل الحضور أو أنشئ حصة جديدة</p>
+        </div>
+      )}
+
+      {!selectedGroup && (
+        <div className="bg-white rounded-2xl shadow-sm p-8 text-center text-gray-400">
+          <p className="text-sm">اختر الصف والمجموعة لبدء تسجيل الحضور</p>
+        </div>
+      )}
     </div>
-  )
+  );
 }

@@ -1,54 +1,104 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import { AuthProvider, useAuth } from './context/AuthContext'
-import Login from './pages/Login'
-import Layout from './components/Layout'
-import Dashboard from './pages/Dashboard'
-import Sessions from './pages/Sessions'
-import Attendance from './pages/Attendance'
-import Students from './pages/Students'
-import HallOfFame from './pages/HallOfFame'
-import CenterExams from './pages/CenterExams'
-import Homework from './pages/Homework'
-import Behavior from './pages/Behavior'
-import Subscriptions from './pages/Subscriptions'
-import Certificates from './pages/Certificates'
-import Settings from './pages/Settings'
-import ParentPortal from './pages/ParentPortal'
-import type { JSX } from 'react'
+import { Suspense } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { lazyWithRetry } from '@/lib/lazyWithRetry';
+import { AuthProvider, useAuth } from '@/context/AuthContext';
+import { SettingsProvider } from '@/context/SettingsContext';
+import { ThemeProvider } from '@/context/ThemeContext';
+import { MonthProvider } from '@/context/MonthContext';
+import LoginPage from '@/pages/LoginPage';
+import AssistantLoginPage from '@/pages/AssistantLoginPage';
+import type { ReactNode } from 'react';
+import ErrorBoundary from '@/components/ui/ErrorBoundary';
+import PageLoader from '@/components/ui/PageLoader';
+import { ToastProvider } from '@/components/ui/Toast';
+import { NotificationProvider } from '@/context/NotificationContext';
+import PWAInstallPrompt from '@/components/ui/PWAInstallPrompt';
 
-function ProtectedRoute({ children }: { children: JSX.Element }) {
-  const { assistant } = useAuth()
-  if (!assistant) return <Navigate to="/login" replace />
-  return <Layout>{children}</Layout>
+const DashboardPage = lazyWithRetry(() => import('@/pages/DashboardPage'));
+const SettingsPage = lazyWithRetry(() => import('@/pages/SettingsPage'));
+const ParentPortal = lazyWithRetry(() => import('@/pages/ParentPortal'));
+const ExamPortalPage = lazyWithRetry(() => import('@/pages/ExamPortalPage'));
+
+function ProtectedRoute({ children }: { children: ReactNode }) {
+  const { role, loading } = useAuth();
+  const location = useLocation();
+  if (loading) return <PageLoader label="جاري التحقق من الجلسة..." />;
+  if (!role) {
+    return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+  return <>{children}</>;
+}
+
+function PublicOnlyRoute({ children }: { children: ReactNode }) {
+  const { role, loading } = useAuth();
+  if (loading) return <PageLoader label="جاري التحقق من الجلسة..." />;
+  if (role) {
+    return <Navigate to="/dashboard" replace />;
+  }
+  return <>{children}</>;
 }
 
 function AppRoutes() {
   return (
     <Routes>
-      <Route path="/login" element={<Login />} />
-      <Route path="/parent/:token" element={<ParentPortal />} />
-      <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-      <Route path="/sessions" element={<ProtectedRoute><Sessions /></ProtectedRoute>} />
-      <Route path="/attendance" element={<ProtectedRoute><Attendance /></ProtectedRoute>} />
-      <Route path="/students" element={<ProtectedRoute><Students /></ProtectedRoute>} />
-      <Route path="/hall-of-fame" element={<ProtectedRoute><HallOfFame /></ProtectedRoute>} />
-      <Route path="/center-exams" element={<ProtectedRoute><CenterExams /></ProtectedRoute>} />
-      <Route path="/homework" element={<ProtectedRoute><Homework /></ProtectedRoute>} />
-      <Route path="/behavior" element={<ProtectedRoute><Behavior /></ProtectedRoute>} />
-      <Route path="/subscriptions" element={<ProtectedRoute><Subscriptions /></ProtectedRoute>} />
-      <Route path="/certificates" element={<ProtectedRoute><Certificates /></ProtectedRoute>} />
-      <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route path="/login" element={<PublicOnlyRoute><LoginPage /></PublicOnlyRoute>} />
+      <Route path="/assistant/login" element={<PublicOnlyRoute><AssistantLoginPage /></PublicOnlyRoute>} />
+      <Route path="/dashboard" element={
+        <ProtectedRoute>
+          <ErrorBoundary>
+            <Suspense fallback={<PageLoader label="جاري تحميل لوحة التحكم..." />}>
+              <DashboardPage />
+            </Suspense>
+          </ErrorBoundary>
+        </ProtectedRoute>
+      } />
+      <Route path="/settings" element={
+        <ProtectedRoute>
+          <ErrorBoundary>
+            <Suspense fallback={<PageLoader label="جاري تحميل الإعدادات..." />}>
+              <SettingsPage />
+            </Suspense>
+          </ErrorBoundary>
+        </ProtectedRoute>
+      } />
+      <Route path="/parent-portal" element={
+        <ErrorBoundary>
+          <Suspense fallback={<PageLoader label="جاري تحميل بوابة ولي الأمر..." />}>
+            <ParentPortal />
+          </Suspense>
+        </ErrorBoundary>
+      } />
+      <Route path="/exam-portal" element={
+        <ErrorBoundary>
+          <Suspense fallback={<PageLoader label="جاري تحميل بوابة الامتحان..." />}>
+            <ExamPortalPage />
+          </Suspense>
+        </ErrorBoundary>
+      } />
+      <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
-  )
+  );
 }
 
 export default function App() {
   return (
+    <ErrorBoundary fullPage>
+    <ThemeProvider>
+    <SettingsProvider>
     <AuthProvider>
-      <BrowserRouter>
+    <MonthProvider>
+    <BrowserRouter>
+    <NotificationProvider>
+      <ToastProvider>
         <AppRoutes />
-      </BrowserRouter>
+        <PWAInstallPrompt />
+      </ToastProvider>
+    </NotificationProvider>
+    </BrowserRouter>
+    </MonthProvider>
     </AuthProvider>
-  )
+    </SettingsProvider>
+    </ThemeProvider>
+    </ErrorBoundary>
+  );
 }

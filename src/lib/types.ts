@@ -390,7 +390,7 @@ export type SubscriptionStatus = 'paid' | 'partial' | 'unpaid' | 'exempt';
 
 // ============ STUDENT STATUS ============
 
-export type StudentStatus = 'active' | 'left' | 'deleted';
+export type StudentStatus = 'active' | 'paused' | 'graduated' | 'withdrawn';
 
 // ============ EXPENSES ============
 

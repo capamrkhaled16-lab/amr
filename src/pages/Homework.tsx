@@ -1,184 +1,223 @@
-import { useState, useEffect, useCallback } from 'react'
-import { useReferenceData } from '../hooks/useData'
-import { supabase } from '../lib/supabase'
-import { PageHeader, Card, Button, Select, Input, Spinner, EmptyState, Badge } from '../components/ui'
-import type { Homework as HomeworkType, HomeworkStatus, Student, Session } from '../types'
-import { formatDateShort, todayISO } from '../lib/utils'
-import { Plus, BookOpen, Pencil, Trash2, Check } from 'lucide-react'
+import { useEffect, useState } from "react";
+import { supabase } from "../lib/supabase";
+import { useToast } from "../lib/toast";
+import type { GradeLevel, Group, Homework as HomeworkType, Session } from "../lib/types";
 
-export default function HomeworkPage() {
-  const { groups, gradeLevels, stages, loading: refLoading } = useReferenceData()
-  const [selectedGroupId, setSelectedGroupId] = useState('')
-  const [homeworks, setHomeworks] = useState<HomeworkType[]>([])
-  const [loading, setLoading] = useState(true)
-  const [showForm, setShowForm] = useState(false)
-  const [editing, setEditing] = useState<HomeworkType | null>(null)
-  const [formTitle, setFormTitle] = useState('')
-  const [formDesc, setFormDesc] = useState('')
-  const [formDueDate, setFormDueDate] = useState(todayISO())
-  const [formSessionId, setFormSessionId] = useState('')
-  const [sessions, setSessions] = useState<Session[]>([])
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState('')
-  const [selectedHwId, setSelectedHwId] = useState('')
-  const [students, setStudents] = useState<Student[]>([])
-  const [hwStatuses, setHwStatuses] = useState<Record<string, string>>({})
-  const [savingStatuses, setSavingStatuses] = useState(false)
+export default function Homework() {
+  const { showSuccess, showWarning } = useToast();
+  const [gradeLevels, setGradeLevels] = useState<GradeLevel[]>([]);
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [homework, setHomework] = useState<HomeworkType[]>([]);
+  const [selectedGroup, setSelectedGroup] = useState("");
+  const [showAdd, setShowAdd] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({ title: "", description: "", session_id: "", due_date: new Date().toISOString().split("T")[0] });
 
   useEffect(() => {
-    if (!selectedGroupId && groups.length > 0) setSelectedGroupId(groups[0].id)
-  }, [groups, selectedGroupId])
+    supabase.from("grade_levels").select("*").order("sort_order").then(({ data }) => {
+      if (data) setGradeLevels(data as GradeLevel[]);
+    });
+    supabase.from("groups").select("*").order("name").then(({ data }) => {
+      if (data) setGroups(data as Group[]);
+    });
+  }, []);
 
-  const groupOptions = stages.flatMap(st =>
-    gradeLevels.filter(gl => gl.stage_id === st.id).flatMap(gl =>
-      groups.filter(g => g.grade_level_id === gl.id).map(g => ({ value: g.id, label: `${st.name} — ${gl.name} — ${g.name}` }))
-    )
-  )
+  const loadSessions = (groupId: string) => {
+    supabase
+      .from("sessions")
+      .select("*")
+      .eq("group_id", groupId)
+      .eq("is_deleted", false)
+      .order("created_at", { ascending: false })
+      .limit(20)
+      .then(({ data }) => setSessions(data as Session[] || []));
+  };
 
-  const fetchHomeworks = useCallback(async () => {
-    if (!selectedGroupId) { setHomeworks([]); setLoading(false); return }
-    setLoading(true)
-    const { data } = await supabase.from('homework').select('*').eq('group_id', selectedGroupId).order('due_date', { ascending: false }).limit(50)
-    setHomeworks((data as HomeworkType[]) || [])
-    setLoading(false)
-  }, [selectedGroupId])
+  const loadHomework = (groupId: string) => {
+    supabase
+      .from("homework")
+      .select("*")
+      .eq("group_id", groupId)
+      .order("due_date", { ascending: false })
+      .then(({ data }) => setHomework(data as HomeworkType[] || []));
+  };
 
-  const fetchSessions = useCallback(async () => {
-    if (!selectedGroupId) { setSessions([]); return }
-    const { data } = await supabase.from('sessions').select('*').eq('group_id', selectedGroupId).eq('is_deleted', false).order('session_date', { ascending: false }).limit(10)
-    setSessions((data as Session[]) || [])
-  }, [selectedGroupId])
-
-  const fetchStudents = useCallback(async () => {
-    if (!selectedGroupId) { setStudents([]); return }
-    const { data } = await supabase.from('students').select('*').eq('group_id', selectedGroupId).eq('is_deleted', false).order('name')
-    setStudents((data as Student[]) || [])
-  }, [selectedGroupId])
-
-  useEffect(() => { fetchHomeworks(); fetchSessions(); fetchStudents() }, [fetchHomeworks, fetchSessions, fetchStudents])
-
-  const fetchStatuses = useCallback(async (hwId: string) => {
-    const { data } = await supabase.from('homework_status').select('*').eq('homework_id', hwId)
-    if (data) {
-      const map: Record<string, string> = {}
-      for (const s of data as HomeworkStatus[]) { map[s.student_id] = s.status }
-      setHwStatuses(map)
+  const handleGroupChange = (groupId: string) => {
+    setSelectedGroup(groupId);
+    if (groupId) {
+      loadSessions(groupId);
+      loadHomework(groupId);
+    } else {
+      setSessions([]);
+      setHomework([]);
     }
-  }, [])
-
-  useEffect(() => { if (selectedHwId) fetchStatuses(selectedHwId) }, [selectedHwId, fetchStatuses])
+  };
 
   const handleSave = async () => {
-    if (!formTitle.trim() || !selectedGroupId || !formSessionId) { setError('يرجى إدخال العنوان واختيار الحصة'); return }
-    setSaving(true); setError('')
-    if (editing) {
-      const { error: e } = await supabase.from('homework').update({
-        title: formTitle.trim(), description: formDesc.trim() || null, due_date: formDueDate,
-      }).eq('id', editing.id)
-      if (e) { setError(e.message); setSaving(false); return }
+    if (!form.title.trim() || !form.session_id || !selectedGroup || saving) return;
+    setSaving(true);
+
+    try {
+      const { data, error } = await supabase
+        .from("homework")
+        .insert({
+          group_id: selectedGroup,
+          session_id: form.session_id,
+          title: form.title.trim(),
+          description: form.description || null,
+          due_date: form.due_date,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      setHomework((prev) => [data as HomeworkType, ...prev]);
+      showSuccess("تم إضافة الواجب");
+      setForm({ title: "", description: "", session_id: "", due_date: new Date().toISOString().split("T")[0] });
+      setShowAdd(false);
+    } catch (err) {
+      console.error("[homework] save error:", err);
+      showWarning("لم يتم حفظ الواجب");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleToggleClose = async (hw: HomeworkType) => {
+    const { error } = await supabase
+      .from("homework")
+      .update({ is_closed: !hw.is_closed })
+      .eq("id", hw.id);
+
+    if (error) {
+      showWarning("لم يتم التحديث");
     } else {
-      const { error: e } = await supabase.from('homework').insert({
-        group_id: selectedGroupId, title: formTitle.trim(), description: formDesc.trim() || null,
-        due_date: formDueDate, session_id: formSessionId,
-      })
-      if (e) { setError(e.message); setSaving(false); return }
+      setHomework((prev) => prev.map((h) => h.id === hw.id ? { ...h, is_closed: !h.is_closed } : h));
+      showSuccess("تم التحديث");
     }
-    await fetchHomeworks()
-    setShowForm(false); setEditing(null); setFormTitle(''); setFormDesc(''); setFormDueDate(todayISO()); setFormSessionId('')
-    setSaving(false)
-  }
+  };
 
-  const handleDelete = async (hw: HomeworkType) => {
-    if (!confirm(`حذف الواجب "${hw.title}"؟`)) return
-    await supabase.from('homework').delete().eq('id', hw.id)
-    await fetchHomeworks()
-  }
-
-  const handleSaveStatuses = async () => {
-    if (!selectedHwId) return
-    setSavingStatuses(true)
-    for (const stu of students) {
-      const status = hwStatuses[stu.id] || 'incomplete'
-      await supabase.from('homework_status').upsert({
-        homework_id: selectedHwId, student_id: stu.id, status, recorded_at: new Date().toISOString(),
-      }, { onConflict: 'homework_id,student_id' })
-    }
-    await fetchStatuses(selectedHwId)
-    setSavingStatuses(false)
-  }
-
-  if (refLoading) return <Spinner label="جارٍ تحميل البيانات..." />
+  const groupName = (gid: string) => groups.find((g) => g.id === gid)?.name || "";
 
   return (
-    <div className="space-y-4 animate-fadeIn">
-      <PageHeader title="الواجبات" action={<Button onClick={() => { setEditing(null); setFormTitle(''); setFormDesc(''); setFormDueDate(todayISO()); setFormSessionId(''); setShowForm(true) }} disabled={!selectedGroupId}><Plus size={18} /> واجب جديد</Button>} />
+    <div className="space-y-4 animate-fade-in">
+      <div className="bg-white rounded-2xl shadow-sm p-4 flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
+        <div className="flex gap-3 flex-1">
+          <select
+            value={selectedGroup}
+            onChange={(e) => handleGroupChange(e.target.value)}
+            className="px-3 py-2 rounded-xl border border-gray-300 text-sm"
+          >
+            <option value="">اختر المجموعة</option>
+            {groups.map((g) => {
+              const gl = gradeLevels.find((x) => x.id === g.grade_level_id);
+              return (
+                <option key={g.id} value={g.id}>
+                  {gl?.name} - {g.name}
+                </option>
+              );
+            })}
+          </select>
+        </div>
+        {selectedGroup && (
+          <button
+            onClick={() => setShowAdd(!showAdd)}
+            className="px-4 py-2 bg-primary-600 text-white rounded-xl hover:bg-primary-700 transition text-sm font-bold"
+          >
+            + واجب جديد
+          </button>
+        )}
+      </div>
 
-      {error && <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-3 text-red-400 text-sm">{error}</div>}
-
-      <Select value={selectedGroupId} onChange={(v) => { setSelectedGroupId(v); setSelectedHwId('') }} options={groupOptions} placeholder="اختر المجموعة" className="min-w-[200px] flex-1" />
-
-      {showForm && (
-        <Card className="p-4 space-y-3 animate-fadeIn">
-          <h3 className="font-semibold text-white">{editing ? 'تعديل واجب' : 'واجب جديد'}</h3>
+      {showAdd && selectedGroup && (
+        <div className="bg-white rounded-2xl shadow-sm p-4 animate-slide-up space-y-3">
+          <h3 className="font-bold text-gray-800">إضافة واجب</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div><label className="block text-xs text-white/50 mb-1.5">العنوان</label><Input value={formTitle} onChange={setFormTitle} placeholder="واجب الفصل الأول" className="w-full" /></div>
-            <div><label className="block text-xs text-white/50 mb-1.5">الحصة</label>
-              <Select value={formSessionId} onChange={setFormSessionId} options={sessions.map(s => ({ value: s.id, label: `${s.title} — ${formatDateShort(s.session_date)}` }))} placeholder="اختر الحصة" className="w-full" />
-            </div>
-            <div><label className="block text-xs text-white/50 mb-1.5">تاريخ التسليم</label><Input type="date" value={formDueDate} onChange={setFormDueDate} dir="ltr" className="w-full" /></div>
-            <div className="sm:col-span-2"><label className="block text-xs text-white/50 mb-1.5">الوصف</label><Input value={formDesc} onChange={setFormDesc} placeholder="تفاصيل الواجب" className="w-full" /></div>
+            <input
+              type="text"
+              placeholder="عنوان الواجب *"
+              value={form.title}
+              onChange={(e) => setForm({ ...form, title: e.target.value })}
+              className="px-3 py-2.5 rounded-xl border border-gray-300 text-sm"
+            />
+            <select
+              value={form.session_id}
+              onChange={(e) => setForm({ ...form, session_id: e.target.value })}
+              className="px-3 py-2.5 rounded-xl border border-gray-300 text-sm"
+            >
+              <option value="">الحصة *</option>
+              {sessions.map((s) => (
+                <option key={s.id} value={s.id}>{s.title} - {s.session_date}</option>
+              ))}
+            </select>
+            <input
+              type="date"
+              value={form.due_date}
+              onChange={(e) => setForm({ ...form, due_date: e.target.value })}
+              className="px-3 py-2.5 rounded-xl border border-gray-300 text-sm"
+            />
+            <input
+              type="text"
+              placeholder="الوصف"
+              value={form.description}
+              onChange={(e) => setForm({ ...form, description: e.target.value })}
+              className="px-3 py-2.5 rounded-xl border border-gray-300 text-sm"
+            />
           </div>
-          <div className="flex gap-2"><Button onClick={handleSave} disabled={saving || !formTitle.trim()}>{saving ? 'جارٍ الحفظ...' : 'حفظ'}</Button><Button variant="ghost" onClick={() => setShowForm(false)}>إلغاء</Button></div>
-        </Card>
-      )}
-
-      {loading ? <Spinner label="جارٍ تحميل الواجبات..." /> : homeworks.length === 0 ? (
-        <EmptyState message="لا توجد واجبات" icon={<BookOpen size={48} />} />
-      ) : (
-        <div className="space-y-2">
-          {homeworks.map(hw => (
-            <Card key={hw.id} className={`p-4 cursor-pointer transition-colors ${selectedHwId === hw.id ? 'border-accent' : 'hover:bg-bg-hover'}`} >
-              <div className="flex items-center gap-3">
-                <div className="flex-1 min-w-0" onClick={() => setSelectedHwId(hw.id === selectedHwId ? '' : hw.id)}>
-                  <p className="font-semibold text-white truncate">{hw.title}</p>
-                  {hw.description && <p className="text-xs text-white/40 truncate mt-0.5">{hw.description}</p>}
-                  <div className="flex items-center gap-2 mt-1"><span className="text-xs text-white/30">تسليم: {formatDateShort(hw.due_date)}</span>{hw.is_closed && <Badge color="red">مغلق</Badge>}</div>
-                </div>
-                <Button variant="ghost" size="sm" onClick={() => { setEditing(hw); setFormTitle(hw.title); setFormDesc(hw.description || ''); setFormDueDate(hw.due_date || todayISO()); setFormSessionId(hw.session_id); setShowForm(true) }}><Pencil size={16} /></Button>
-                <Button variant="danger" size="sm" onClick={() => handleDelete(hw)}><Trash2 size={16} /></Button>
-              </div>
-            </Card>
-          ))}
+          <div className="flex gap-2">
+            <button
+              onClick={handleSave}
+              disabled={saving || !form.title.trim() || !form.session_id}
+              className="px-5 py-2.5 bg-success-600 text-white rounded-xl hover:bg-success-700 transition disabled:opacity-60 text-sm font-bold"
+            >
+              {saving ? "جاري الحفظ..." : "حفظ"}
+            </button>
+            <button
+              onClick={() => setShowAdd(false)}
+              className="px-5 py-2.5 bg-gray-100 text-gray-600 rounded-xl hover:bg-gray-200 transition text-sm font-semibold"
+            >
+              إلغاء
+            </button>
+          </div>
         </div>
       )}
 
-      {selectedHwId && (
-        <Card className="p-4 animate-fadeIn">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold text-white">حالة الواجبات</h3>
-            <Button size="sm" onClick={handleSaveStatuses} disabled={savingStatuses}><Check size={16} /> {savingStatuses ? 'جارٍ الحفظ...' : 'حفظ'}</Button>
-          </div>
-          <div className="space-y-2">
-            {students.map(stu => (
-              <div key={stu.id} className="flex items-center gap-3 py-1.5 border-b border-bg-border last:border-0">
-                <span className="flex-1 text-sm text-white truncate">{stu.name}</span>
-                <div className="flex gap-1">
-                  {['complete', 'incomplete', 'partial'].map(s => (
-                    <button key={s} onClick={() => setHwStatuses(prev => ({ ...prev, [stu.id]: s }))}
-                      className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${
-                        (hwStatuses[stu.id] || 'incomplete') === s
-                          ? s === 'complete' ? 'bg-accent/20 text-accent' : s === 'incomplete' ? 'bg-red-500/20 text-red-400' : 'bg-gold/20 text-gold'
-                          : 'bg-bg-input text-white/30 hover:bg-bg-hover'
-                      }`}>
-                      {s === 'complete' ? 'مكتمل' : s === 'incomplete' ? 'لم يفعل' : 'جزئي'}
-                    </button>
-                  ))}
-                </div>
+      {selectedGroup && (
+        <div className="space-y-2">
+          {homework.map((hw) => (
+            <div key={hw.id} className="bg-white rounded-2xl shadow-sm p-4 flex items-center justify-between">
+              <div className="min-w-0">
+                <h3 className="font-bold text-gray-800 text-sm">{hw.title}</h3>
+                {hw.description && <p className="text-gray-500 text-xs mt-1">{hw.description}</p>}
+                <p className="text-gray-400 text-xs mt-1">تاريخ التسليم: {hw.due_date}</p>
               </div>
-            ))}
-          </div>
-        </Card>
+              <button
+                onClick={() => handleToggleClose(hw)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                  hw.is_closed
+                    ? "bg-gray-100 text-gray-500"
+                    : "bg-success-50 text-success-700"
+                }`}
+              >
+                {hw.is_closed ? "مغلق" : "مفتوح"}
+              </button>
+            </div>
+          ))}
+          {homework.length === 0 && (
+            <div className="bg-white rounded-2xl shadow-sm p-8 text-center text-gray-400 text-sm">
+              لا توجد واجبات لهذه المجموعة
+            </div>
+          )}
+        </div>
+      )}
+
+      {!selectedGroup && (
+        <div className="bg-white rounded-2xl shadow-sm p-8 text-center text-gray-400 text-sm">
+          اختر مجموعة لعرض الواجبات
+        </div>
       )}
     </div>
-  )
+  );
 }

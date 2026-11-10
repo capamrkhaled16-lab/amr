@@ -157,12 +157,14 @@ export function buildPaymentWhatsAppMessage(snapshot: PaymentSnapshot, platformN
 export function buildUnpaidReminderMessage(snapshot: PaymentSnapshot): string {
   const monthLabel = getMonthLabel(snapshot.monthKey);
   return (
-    `🌷 السلام عليكم ورحمة الله وبركاته\n` +
-    `ولي الأمر الكريم،\n` +
-    `نود تذكيركم بالمصروفات الشهرية الخاصة بالطالب/ة ${snapshot.studentName} عن شهر ${monthLabel}.\n` +
-    `💰 إجمالي المصروفات: ${formatCurrency(snapshot.totalFees)} ج.م\n` +
-    `🟩 المدفوع: 0 ج.م\n` +
-    `🤍 شكرًا لثقتكم ودعمكم الدائم، وإذن الله دائمًا نشوف أولادنا في أعلى المراتب.`
+    `السلام عليكم ورحمة الله وبركاته 🌹\n` +
+    `ولي الأمر الكريم، نذكّركم باشتراك الطالب ${snapshot.studentName} عن شهر ${monthLabel}.\n` +
+    `إجمالي الاشتراك: ${formatCurrency(snapshot.totalFees)} جنيه.\n` +
+    `المبلغ المدفوع: 0 جنيه.\n` +
+    `المتبقي: ${formatCurrency(snapshot.totalFees)} جنيه.\n` +
+    `نرجو التكرم بتسوية الاشتراك، مع خالص الشكر والتقدير لتعاونكم.\n` +
+    `مع تحيات\n` +
+    `تيم مستر عمرو خالد – مدرس العلوم`
   );
 }
 

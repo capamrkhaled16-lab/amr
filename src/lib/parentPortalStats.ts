@@ -37,7 +37,7 @@ export interface MonthStats {
 }
 
 const RECORDED_ATTENDANCE_STATUSES = ['present', 'absent', 'excused', 'excused_absence', 'late'];
-const HOMEWORK_CREDIT: Record<string, number> = { complete: 1, late: 0.5, incomplete: 0 };
+const DONE_HOMEWORK_STATUSES = ['done', 'complete', 'completed'];
 const POSITIVE_BEHAVIOR = ['excellent', 'participatory'];
 const WARNING_BEHAVIOR = ['needs_attention', 'disruptive'];
 
@@ -61,8 +61,7 @@ export function computeMonthStats(records: MonthlyRecords, monthKey: string): Mo
   const monthHomework = records.homework.filter((h) => h.due_date && h.due_date.slice(0, 7) === monthKey);
   const homeworkIds = new Set(monthHomework.map((h) => h.id));
   const monthStatuses = records.homeworkStatuses.filter((s) => homeworkIds.has(s.homework_id));
-  const hwEarned = monthStatuses.reduce((sum, s) => sum + (HOMEWORK_CREDIT[s.status] ?? 0), 0);
-  const hwDone = monthStatuses.filter((s) => s.status === 'complete').length;
+  const hwDone = monthStatuses.filter((s) => DONE_HOMEWORK_STATUSES.includes(s.status)).length;
 
   const examPercents: number[] = [];
   for (const grade of records.centerGrades) {
@@ -98,7 +97,7 @@ export function computeMonthStats(records: MonthlyRecords, monthKey: string): Mo
       total: monthStatuses.length,
       done: hwDone,
       incomplete: monthStatuses.length - hwDone,
-      rate: monthStatuses.length > 0 ? Math.round((hwEarned / monthStatuses.length) * 100) : null,
+      rate: percentOf(hwDone, monthStatuses.length),
     },
     exams: {
       count: examPercents.length,
