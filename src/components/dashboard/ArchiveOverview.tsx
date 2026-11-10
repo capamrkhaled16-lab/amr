@@ -97,6 +97,7 @@ type ArchivedStudent = {
   group_id?: string | null;
   total_fees?: number | null;
   paid_fees?: number | null;
+  finance_note?: string | null;
   is_exempt?: boolean | null;
   parent_token?: string | null;
 };
@@ -199,22 +200,18 @@ function currentMonthKey(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
-function buildPaymentReminderLink(s: ArchivedStudent, row: ArchiveRow, paidTotal: number, remaining: number): string {
-  const phone = normalizePhoneForWhatsApp(s.parent_phone ?? s.phone ?? '');
-  if (!phone) return '';
+function buildPaymentReminderMessage(s: ArchivedStudent, row: ArchiveRow, paidTotal: number, remaining: number): string {
   const monthLabel = formatMonthLabel(row.archive_month);
-  const totalFees = s.total_fees ?? 0;
-  const message =
-    `السلام عليكم ورحمة الله وبركاته 🌷\n` +
-    `ولي الأمر الكريم،\n` +
-    `نود تذكير حضرتكم بالمصروفات الشهرية الخاصة بالطالب/ة ${s.name} عن شهر ${monthLabel}.\n` +
-    `💰 المطلوب: ${formatCurrency(totalFees)} ج.م\n` +
-    `💳 المدفوع: ${formatCurrency(paidTotal)} ج.م\n` +
-    `📌 المتبقي: ${formatCurrency(remaining)} ج.م\n` +
-    `شكرًا لثقتكم ودعمكم الدائم 🤍\n` +
-    `وبإذن الله دايمًا نشوف أولادنا في أفضل صورة، ونجاحهم يفرّح قلوبكم قبل قلوبنا 🌟\n` +
-    `تيم مستر عمرو خالد`;
-  return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
+  const lines = [
+    'السلام عليكم ورحمة الله وبركاته،',
+    `ولي أمر الطالب/ة ${s.name} المحترم،`,
+    `نود تذكيركم بالحساب الشهري للطالب/ة عن شهر ${monthLabel}.`,
+    `المطلوب: ${formatCurrency(s.total_fees ?? 0)} ج.م`,
+    `المدفوع: ${formatCurrency(paidTotal)} ج.م`,
+  ];
+  if (!s.is_exempt && remaining > 0) lines.push(`المتبقي: ${formatCurrency(remaining)} ج.م`);
+  lines.push('لأي استفسار يرجى التواصل مع إدارة المركز. شكراً لتعاونكم.', 'تيم مستر عمرو خالد');
+  return lines.join('\n');
 }
 
 function buildParentPortalLink(s: ArchivedStudent, row: ArchiveRow, paidTotal?: number, remaining?: number): string {
@@ -519,6 +516,7 @@ export default function ArchiveOverview({
   const { settings } = useSettings();
   const { showToast } = useToast();
   const [archives, setArchives] = useState<ArchiveRow[]>([]);
+  const [financialExclusions, setFinancialExclusions] = useState<Set<string>>(new Set());
   const archivesReqIdRef = useRef(0);
   const [archiveRuns, setArchiveRuns] = useState<ArchiveRun[]>([]);
   const [carriedBalances, setCarriedBalances] = useState<CarriedOverBalance[]>([]);
@@ -629,6 +627,10 @@ export default function ArchiveOverview({
   const [archiveEditTarget, setArchiveEditTarget] = useState<{ student: ArchivedStudent; row: ArchiveRow } | null>(null);
   const [archiveEditPayments, setArchiveEditPayments] = useState<{ id: string; amount: string; payment_date: string; month_key: string }[]>([]);
   const [archiveEditSaving, setArchiveEditSaving] = useState(false);
+  const [archiveEditFees, setArchiveEditFees] = useState('');
+  const [archiveEditNote, setArchiveEditNote] = useState('');
+  const [archiveEditExempt, setArchiveEditExempt] = useState(false);
+  const [reminderDraft, setReminderDraft] = useState<{ student: ArchivedStudent; message: string; phone: string } | null>(null);
   const [honorBoardOpen, setHonorBoardOpen] = useState(false);
   const [historicalSubmitting, setHistoricalSubmitting] = useState(false);
   const [issueFilter, setIssueFilter] = useState<'all' | 'error' | 'warning'>('all');
@@ -816,9 +818,26 @@ export default function ArchiveOverview({
     }
   }
 
+  function openPaymentReminder(s: ArchivedStudent, row: ArchiveRow, paidTotal: number, remaining: number) {
+    const message = buildPaymentReminderMessage(s, row, paidTotal, remaining);
+    setReminderDraft({ student: s, message, phone: normalizePhoneForWhatsApp(s.parent_phone ?? s.phone ?? '') });
+  }
+
+  async function copyReminderMessage(message: string) {
+    try {
+      await navigator.clipboard.writeText(message);
+      showToast('تم نسخ الرسالة', 'success');
+    } catch {
+      showToast('تعذر نسخ الرسالة من المتصفح', 'error');
+    }
+  }
+
   function startArchiveEdit(student: ArchivedStudent, row: ArchiveRow) {
     const studentPayments = getPaymentsForStudent(row, student.id);
     setArchiveEditTarget({ student, row });
+    setArchiveEditFees(String(student.total_fees ?? 0));
+    setArchiveEditNote(student.finance_note ?? '');
+    setArchiveEditExempt(student.is_exempt ?? false);
     setArchiveEditPayments(studentPayments.map((p) => ({
       id: p.id,
       amount: String(p.amount),
@@ -835,6 +854,11 @@ export default function ArchiveOverview({
   async function saveArchiveEdit() {
     if (!archiveEditTarget || archiveEditSaving) return;
     const { student, row } = archiveEditTarget;
+    const feesValue = parseFloat(archiveEditFees);
+    if (isNaN(feesValue) || feesValue < 0) {
+      showToast('أدخل مبلغاً مطلوباً صحيحاً', 'error');
+      return;
+    }
     setArchiveEditSaving(true);
     const newData = JSON.parse(JSON.stringify(row.archive_data ?? {})) as Record<string, unknown>;
     const allPayments = (newData.payments as ArchivedPayment[] | undefined) ?? [];
@@ -848,37 +872,36 @@ export default function ArchiveOverview({
     const newPaidFees = studentPayments.reduce((sum, p) => sum + (p.amount ?? 0), 0);
     const students = (newData.students as ArchivedStudent[] | undefined) ?? [];
     newData.students = students.map((st) =>
-      st.id === student.id ? { ...st, paid_fees: newPaidFees } : st
+      st.id === student.id
+        ? { ...st, paid_fees: newPaidFees, total_fees: feesValue, is_exempt: archiveEditExempt, finance_note: archiveEditNote.trim() || null }
+        : st
     );
-    // Optimistic: update UI immediately, close modal, show success
+    const { error: archiveError } = await supabase.from('monthly_archives').update({ archive_data: newData }).eq('id', row.id);
+    if (archiveError) {
+      setArchiveEditSaving(false);
+      showToast(`تعذر حفظ التعديل: ${archiveError.message}`, 'error');
+      return;
+    }
+    const paymentErrors: string[] = [];
+    for (const ep of archiveEditPayments) {
+      const updatePayload: Record<string, unknown> = {
+        amount: parseFloat(ep.amount) || 0,
+        payment_date: ep.payment_date,
+        month_key: ep.month_key,
+      };
+      const { error: payError } = await supabase.from('payments').update(updatePayload).eq('id', ep.id);
+      if (payError) paymentErrors.push(payError.message);
+    }
+    setArchiveEditSaving(false);
     patchArchiveRow(row.id, newData);
     invalidateByPrefix('archive_');
-    setArchiveEditSaving(false);
+    void loadArchives({ silent: true });
+    if (paymentErrors.length > 0) {
+      showToast(`تم حفظ الأرشيف لكن تعذر تحديث ${paymentErrors.length} دفعة: ${paymentErrors[0]}`, 'error');
+      return;
+    }
     cancelArchiveEdit();
-    showToast('تم تعديل بيانات الدفع بنجاح', 'success');
-
-    // Background sync to server — silent, no error shown to user
-    void (async () => {
-      try {
-        await supabase.from('monthly_archives').update({ archive_data: newData }).eq('id', row.id);
-      } catch { /* will be retried by realtime sync */ }
-      for (const ep of archiveEditPayments) {
-        try {
-          const { data: existing } = await supabase.from('payments').select('id').eq('id', ep.id).maybeSingle();
-          if (existing) {
-            const updatePayload: Record<string, unknown> = {
-              amount: parseFloat(ep.amount) || 0,
-              payment_date: ep.payment_date,
-            };
-            if (ep.month_key !== row.archive_month) {
-              updatePayload.month_key = ep.month_key;
-            }
-            await supabase.from('payments').update(updatePayload).eq('id', ep.id);
-          }
-        } catch { /* payment may not exist in live table */ }
-      }
-      void loadArchives({ silent: true });
-    })();
+    showToast('تم حفظ التعديلات المالية', 'success');
   }
 
   function patchArchiveRow(rowId: string, newData: Record<string, unknown>) {
@@ -914,6 +937,23 @@ export default function ArchiveOverview({
     const rand = Math.random().toString(36).slice(2, 10);
     const rand2 = Math.random().toString(36).slice(2, 10);
     return `${ts}-${rand}-${rand2}`;
+  }
+
+  async function excludeStudentFromAccounts(row: ArchiveRow, student: ArchivedStudent) {
+    const monthLabel = formatMonthLabel(row.archive_month);
+    if (!window.confirm(`حذف ${student.name} من حسابات ${monthLabel} فقط؟\nالطالب سيظل نشطاً في المنصة، وتبقى مدفوعاته وسجلاته كما هي.`)) return;
+    const { error } = await supabase.from('archive_financial_exclusions').insert({
+      student_id: student.id,
+      month_key: row.archive_month,
+      reason: 'حذف من الحسابات',
+    });
+    if (error) {
+      showToast(`تعذر الحذف من الحسابات: ${error.message}`, 'error');
+      return;
+    }
+    setFinancialExclusions((prev) => new Set(prev).add(`${student.id}|${row.archive_month}`));
+    invalidateByPrefix('archive_');
+    showToast(`تم حذف ${student.name} من حسابات ${monthLabel}`, 'success');
   }
 
   function startInlineEdit(student: ArchivedStudent) {
@@ -1043,12 +1083,13 @@ export default function ArchiveOverview({
     // Otherwise fetch from network
     if (!hasCached && !opts?.silent) setLoading(true);
     try {
-      const [archRes, runsRes, carriedRes, examsRes, studentsRes] = await Promise.all([
+      const [archRes, runsRes, carriedRes, examsRes, studentsRes, exclRes] = await Promise.all([
         supabase.from('monthly_archives').select('*').order('archive_month', { ascending: false }),
         supabase.from('archive_runs').select('*').order('archive_month', { ascending: false }).limit(10),
         supabase.from('carried_over_balances').select('*').order('created_at', { ascending: false }).limit(50),
         supabase.from('center_exams').select('id, title, max_score, pass_score, category, group_id'),
         supabase.from('students').select('id, name, phone, parent_phone, parent_token'),
+        supabase.from('archive_financial_exclusions').select('student_id, month_key').is('restored_at', null),
       ]);
       if (reqId !== archivesReqIdRef.current) return;
       if (archRes.data) {
@@ -1068,6 +1109,9 @@ export default function ArchiveOverview({
           map.set(s.id, { name: s.name, phone: s.phone, parent_phone: s.parent_phone, parent_token: s.parent_token });
         }
         setLiveStudentMap(map);
+      }
+      if (exclRes.data) {
+        setFinancialExclusions(new Set((exclRes.data as { student_id: string; month_key: string }[]).map((e) => `${e.student_id}|${e.month_key}`)));
       }
       // Persist to cache — only if we got real data back
       if (archRes.data && archRes.data.length > 0) {
@@ -1852,8 +1896,12 @@ export default function ArchiveOverview({
     return getPaymentsForStudent(row, studentId).reduce((s, p) => s + (p.amount ?? 0), 0);
   }
 
+  function isFinanciallyExcluded(row: ArchiveRow, s: ArchivedStudent): boolean {
+    return financialExclusions.has(`${s.id}|${row.archive_month}`);
+  }
+
   function isStudentPaid(row: ArchiveRow, s: ArchivedStudent): boolean {
-    if (s.is_exempt) return true;
+    if (s.is_exempt || isFinanciallyExcluded(row, s)) return true;
     if ((s.total_fees ?? 0) <= 0) return true;
     return getPaidAmountForStudent(row, s.id) >= (s.total_fees ?? 0);
   }
@@ -2392,7 +2440,7 @@ export default function ArchiveOverview({
                             .filter((x) => x.totalSessions > 1)
                             .sort((a, b) => b.totalSessions - a.totalSessions);
                           if (multiSessionStudents.length === 0) return null;
-                          const unpaidCount = multiSessionStudents.filter((x) => !x.student.is_exempt && (x.student.total_fees ?? 0) > 0 && x.paidTotal < (x.student.total_fees ?? 0)).length;
+                          const unpaidCount = multiSessionStudents.filter((x) => !x.student.is_exempt && !isFinanciallyExcluded(row, x.student) && (x.student.total_fees ?? 0) > 0 && x.paidTotal < (x.student.total_fees ?? 0)).length;
                           return (
                             <div className="glass-light rounded-xl p-4 space-y-3 border border-sky-500/15">
                               <div className="flex items-center justify-between">
@@ -2409,7 +2457,7 @@ export default function ArchiveOverview({
                               </p>
                               <div className="space-y-1.5 max-h-52 overflow-y-auto">
                                 {multiSessionStudents.map((x) => {
-                                  const remaining = x.student.is_exempt ? 0 : Math.max(0, (x.student.total_fees ?? 0) - x.paidTotal);
+                                  const remaining = x.student.is_exempt || isFinanciallyExcluded(row, x.student) ? 0 : Math.max(0, (x.student.total_fees ?? 0) - x.paidTotal);
                                   const isPaid = x.student.is_exempt || remaining <= 0;
                                   return (
                                     <div key={x.student.id} className="flex items-center justify-between bg-white/[0.02] rounded-lg px-3 py-2 border border-white/[0.04]">
@@ -2527,7 +2575,7 @@ export default function ArchiveOverview({
                                   const grades = getGradesForStudent(row, s.id);
                                   const homework = getHomeworkForStudent(row, s.id);
                                   const behavior = getBehaviorForStudent(row, s.id);
-                                  const remaining = s.is_exempt ? 0 : Math.max(0, (s.total_fees ?? 0) - paidTotal);
+                                  const remaining = s.is_exempt || isFinanciallyExcluded(row, s) ? 0 : Math.max(0, (s.total_fees ?? 0) - paidTotal);
                                   const studentRank = rowRankings.get(s.id);
                                   return (
                                     <div key={s.id} className="glass-light rounded-xl p-3 space-y-2">
@@ -2600,20 +2648,16 @@ export default function ArchiveOverview({
                                           )}
                                         </div>
                                         <div className="flex items-center gap-1.5 flex-shrink-0 flex-wrap">
-                                          {(s.phone || s.parent_phone) && (() => {
-                                            const payLink = buildPaymentReminderLink(s, row, paidTotal, remaining);
-                                            return payLink ? (
-                                              <a
-                                                href={payLink}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="p-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 transition"
-                                                title="تذكير بالمصروفات"
-                                              >
-                                                <Wallet size={12} />
-                                              </a>
-                                            ) : null;
-                                          })()}
+                                          {(s.phone || s.parent_phone) && (
+                                            <button
+                                              onClick={() => openPaymentReminder(s, row, paidTotal, remaining)}
+                                              className="p-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 transition"
+                                              title="إشعار تذكير"
+                                              aria-label="إشعار تذكير"
+                                            >
+                                              <Wallet size={12} />
+                                            </button>
+                                          )}
                                           {(s.phone || s.parent_phone) && (() => {
                                             const portalLink = buildParentPortalLink(s, row, paidTotal, remaining);
                                             return portalLink ? (
@@ -2654,6 +2698,16 @@ export default function ArchiveOverview({
                                               title="تعديل المصروفات والمدفوع"
                                             >
                                               <Edit2 size={12} />
+                                            </button>
+                                          )}
+                                          {isMaster && !row.is_locked && !isFinanciallyExcluded(row, s) && (
+                                            <button
+                                              onClick={() => void excludeStudentFromAccounts(row, s)}
+                                              className="p-1.5 rounded-lg hover:bg-red-500/10 text-slate-400 hover:text-red-400 transition"
+                                              title="حذف من الحسابات"
+                                              aria-label="حذف من الحسابات"
+                                            >
+                                              <Trash2 size={12} />
                                             </button>
                                           )}
 
@@ -2944,7 +2998,7 @@ export default function ArchiveOverview({
           const grades = getGradesForStudent(row, s.id);
           const homework = getHomeworkForStudent(row, s.id);
           const behavior = getBehaviorForStudent(row, s.id);
-          const remaining = s.is_exempt ? 0 : Math.max(0, (s.total_fees ?? 0) - paidTotal);
+          const remaining = s.is_exempt || isFinanciallyExcluded(row, s) ? 0 : Math.max(0, (s.total_fees ?? 0) - paidTotal);
           const detailRank = getOfficialRankingsStatic(row).get(s.id);
           return (
             <>
@@ -2984,20 +3038,16 @@ export default function ArchiveOverview({
                       {s.is_exempt && <span className="text-emerald-400 font-bold">معفى من الرسوم</span>}
                     </div>
                   </div>
-                {(s.phone || s.parent_phone) && (() => {
-                  const payLink = buildPaymentReminderLink(s, row, paidTotal, remaining);
-                  return payLink ? (
-                    <a
-                      href={payLink}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="p-2.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 transition flex-shrink-0"
-                      title="تذكير بالمصروفات"
-                    >
-                      <Wallet size={18} />
-                    </a>
-                  ) : null;
-                })()}
+                {(s.phone || s.parent_phone) && (
+                  <button
+                    onClick={() => openPaymentReminder(s, row, paidTotal, remaining)}
+                    className="p-2.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 transition flex-shrink-0"
+                    title="إشعار تذكير"
+                    aria-label="إشعار تذكير"
+                  >
+                    <Wallet size={18} />
+                  </button>
+                )}
                 {(s.phone || s.parent_phone) && (() => {
                   const portalLink = buildParentPortalLink(s, row, paidTotal, remaining);
                   return portalLink ? (
@@ -3988,7 +4038,7 @@ export default function ArchiveOverview({
                         const grp = allGroups.find((g) => g.id === s.group_id);
                         const gd = grp as (Group & { grade_level?: { name?: string; stage?: { name?: string } } }) | undefined;
                         const studentPaid = getPaidAmountForStudent(studentListModal.row, s.id);
-                        const remaining = s.is_exempt ? 0 : Math.max(0, (s.total_fees ?? 0) - studentPaid);
+                        const remaining = s.is_exempt || isFinanciallyExcluded(studentListModal.row, s) ? 0 : Math.max(0, (s.total_fees ?? 0) - studentPaid);
                         return (
                           <tr key={s.id} className="hover:bg-white/[0.03] transition">
                             <td className="px-4 py-3 text-slate-500 text-xs">{idx + 1}</td>
@@ -4039,6 +4089,31 @@ export default function ArchiveOverview({
         })()}
       </Modal>
 
+      <Modal
+        open={!!reminderDraft}
+        onClose={() => setReminderDraft(null)}
+        title={`إشعار تذكير — ${reminderDraft?.student.name ?? ''}`}
+        size="md"
+      >
+        {reminderDraft && (
+          <div className="space-y-4">
+            <textarea readOnly rows={9} value={reminderDraft.message} className={inputCls} />
+            {!reminderDraft.phone && (
+              <p className="text-xs text-amber-400">لا يوجد رقم هاتف لولي الأمر، استخدم زر النسخ ثم أرسل الرسالة يدوياً.</p>
+            )}
+            <div className="flex gap-3 justify-end flex-wrap">
+              <Button variant="secondary" onClick={() => void copyReminderMessage(reminderDraft.message)}>نسخ الرسالة</Button>
+              <Button
+                disabled={!reminderDraft.phone}
+                onClick={() => window.open(`https://wa.me/${reminderDraft.phone}?text=${encodeURIComponent(reminderDraft.message)}`, '_blank', 'noopener,noreferrer')}
+              >
+                فتح واتساب
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
       {/* Archive Payment Edit Modal — direct payment editing */}
       <Modal
         open={!!archiveEditTarget}
@@ -4049,7 +4124,7 @@ export default function ArchiveOverview({
         {archiveEditTarget && (() => {
           const { student, row } = archiveEditTarget;
           const grp = allGroups.find((g) => g.id === student.group_id);
-          const totalFees = student.total_fees ?? 0;
+          const totalFees = parseFloat(archiveEditFees) || 0;
           const totalAfterEdit = archiveEditPayments.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
           const remainingAfter = Math.max(0, totalFees - totalAfterEdit);
           const statusAfter = student.is_exempt ? 'معفى' : totalAfterEdit >= totalFees ? 'مسدد بالكامل' : totalAfterEdit > 0 ? 'دفع جزئي' : 'غير مسدد';
@@ -4061,6 +4136,22 @@ export default function ArchiveOverview({
                 <div className="flex justify-between"><span className="text-slate-400">الشهر:</span><span className="font-bold text-white">{formatMonthLabel(row.archive_month)}</span></div>
                 <div className="flex justify-between"><span className="text-slate-400">المجموعة:</span><span className="font-bold text-white">{grp?.name ?? '—'}</span></div>
                 <div className="flex justify-between"><span className="text-slate-400">إجمالي المطلوب:</span><span className="font-bold text-white">{formatCurrency(totalFees)} ج.م</span></div>
+              </div>
+
+              <div className="glass-light rounded-xl p-3 space-y-3 border border-white/5">
+                <p className="text-sm font-bold text-white">البيانات المالية للشهر</p>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">المبلغ المطلوب (ج.م)</label>
+                  <input type="number" min="0" value={archiveEditFees} onChange={(e) => setArchiveEditFees(e.target.value)} className={inputCls} />
+                </div>
+                <label className="flex items-center gap-2 text-xs text-slate-300">
+                  <input type="checkbox" checked={archiveEditExempt} onChange={(e) => setArchiveEditExempt(e.target.checked)} />
+                  معفى من الرسوم لهذا الشهر
+                </label>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">ملاحظات مالية</label>
+                  <textarea rows={2} value={archiveEditNote} onChange={(e) => setArchiveEditNote(e.target.value)} className={inputCls} />
+                </div>
               </div>
 
               {archiveEditPayments.length === 0 ? (
