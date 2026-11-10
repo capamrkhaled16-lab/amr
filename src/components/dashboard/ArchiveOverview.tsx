@@ -201,22 +201,17 @@ function currentMonthKey(): string {
 }
 
 function buildPaymentReminderMessage(s: ArchivedStudent, row: ArchiveRow, paidTotal: number, remaining: number): string {
-  if (s.is_exempt || remaining <= 0) return '';
   const monthLabel = formatMonthLabel(row.archive_month);
-  return [
-    'السلام عليكم ورحمة الله وبركاته 🌹',
-    '',
-    `ولي الأمر الكريم، نذكّركم باشتراك الطالب ${s.name} عن شهر ${monthLabel}.`,
-    '',
-    `إجمالي الاشتراك: ${formatCurrency(s.total_fees ?? 0)} جنيه.`,
-    `المبلغ المدفوع: ${formatCurrency(paidTotal)} جنيه.`,
-    `المتبقي: ${formatCurrency(remaining)} جنيه.`,
-    '',
-    'نرجو التكرم بتسوية الاشتراك، مع خالص الشكر والتقدير لتعاونكم.',
-    '',
-    'مع تحيات',
-    'تيم مستر عمرو خالد – مدرس العلوم',
-  ].join('\n');
+  const lines = [
+    'السلام عليكم ورحمة الله وبركاته،',
+    `ولي أمر الطالب/ة ${s.name} المحترم،`,
+    `نود تذكيركم بالحساب الشهري للطالب/ة عن شهر ${monthLabel}.`,
+    `المطلوب: ${formatCurrency(s.total_fees ?? 0)} ج.م`,
+    `المدفوع: ${formatCurrency(paidTotal)} ج.م`,
+  ];
+  if (!s.is_exempt && remaining > 0) lines.push(`المتبقي: ${formatCurrency(remaining)} ج.م`);
+  lines.push('لأي استفسار يرجى التواصل مع إدارة المركز. شكراً لتعاونكم.', 'تيم مستر عمرو خالد');
+  return lines.join('\n');
 }
 
 function buildParentPortalLink(s: ArchivedStudent, row: ArchiveRow, paidTotal?: number, remaining?: number): string {
@@ -3053,16 +3048,6 @@ export default function ArchiveOverview({
                     <Wallet size={18} />
                   </button>
                 )}
-                {isMaster && !row.is_locked && !isFinanciallyExcluded(row, s) && (
-                  <button
-                    onClick={() => void excludeStudentFromAccounts(row, s)}
-                    className="p-2.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 transition flex-shrink-0"
-                    title="حذف من الحسابات"
-                    aria-label="حذف من الحسابات"
-                  >
-                    <Trash2 size={18} />
-                  </button>
-                )}
                 {(s.phone || s.parent_phone) && (() => {
                   const portalLink = buildParentPortalLink(s, row, paidTotal, remaining);
                   return portalLink ? (
@@ -4008,7 +3993,7 @@ export default function ArchiveOverview({
 
               {(() => {
                 const filteredCollected = filtered.reduce((sum, s) => sum + getPaidAmountForStudent(studentListModal.row, s.id), 0);
-                const filteredRemaining = filtered.reduce((sum, s) => sum + (s.is_exempt || isFinanciallyExcluded(studentListModal.row, s) ? 0 : Math.max(0, (s.total_fees ?? 0) - getPaidAmountForStudent(studentListModal.row, s.id))), 0);
+                const filteredRemaining = filtered.reduce((sum, s) => sum + (s.is_exempt ? 0 : Math.max(0, (s.total_fees ?? 0) - getPaidAmountForStudent(studentListModal.row, s.id))), 0);
                 const hasFilter = modalStageFilter !== 'all' || modalGradeFilter !== 'all';
                 return (
                   <div className={`glass-light rounded-xl p-3 flex items-center justify-between ${hasFilter ? 'border border-sky-500/20' : ''}`}>
@@ -4090,22 +4075,6 @@ export default function ArchiveOverview({
                                     <Edit2 size={12} /> تعديل
                                   </button>
                                 )}
-                                {isMaster && !studentListModal.row.is_locked && !isFinanciallyExcluded(studentListModal.row, s) && (
-                                  <button
-                                    onClick={() => void excludeStudentFromAccounts(studentListModal.row, s)}
-                                    className="inline-flex items-center gap-1 text-[11px] font-bold text-red-400 hover:text-red-300 bg-red-500/10 hover:bg-red-500/20 px-2.5 py-1 rounded-lg transition"
-                                  >
-                                    <Trash2 size={12} /> حذف من الحسابات
-                                  </button>
-                                )}
-                                {(s.phone || s.parent_phone) && (
-                                  <button
-                                    onClick={() => openPaymentReminder(s, studentListModal.row, studentPaid, remaining)}
-                                    className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-400 hover:text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 px-2.5 py-1 rounded-lg transition"
-                                  >
-                                    <Wallet size={12} /> إشعار تذكير
-                                  </button>
-                                )}
                               </div>
                             </td>
                           </tr>
@@ -4128,15 +4097,10 @@ export default function ArchiveOverview({
       >
         {reminderDraft && (
           <div className="space-y-4">
-            {reminderDraft.message ? (
-              <textarea readOnly rows={9} value={reminderDraft.message} className={inputCls} />
-            ) : (
-              <p className="text-sm text-emerald-400">هذا الطالب مسدّد بالكامل لهذا الشهر أو معفى، ولا يوجد مبلغ متبقٍ للتذكير به.</p>
-            )}
+            <textarea readOnly rows={9} value={reminderDraft.message} className={inputCls} />
             {!reminderDraft.phone && (
               <p className="text-xs text-amber-400">لا يوجد رقم هاتف لولي الأمر، استخدم زر النسخ ثم أرسل الرسالة يدوياً.</p>
             )}
-            {reminderDraft.message && (
             <div className="flex gap-3 justify-end flex-wrap">
               <Button variant="secondary" onClick={() => void copyReminderMessage(reminderDraft.message)}>نسخ الرسالة</Button>
               <Button
@@ -4146,7 +4110,6 @@ export default function ArchiveOverview({
                 فتح واتساب
               </Button>
             </div>
-            )}
           </div>
         )}
       </Modal>
@@ -4177,12 +4140,6 @@ export default function ArchiveOverview({
 
               <div className="glass-light rounded-xl p-3 space-y-3 border border-white/5">
                 <p className="text-sm font-bold text-white">البيانات المالية للشهر</p>
-              {(() => {
-                const modalPaid = archiveEditPayments.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
-                const modalFees = parseFloat(archiveEditFees) || 0;
-                const status = archiveEditExempt ? 'معفى من الرسوم' : modalFees > 0 && modalPaid >= modalFees ? 'مسدّد بالكامل' : modalPaid > 0 ? 'مسدّد جزئياً' : 'غير مسدّد';
-                return <p className="text-xs text-slate-400">حالة السداد: <span className="font-bold text-white">{status}</span></p>;
-              })()}
                 <div>
                   <label className="block text-xs text-slate-400 mb-1">المبلغ المطلوب (ج.م)</label>
                   <input type="number" min="0" value={archiveEditFees} onChange={(e) => setArchiveEditFees(e.target.value)} className={inputCls} />
