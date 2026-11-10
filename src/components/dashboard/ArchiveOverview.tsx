@@ -3048,6 +3048,16 @@ export default function ArchiveOverview({
                     <Wallet size={18} />
                   </button>
                 )}
+                {isMaster && !row.is_locked && !isFinanciallyExcluded(row, s) && (
+                  <button
+                    onClick={() => void excludeStudentFromAccounts(row, s)}
+                    className="p-2.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 transition flex-shrink-0"
+                    title="حذف من الحسابات"
+                    aria-label="حذف من الحسابات"
+                  >
+                    <Trash2 size={18} />
+                  </button>
+                )}
                 {(s.phone || s.parent_phone) && (() => {
                   const portalLink = buildParentPortalLink(s, row, paidTotal, remaining);
                   return portalLink ? (
