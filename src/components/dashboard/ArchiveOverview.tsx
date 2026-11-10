@@ -4137,7 +4137,6 @@ export default function ArchiveOverview({
               <p className="text-xs text-amber-400">لا يوجد رقم هاتف لولي الأمر، استخدم زر النسخ ثم أرسل الرسالة يدوياً.</p>
             )}
             {reminderDraft.message && (
-            {reminderDraft.message && (
             <div className="flex gap-3 justify-end flex-wrap">
               <Button variant="secondary" onClick={() => void copyReminderMessage(reminderDraft.message)}>نسخ الرسالة</Button>
               <Button
@@ -4147,6 +4146,7 @@ export default function ArchiveOverview({
                 فتح واتساب
               </Button>
             </div>
+            )}
           </div>
         )}
       </Modal>
