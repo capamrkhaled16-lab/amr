@@ -39,6 +39,8 @@ import {
   ChevronLeft,
   ChevronRight,
   SkipForward,
+  Copy,
+  MoreVertical,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
@@ -199,12 +201,10 @@ function currentMonthKey(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
-function buildPaymentReminderLink(s: ArchivedStudent, row: ArchiveRow, paidTotal: number, remaining: number): string {
-  const phone = normalizePhoneForWhatsApp(s.parent_phone ?? s.phone ?? '');
-  if (!phone) return '';
+function buildPaymentReminderText(s: ArchivedStudent, row: ArchiveRow, paidTotal: number, remaining: number): string {
   const monthLabel = formatMonthLabel(row.archive_month);
   const totalFees = s.total_fees ?? 0;
-  const message =
+  return (
     `السلام عليكم ورحمة الله وبركاته 🌹\n` +
     `ولي الأمر الكريم، نذكّركم باشتراك الطالب ${s.name} عن شهر ${monthLabel}.\n` +
     `إجمالي الاشتراك: ${formatCurrency(totalFees)} جنيه.\n` +
@@ -212,7 +212,14 @@ function buildPaymentReminderLink(s: ArchivedStudent, row: ArchiveRow, paidTotal
     `المتبقي: ${formatCurrency(remaining)} جنيه.\n` +
     `نرجو التكرم بتسوية الاشتراك، مع خالص الشكر والتقدير لتعاونكم.\n` +
     `مع تحيات\n` +
-    `تيم مستر عمرو خالد – مدرس العلوم`;
+    `تيم مستر عمرو خالد – مدرس العلوم`
+  );
+}
+
+function buildPaymentReminderLink(s: ArchivedStudent, row: ArchiveRow, paidTotal: number, remaining: number): string {
+  const phone = normalizePhoneForWhatsApp(s.parent_phone ?? s.phone ?? '');
+  if (!phone) return '';
+  const message = buildPaymentReminderText(s, row, paidTotal, remaining);
   return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
 }
 
@@ -620,6 +627,7 @@ export default function ArchiveOverview({
   const [modalStudentSearch, setModalStudentSearch] = useState('');
   const [modalStageFilter, setModalStageFilter] = useState<string>('all');
   const [modalGradeFilter, setModalGradeFilter] = useState<string>('all');
+  const [modalActionMenu, setModalActionMenu] = useState<string | null>(null);
   const [inlineEditStudentId, setInlineEditStudentId] = useState<string | null>(null);
   const [inlineEditFees, setInlineEditFees] = useState('');
   const [inlineEditPaid, setInlineEditPaid] = useState('');
@@ -4039,7 +4047,7 @@ export default function ArchiveOverview({
                               {isPaid ? `${formatCurrency(studentPaid)} ج.م` : `${formatCurrency(remaining)} ج.م`}
                             </td>
                             <td className="px-4 py-3 text-center">
-                              <div className="flex items-center justify-center gap-1.5">
+                              <div className="flex items-center justify-center gap-1.5 flex-wrap">
                                 <button
                                   onClick={() => setDetailStudent({ student: s, row: studentListModal.row })}
                                   className="inline-flex items-center gap-1 text-[11px] font-bold text-sky-400 hover:text-sky-300 bg-sky-500/10 hover:bg-sky-500/20 px-2.5 py-1 rounded-lg transition"
@@ -4054,6 +4062,47 @@ export default function ArchiveOverview({
                                     <Edit2 size={12} /> تعديل
                                   </button>
                                 )}
+                                {!isPaid && remaining > 0 && !s.is_exempt && (() => {
+                                  const reminderText = buildPaymentReminderText(s, studentListModal.row, studentPaid, remaining);
+                                  const reminderLink = buildPaymentReminderLink(s, studentListModal.row, studentPaid, remaining);
+                                  return (
+                                    <>
+                                      {reminderLink && (
+                                        <a
+                                          href={reminderLink}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-400 hover:text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 px-2.5 py-1 rounded-lg transition"
+                                        >
+                                          <MessageCircle size={12} /> تذكير
+                                        </a>
+                                      )}
+                                      <button
+                                        onClick={() => {
+                                          navigator.clipboard?.writeText(reminderText).then(
+                                            () => showToast('تم نسخ نص التذكير', 'success'),
+                                            () => showToast('تعذّر نسخ النص', 'error')
+                                          );
+                                        }}
+                                        className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-300 hover:text-white bg-slate-500/10 hover:bg-slate-500/20 px-2.5 py-1 rounded-lg transition"
+                                      >
+                                        <Copy size={12} /> نسخ
+                                      </button>
+                                    </>
+                                  );
+                                })()}
+                                {isMaster && !isPaid && !studentListModal.row.is_locked && (() => {
+                                  const isExcluded = getExcludedStudentIds(studentListModal.row).has(s.id);
+                                  return (
+                                    <button
+                                      onClick={() => toggleMonthExclusion(studentListModal.row, s.id)}
+                                      className={`inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-lg transition ${isExcluded ? 'text-amber-300 hover:text-amber-200 bg-amber-500/10 hover:bg-amber-500/20' : 'text-red-300 hover:text-red-200 bg-red-500/10 hover:bg-red-500/20'}`}
+                                      title={isExcluded ? 'إلغاء الاستثناء وإعادة الطالب للقائمة' : 'استثناء الطالب من قائمة غير المسددين لهذا الشهر'}
+                                    >
+                                      <SkipForward size={12} /> {isExcluded ? 'إلغاء الاستثناء' : 'حذف من الحسابات'}
+                                    </button>
+                                  );
+                                })()}
                               </div>
                             </td>
                           </tr>
