@@ -37,6 +37,7 @@ export default function StudentManager({
   const { showToast } = useToast();
   const [monthlyPaidMap, setMonthlyPaidMap] = useState<Map<string, number>>(new Map());
   const [addOpen, setAddOpen] = useState(false);
+  const [adding, setAdding] = useState(false);
   const [editTarget, setEditTarget] = useState<Student | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Student | null>(null);
   const [leftTarget, setLeftTarget] = useState<Student | null>(null);
@@ -183,75 +184,92 @@ export default function StudentManager({
   }
 
   async function handleAdd() {
-    if (!form.name.trim()) return;
-    const dup = await checkDuplicateStudentName(form.name.trim(), groupId);
-    if (dup) { setNameError('هذا الاسم مسجل بالفعل في هذه المجموعة والمرحلة. برجاء اختيار اسم آخر.'); return; }
-    setNameError('');
-    const joinDateStr = joinDate || new Date().toISOString().slice(0, 10);
-    const enrollTimestamp = new Date(joinDateStr + 'T' + new Date().toTimeString().slice(0, 8)).toISOString();
-    const joinMonthKey = enrollTimestamp.slice(0, 7);
-    const joinDay = new Date(joinDateStr).getDate();
-    const isLateJoiner = joinDay >= 20 && feeMode === 'full';
-    const effectiveFeeMode = feeMode === 'full' && joinDay >= 20 ? 'deferred' : feeMode;
-    const totalFees = effectiveFeeMode === 'deferred' ? 0 : (parseFloat(form.total_fees) || 0);
-    const paidFees = markAsPaid ? totalFees : 0;
-    const modeNote = effectiveFeeMode === 'deferred'
-      ? ' — تم ترحيل مصاريف الشهر للشهر التالي (انضمام متأخر)'
-      : effectiveFeeMode === 'pro_rata'
-      ? ' — احتساب بنظام الحصص الفعلية'
-      : '';
-    showToast(`تمت إضافة الطالب بنجاح — تاريخ الانضمام: ${enrollTimestamp.slice(0, 10)}${modeNote}`, 'success');
-    resetForm();
-    setAddOpen(false);
-    createStudent({
-      group_id: groupId,
-      name: form.name.trim(),
-      phone: form.phone.trim() || null,
-      parent_phone: form.parent_phone.trim() || null,
-      gender: form.gender,
-      total_fees: totalFees,
-      paid_fees: paidFees,
-      discount_type: form.discount_type || null,
-      discount_amount: parseFloat(form.discount_amount) || 0,
-      enrollment_date: enrollTimestamp,
-      fee_mode: effectiveFeeMode,
-      join_month_key: joinMonthKey,
-      pro_rata_sessions: 0,
-    }).then(async (student) => {
-      if (!student) { onRefresh(); return; }
+    if (!form.name.trim() || adding) return;
+    setAdding(true);
+    try {
+      const dup = await checkDuplicateStudentName(form.name.trim(), groupId);
+      if (dup) { setNameError('هذا الاسم مسجل بالفعل في هذه المجموعة والمرحلة. برجاء اختيار اسم آخر.'); return; }
+      setNameError('');
+      const joinDateStr = joinDate || new Date().toISOString().slice(0, 10);
+      const enrollTimestamp = new Date(joinDateStr + 'T' + new Date().toTimeString().slice(0, 8)).toISOString();
+      const joinMonthKey = enrollTimestamp.slice(0, 7);
+      const joinDay = new Date(joinDateStr).getDate();
+      const isLateJoiner = joinDay >= 20 && feeMode === 'full';
+      const effectiveFeeMode = feeMode === 'full' && joinDay >= 20 ? 'deferred' : feeMode;
+      const totalFees = effectiveFeeMode === 'deferred' ? 0 : (parseFloat(form.total_fees) || 0);
+      const paidFees = markAsPaid ? totalFees : 0;
+      const modeNote = effectiveFeeMode === 'deferred'
+        ? ' — تم ترحيل مصاريف الشهر للشهر التالي (انضمام متأخر)'
+        : effectiveFeeMode === 'pro_rata'
+        ? ' — احتساب بنظام الحصص الفعلية'
+        : '';
+      const student = await createStudent({
+        group_id: groupId,
+        name: form.name.trim(),
+        phone: form.phone.trim() || null,
+        parent_phone: form.parent_phone.trim() || null,
+        gender: form.gender,
+        total_fees: totalFees,
+        paid_fees: paidFees,
+        discount_type: form.discount_type || null,
+        discount_amount: parseFloat(form.discount_amount) || 0,
+        enrollment_date: enrollTimestamp,
+        fee_mode: effectiveFeeMode,
+        join_month_key: joinMonthKey,
+        pro_rata_sessions: 0,
+      });
+      if (!student) {
+        showToast('تعذّر إضافة الطالب — لم يتم الحفظ في قاعدة البيانات. أعد المحاولة.', 'error');
+        return;
+      }
+      showToast(`تمت إضافة الطالب بنجاح — تاريخ الانضمام: ${enrollTimestamp.slice(0, 10)}${modeNote}`, 'success');
+      resetForm();
+      setAddOpen(false);
       try {
         const backfilled = await backfillAttendanceForNewStudent(student.id, groupId, enrollTimestamp);
         if (backfilled > 0) {
-          showToast(`تم إضافة الطالب وتسجيل حضور ${backfilled} حصة سابقة`, 'success');
+          showToast(`تم تسجيل حضور ${backfilled} حصة سابقة للطالب الجديد`, 'success');
         }
       } catch { /* best-effort */ }
       onRefresh();
-    }).catch(() => showToast('تعذّر إضافة الطالب', 'error'));
+    } catch (err) {
+      showToast(err instanceof Error ? `تعذّر إضافة الطالب: ${err.message}` : 'تعذّر إضافة الطالب', 'error');
+    } finally {
+      setAdding(false);
+    }
   }
 
   async function handleEdit() {
     if (!editTarget) return;
-    const dup = await checkDuplicateStudentName(form.name.trim(), groupId, editTarget.id);
-    if (dup) { setNameError('هذا الاسم مسجل بالفعل في هذه المجموعة والمرحلة. برجاء اختيار اسم آخر.'); return; }
-    setNameError('');
-    const totalFees = parseFloat(form.total_fees) || 0;
-    const updates: Partial<Student> = {
-      name: form.name.trim(),
-      phone: form.phone.trim() || null,
-      parent_phone: form.parent_phone.trim() || null,
-      gender: form.gender,
-      total_fees: totalFees,
-      discount_type: form.discount_type || null,
-      discount_amount: parseFloat(form.discount_amount) || 0,
-    };
-    // If marking as fully paid, set paid_fees = total_fees to clear any debt
-    if (markAsPaid) {
-      updates.paid_fees = totalFees;
+    if (adding) return;
+    setAdding(true);
+    try {
+      const dup = await checkDuplicateStudentName(form.name.trim(), groupId, editTarget.id);
+      if (dup) { setNameError('هذا الاسم مسجل بالفعل في هذه المجموعة والمرحلة. برجاء اختيار اسم آخر.'); return; }
+      setNameError('');
+      const totalFees = parseFloat(form.total_fees) || 0;
+      const updates: Partial<Student> = {
+        name: form.name.trim(),
+        phone: form.phone.trim() || null,
+        parent_phone: form.parent_phone.trim() || null,
+        gender: form.gender,
+        total_fees: totalFees,
+        discount_type: form.discount_type || null,
+        discount_amount: parseFloat(form.discount_amount) || 0,
+      };
+      if (markAsPaid) {
+        updates.paid_fees = totalFees;
+      }
+      await updateStudent(editTarget.id, updates);
+      showToast('تم حفظ تعديلات الطالب', 'success');
+      setEditTarget(null);
+      resetForm();
+      onRefresh();
+    } catch {
+      showToast('تعذّر حفظ التعديلات. تحقق من الاتصال وحاول مرة أخرى', 'error');
+    } finally {
+      setAdding(false);
     }
-    showToast('تم حفظ تعديلات الطالب', 'success');
-    setEditTarget(null);
-    resetForm();
-    updateStudent(editTarget.id, updates).then(() => onRefresh()).catch(() => showToast('تعذّر حفظ التعديلات', 'error'));
   }
 
   async function handleDelete() {
@@ -272,9 +290,16 @@ export default function StudentManager({
   async function handleMarkLeft() {
     if (!leftTarget) return;
     const actorName = isMaster ? 'المدرس' : assistant?.display_name ?? assistant?.username ?? 'مساعد';
-    showToast('تم تحديد الطالب كمغادر', 'success');
+    const target = leftTarget;
     setLeftTarget(null);
-    setStudentStatus(leftTarget.id, 'left', actorName, isMaster ? 'master' : 'assistant').then(() => onRefresh()).catch(() => showToast('تعذّر تحديث الحالة', 'error'));
+    try {
+      await setStudentStatus(target.id, 'left', actorName, isMaster ? 'master' : 'assistant');
+    } catch {
+      showToast('تعذّر تحديث حالة الطالب. تحقق من الاتصال وحاول مرة أخرى', 'error');
+      return;
+    }
+    showToast('تم تحديد الطالب كمغادر', 'success');
+    onRefresh();
   }
 
   async function openTransfer(s: Student) {
@@ -415,7 +440,7 @@ export default function StudentManager({
               )}
             </div>
           )}
-          <Button size="sm" onClick={openAdd}>
+          <Button size="sm" onClick={openAdd} disabled={adding}>
             <Plus size={16} />
             إضافة طالب
           </Button>
@@ -623,7 +648,7 @@ export default function StudentManager({
       >
         <div className="space-y-4">
           <div className="flex justify-end">
-            <Button size="sm" onClick={editTarget ? handleEdit : handleAdd} disabled={!form.name.trim()}>{editTarget ? 'حفظ التعديلات' : 'إضافة'}</Button>
+            <Button size="sm" onClick={editTarget ? handleEdit : handleAdd} disabled={!form.name.trim() || adding} loading={adding}>{editTarget ? 'حفظ التعديلات' : 'إضافة'}</Button>
           </div>
           <Field label="اسم الطالب">
             <input type="text" value={form.name} onChange={(e) => { setForm({ ...form, name: e.target.value }); setNameError(''); }} className={inputClass} placeholder="الاسم الكامل" />

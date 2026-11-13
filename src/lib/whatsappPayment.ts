@@ -160,8 +160,8 @@ export function buildUnpaidReminderMessage(snapshot: PaymentSnapshot): string {
     `السلام عليكم ورحمة الله وبركاته 🌹\n` +
     `ولي الأمر الكريم، نذكّركم باشتراك الطالب ${snapshot.studentName} عن شهر ${monthLabel}.\n` +
     `إجمالي الاشتراك: ${formatCurrency(snapshot.totalFees)} جنيه.\n` +
-    `المبلغ المدفوع: 0 جنيه.\n` +
-    `المتبقي: ${formatCurrency(snapshot.totalFees)} جنيه.\n` +
+    `المبلغ المدفوع: ${formatCurrency(snapshot.totalPaid)} جنيه.\n` +
+    `المتبقي: ${formatCurrency(snapshot.remaining)} جنيه.\n` +
     `نرجو التكرم بتسوية الاشتراك، مع خالص الشكر والتقدير لتعاونكم.\n` +
     `مع تحيات\n` +
     `تيم مستر عمرو خالد – مدرس العلوم`

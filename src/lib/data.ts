@@ -360,7 +360,8 @@ export async function updateStudent(
   id: string,
   patch: Partial<Student>
 ): Promise<void> {
-  await supabase.from('students').update(patch).eq('id', id);
+  const { error } = await supabase.from('students').update(patch).eq('id', id);
+  if (error) throw new Error(error.message);
   invalidateByPrefix('students_');
   emitStudentsChanged();
 }
@@ -741,10 +742,11 @@ export async function updateCenterExamTitle(examId: string, title: string): Prom
 
 export async function fetchCenterGrades(examId: string): Promise<CenterGrade[]> {
   return swrFetch(`grades_${examId}`, async () => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('center_grades')
       .select('*')
       .eq('center_exam_id', examId);
+    if (error) throw new Error(error.message);
     return data ?? [];
   });
 }
@@ -808,7 +810,6 @@ export async function upsertCenterGrade(
     {
       opKey: safeOpKey('centerGrade', examId, studentId),
       cacheKeys: [`grades_${examId}`],
-      optimistic: true,
     }
   );
 }
@@ -1176,7 +1177,6 @@ export async function upsertOnlineGrade(
     {
       opKey: safeOpKey('onlineGrade', examId, studentId),
       cachePrefixes: ['online_grades_'],
-      optimistic: true,
     }
   );
 }
@@ -1926,7 +1926,7 @@ export async function fetchSessions(
   month: string
 ): Promise<Session[]> {
   return swrFetch(`sessions_${groupId}_${month}`, async () => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('sessions')
       .select('*')
       .eq('group_id', groupId)
@@ -1934,6 +1934,7 @@ export async function fetchSessions(
       .eq('is_archived', false)
       .eq('is_deleted', false)
       .order('created_at', { ascending: true });
+    if (error) throw new Error(error.message);
     return (data as Session[]) ?? [];
   });
 }
@@ -1963,9 +1964,18 @@ export async function createSession(
 }
 
 export async function deleteSession(id: string): Promise<void> {
-  const { error } = await supabase.from('sessions').update({ is_deleted: true }).eq('id', id);
-  invalidateByPrefix('sessions_');
+  const { data, error } = await supabase
+    .from('sessions')
+    .update({ is_deleted: true })
+    .eq('id', id)
+    .select('id');
   if (error) throw new Error(error.message);
+  // RLS or a wrong id can silently affect 0 rows — that is a failure,
+  // not a success. Surface it so the user knows the delete did not happen.
+  if (!data || data.length === 0) {
+    throw new Error('لم يتم حذف الحصة — تأكد من الصلاحيات وأعد المحاولة');
+  }
+  invalidateByPrefix('sessions_');
 }
 
 // ============ MONTHLY ARCHIVE ============
@@ -2899,7 +2909,6 @@ export async function upsertHomeworkStatus(
     {
       opKey: safeOpKey('hwStatus', homeworkId, studentId),
       cachePrefixes: ['hw_status_'],
-      optimistic: true,
     }
   );
 }
@@ -2979,7 +2988,6 @@ export async function upsertBehaviorEval(
     {
       opKey: safeOpKey('behaviorEval', studentId, evalDate, scope),
       cachePrefixes: ['behavior_'],
-      optimistic: true,
     }
   );
 }
@@ -4187,13 +4195,14 @@ export async function createHistoricalPayment(
       const sub = (subRows ?? [])[0];
       if (sub) {
         const subRow = sub as { id: string; amount_due: number; amount_paid: number; status: string };
-        const newPaid = Math.min(Number(subRow.amount_due), Number(subRow.amount_paid) + amount);
-        const isFull = newPaid >= Number(subRow.amount_due);
+        const newPaid = Number(subRow.amount_paid) + amount;
+        const isFull = newPaid >= Number(subRow.amount_due) && Number(subRow.amount_due) > 0;
+        const isExempt = subRow.status === 'exempt';
         await supabase
           .from('monthly_subscriptions')
           .update({
             amount_paid: newPaid,
-            status: isFull ? 'paid' : 'partial',
+            status: isExempt ? 'exempt' : isFull ? 'paid' : 'partial',
             paid_date: isFull ? isoNow : null,
             receipt_number: receiptNumber,
             recorded_by: recordedBy,
@@ -4213,7 +4222,7 @@ export async function createHistoricalPayment(
       const ad = (archiveRow as { id: string; archive_data: Record<string, unknown> }).archive_data;
       const payments = (ad.payments ?? []) as ArchivedPaymentRow[];
       const students = (ad.students ?? []) as Array<{ id: string; paid_fees?: number | null }>;
-      const paymentId = paymentResult?.id ?? `hist-${Date.now()}`;
+      const paymentId = paymentResult?.id ?? `hist-${studentId}-${Date.now()}`;
       const archivedPayment = payments.find((p) => p.id === paymentId);
       if (archivedPayment) {
         archivedPayment.amount = (archivedPayment.amount ?? 0) + amount;
@@ -4228,6 +4237,10 @@ export async function createHistoricalPayment(
           payment_date: paymentDate,
           note: note ?? `دفعة متأخرة لشهر ${targetArchiveMonth}`,
           receipt_number: receiptNumber,
+          recorded_by: recordedBy,
+          recorded_at: isoNow,
+          month_key: targetArchiveMonth,
+          is_deleted: false,
         });
       }
       ad.payments = payments;

@@ -496,23 +496,21 @@ export default function AttendanceModule({ groupId, students, groupName, stageNa
     const prevStatus = existing?.status ?? 'unrecorded';
     // When already 'late' and updating minutes, fall through to the update path instead of toggling off.
     if (existing && existing.status === status && !(status === 'late' && lateMinutes != null)) {
-      setRecords((prev) => {
-        const next = { ...prev };
-        delete next[student.id];
-        return next;
-      });
-      // If clearing a makeup record for an external student, drop them from the extra list too
-      if (status === 'makeup' && !students.some((s) => s.id === student.id)) {
-        setExtraMakeupStudents((prev) => prev.filter((s) => s.id !== student.id));
-      }
       try {
         await upsertAttendance(student.id, groupId, 'unrecorded', existing.notes ?? null, selectedDate, activeSessionId || null);
+        setRecords((prev) => {
+          const next = { ...prev };
+          delete next[student.id];
+          return next;
+        });
+        // If clearing a makeup record for an external student, drop them from the extra list too
+        if (status === 'makeup' && !students.some((s) => s.id === student.id)) {
+          setExtraMakeupStudents((prev) => prev.filter((s) => s.id !== student.id));
+        }
         showToastWithAction(`تم إلغاء حالة ${student.name}`, 'تراجع', () => setStatus(student, prevStatus));
         markSaveEnd(true);
         return true;
       } catch (err) {
-        // Restore the record so the user doesn't lose their selection
-        setRecords((prev) => ({ ...prev, [student.id]: { ...existing, status: prevStatus } }));
         const msg = err instanceof Error ? err.message : '';
         if (msg.includes('network') || msg.includes('fetch')) {
           showToast('تعذّر الاتصال بالخادم — تحقق من الإنترنت وحاول مرة أخرى', 'error');
@@ -538,26 +536,15 @@ export default function AttendanceModule({ groupId, students, groupName, stageNa
       recorded_at: new Date().toISOString(),
       late_minutes: status === 'late' ? (lateMinutes ?? existing?.late_minutes ?? null) : null,
     };
-    setRecords((prev) => ({ ...prev, [student.id]: newRecord }));
     try {
       await upsertAttendance(student.id, groupId, status, existing?.notes ?? null, selectedDate, sessionId, status === 'late' ? (lateMinutes ?? existing?.late_minutes ?? null) : null);
+      setRecords((prev) => ({ ...prev, [student.id]: newRecord }));
       if (prevStatus !== 'unrecorded' && !silent) {
         showToastWithAction(`تم تغيير ${student.name} إلى ${STATUS_META[status]?.label ?? status}`, 'تراجع', () => setStatus(student, prevStatus));
       }
       markSaveEnd(true);
       return true;
     } catch (err) {
-      // Preserve user-entered late_minutes so they can retry without re-typing
-      const preservedLateMinutes = status === 'late' ? (lateMinutes ?? existing?.late_minutes ?? null) : null;
-      setRecords((prev) => {
-        const next = { ...prev };
-        if (prevStatus === 'unrecorded') {
-          delete next[student.id];
-        } else if (existing) {
-          next[student.id] = { ...existing, status: prevStatus, late_minutes: preservedLateMinutes };
-        }
-        return next;
-      });
       if (!suppressToast) {
         const msg = err instanceof Error ? err.message : '';
         if (msg.includes('network') || msg.includes('fetch')) {

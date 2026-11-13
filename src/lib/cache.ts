@@ -202,7 +202,10 @@ export async function swrFetch<T>(
   const promise = fetchWithRetry(fetcher).finally(() => inflight.delete(cacheKey));
   inflight.set(cacheKey, promise);
   const data = await promise;
-  if (data !== null && data !== undefined) setCached(cacheKey, data, ttl);
+  // Never cache empty results — a failed or filtered-out fetch returning []
+  // would poison the cache and make saved records vanish for the next TTL window.
+  const isEmptyArray = Array.isArray(data) && data.length === 0;
+  if (!isEmptyArray && data !== null && data !== undefined) setCached(cacheKey, data, ttl);
   return data;
 }
 

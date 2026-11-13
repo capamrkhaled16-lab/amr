@@ -15,6 +15,7 @@ import {
 } from '@/lib/data';
 import { formatArabicDate } from '@/lib/format';
 import Modal from '@/components/ui/Modal';
+import { useToast } from '@/lib/toast';
 
 const ARABIC_MONTHS = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
 const WEEKDAYS = ['السبت', 'الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة'];
@@ -29,6 +30,7 @@ type StudentDetail = {
 };
 
 export default function SessionCalendar({ groupId }: { groupId: string }) {
+  const { showError } = useToast();
   const [viewMonth, setViewMonth] = useState(() => {
     const now = new Date();
     return `${ARABIC_MONTHS[now.getMonth()]} ${now.getFullYear()}`;
@@ -40,14 +42,18 @@ export default function SessionCalendar({ groupId }: { groupId: string }) {
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const loadSessions = useCallback(async () => {
     setLoading(true);
     try {
       const data = await fetchSessions(groupId, viewMonth);
       setSessions(data);
-    } catch {
-      setSessions([]);
+      setLoadError(null);
+    } catch (err) {
+      // Keep the previous sessions on screen — a failed fetch must never
+      // render as an empty calendar (that looks like data was lost).
+      setLoadError(err instanceof Error ? err.message : 'تعذّر تحميل الحصص');
     } finally {
       setLoading(false);
     }
@@ -70,10 +76,11 @@ export default function SessionCalendar({ groupId }: { groupId: string }) {
   const firstDay = new Date(year, monthIdx, 1);
   const startOffset = (firstDay.getDay() + 1) % 7;
 
-  const sessionByDate: Record<string, Session> = {};
+  const sessionByDate: Record<string, Session[]> = {};
   for (const s of sessions) {
     const d = (s.session_date ?? s.created_at).slice(0, 10);
-    sessionByDate[d] = s;
+    if (!sessionByDate[d]) sessionByDate[d] = [];
+    sessionByDate[d].push(s);
   }
 
   async function openSessionDetails(session: Session) {
@@ -162,12 +169,26 @@ export default function SessionCalendar({ groupId }: { groupId: string }) {
           <div className="flex items-center justify-center py-8">
             <span className="text-slate-400 text-sm">جارٍ تحميل المواعيد…</span>
           </div>
+        ) : loadError && sessions.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-8 gap-2">
+            <span className="text-red-400 text-sm font-bold">تعذّر تحميل الحصص</span>
+            <span className="text-slate-400 text-xs">{loadError}</span>
+            <button onClick={() => void loadSessions()} className="mt-1 px-3 py-1.5 rounded-lg glass-light text-sky-400 text-xs font-bold hover:bg-white/10 transition">
+              إعادة المحاولة
+            </button>
+          </div>
+        ) : loadError ? (
+          <div className="mb-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs">
+            فشل تحديث الحصص ({loadError}) — تُعرض آخر بيانات محفوظة.
+          </div>
         ) : (
           <div className="grid grid-cols-7 gap-1 sm:gap-1.5">
             {cells.map((day, idx) => {
               if (day === null) return <div key={idx} />;
               const dateStr = `${year}-${String(monthIdx + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-              const session = sessionByDate[dateStr];
+              const daySessions = sessionByDate[dateStr] ?? [];
+              const session = daySessions[0];
+              const extraCount = Math.max(0, daySessions.length - 1);
               const isToday = dateStr === new Date().toISOString().slice(0, 10);
               return (
                 <button
@@ -180,7 +201,7 @@ export default function SessionCalendar({ groupId }: { groupId: string }) {
                   } ${isToday ? 'ring-1 ring-amber-400/50' : ''}`}
                 >
                   <span className={`font-bold ${session ? 'text-white' : ''}`}>{day}</span>
-                  {session && <span className="text-[10px] text-emerald-400 truncate w-full text-center px-1 mt-0.5">{session.title}</span>}
+                  {session && <span className="text-[10px] text-emerald-400 truncate w-full text-center px-1 mt-0.5">{session.title}{extraCount > 0 ? ` +${extraCount}` : ''}</span>}
                   {session && <span className="text-[9px] text-slate-400 mt-0.5 truncate w-full text-center px-1">{formatArabicDate(dateStr)}</span>}
                 </button>
               );
@@ -235,8 +256,8 @@ export default function SessionCalendar({ groupId }: { groupId: string }) {
                     setSelectedSession(null);
                     setConfirmDelete(false);
                     await loadSessions();
-                  } catch {
-                    // ignore
+                  } catch (err) {
+                    showError(err instanceof Error ? `تعذّر حذف الحصة: ${err.message}` : 'تعذّر حذف الحصة — حدث خطأ غير معروف');
                   } finally {
                     setDeleting(false);
                   }
