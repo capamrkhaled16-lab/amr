@@ -1,16 +1,8 @@
+import "@/lib/polyfills";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import "./index.css";
-
-// Polyfill Object.hasOwn for older WebView/browser engines that don't
-// support it (Safari < 15.4, older Android WebView). This prevents
-// "Object.hasOwn is not a function" runtime errors.
-if (typeof Object.hasOwn !== "function") {
-  Object.hasOwn = function (obj: object, prop: PropertyKey): boolean {
-    return Object.prototype.hasOwnProperty.call(obj, prop);
-  };
-}
 
 // Suppress Supabase realtime internal socket errors that originate from the
 // library's state machine (e.g. "Connect confirmed object to primitive value").

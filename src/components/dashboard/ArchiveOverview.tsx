@@ -853,7 +853,7 @@ export default function ArchiveOverview({
     newData.payments = updatedPayments;
     const studentPayments = updatedPayments.filter((p) => p.student_id === student.id);
     const newPaidFees = studentPayments.reduce((sum, p) => sum + (p.amount ?? 0), 0);
-    const students = (newData.students as ArchivedStudent[] | undefined) ?? [];
+    const students = ((newData.students as ArchivedStudent[] | undefined) ?? []).filter((st) => st && st.id);
     newData.students = students.map((st) =>
       st.id === student.id ? { ...st, paid_fees: newPaidFees } : st
     );
@@ -959,7 +959,7 @@ export default function ArchiveOverview({
     const origExempt = student.is_exempt ?? false;
     if (newFees === origFees && newPaid === origPaid && inlineEditExempt === origExempt) return;
     const newData = JSON.parse(JSON.stringify(row.archive_data ?? {})) as Record<string, unknown>;
-    const students = (newData.students as ArchivedStudent[] | undefined) ?? [];
+    const students = ((newData.students as ArchivedStudent[] | undefined) ?? []).filter((st) => st && st.id);
     newData.students = students.map((st) =>
       st.id === student.id
         ? { ...st, total_fees: newFees, paid_fees: newPaid, is_exempt: inlineEditExempt }
