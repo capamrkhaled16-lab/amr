@@ -290,7 +290,6 @@ export async function fetchDashboardKPIs(monthKey?: string): Promise<{
       .select('student_id, amount')
       .eq('month_key', mk)
       .eq('is_deleted', false)
-      .eq('is_historical_payment', false)
       .gt('amount', 0);
     if (!monthPayErr && monthPayments) {
       for (const p of monthPayments as { student_id: string; amount: number }[]) {
@@ -1327,7 +1326,6 @@ export async function fetchFinancialOverview(monthKey?: string): Promise<{
       .select('student_id, amount')
       .eq('month_key', mk)
       .eq('is_deleted', false)
-      .eq('is_historical_payment', false)
       .gt('amount', 0)
       .in('student_id', studentIds),
     supabase
@@ -1365,7 +1363,6 @@ export async function fetchFeesTotals(monthKey?: string): Promise<{ collected: n
       .select('student_id, amount')
       .eq('month_key', mk)
       .eq('is_deleted', false)
-      .eq('is_historical_payment', false)
       .gt('amount', 0)
       .in('student_id', studentIds),
     supabase
@@ -1556,6 +1553,8 @@ export async function createPayment(
     }
     guard.complete(true);
     emitPaymentsChanged(undefined, studentId);
+    void syncStudentPaymentStatus(studentId, monthKey)
+      .catch((err) => console.error('[createPayment] syncStudentPaymentStatus (timeout recovery) failed:', err));
     return saved as Payment;
   }
 
@@ -1570,6 +1569,8 @@ export async function createPayment(
         .eq('idempotency_key', idempotencyKey)
         .maybeSingle();
       guard.complete(true);
+      void syncStudentPaymentStatus(studentId, monthKey)
+        .catch((err) => console.error('[createPayment] syncStudentPaymentStatus (duplicate) failed:', err));
       return (existing as Payment | null) ?? null;
     }
     guard.complete(false);
@@ -1580,6 +1581,12 @@ export async function createPayment(
   const monthLabel = ARABIC_MONTHS[parseInt(monthKey.split('-')[1], 10) - 1] ?? monthKey;
   guard.complete(true);
   emitPaymentsChanged(undefined, studentId);
+
+  // Sync student paid_fees and monthly_subscriptions status immediately
+  // after a successful insert so the wallet icon and payment status reflect
+  // the new payment without requiring a page reload.
+  void syncStudentPaymentStatus(studentId, monthKey)
+    .catch((err) => console.error('[createPayment] syncStudentPaymentStatus failed:', err));
 
   void (async () => {
     const { data: payStudent } = await supabase
@@ -1596,14 +1603,21 @@ export async function createPayment(
 }
 
 export async function syncStudentPaymentStatus(studentId: string, monthKey: string): Promise<void> {
+  // Count ALL non-deleted payments for this month (including historical/late
+  // payments) so that paid_fees and subscription status reflect the true
+  // total. Previously, filtering out is_historical_payment caused students
+  // who paid late (after the month ended) to show paid_fees=0 and appear
+  // overdue in the wallet icon despite having a valid payment on record.
   const { data: payRows } = await supabase
     .from('payments')
-    .select('amount')
+    .select('amount, is_historical_payment, target_archive_month')
     .eq('student_id', studentId)
     .eq('month_key', monthKey)
-    .eq('is_deleted', false)
-    .eq('is_historical_payment', false);
-  const total = (payRows ?? []).reduce((s, p) => s + Number((p as { amount: number }).amount ?? 0), 0);
+    .eq('is_deleted', false);
+  const allRows = (payRows ?? []) as { amount: number; is_historical_payment: boolean | null; target_archive_month: string | null }[];
+  const total = allRows.reduce((s, p) => s + Number(p.amount ?? 0), 0);
+  // For paid_fees, use the total of all payments targeting this month
+  // (both regular and historical). This keeps the wallet icon accurate.
   await supabase.from('students').update({ paid_fees: total }).eq('id', studentId);
   const { data: subRows } = await supabase
     .from('monthly_subscriptions')
@@ -1889,7 +1903,6 @@ export async function fetchGroupStats(
       .select('student_id, amount')
       .eq('month_key', mk)
       .eq('is_deleted', false)
-      .eq('is_historical_payment', false)
       .gt('amount', 0)
       .in('student_id', studentIds),
     supabase
@@ -2632,7 +2645,6 @@ export async function preArchiveValidation(monthKey?: string): Promise<{ ok: boo
     .select('id, student_id, amount, month_key')
     .eq('month_key', currentMk)
     .eq('is_deleted', false)
-    .eq('is_historical_payment', false)
     .gt('amount', 0);
   if (paymentsErr) throw new Error(paymentsErr.message);
   const payments = (paymentsData ?? []) as { id: string; student_id: string; amount: number; month_key: string }[];
@@ -3777,12 +3789,12 @@ export async function fetchGroupMonthlyCollected(groupId: string, monthKey?: str
     .eq('status', 'active'));
   if (!students || students.length === 0) return 0;
   const studentIds = students.map((s) => s.id);
+  // Include historical (late) payments so collected totals match reality
   const { data: payments } = await withTimeout(supabase
     .from('payments')
     .select('student_id, amount')
     .eq('month_key', mk)
     .eq('is_deleted', false)
-    .eq('is_historical_payment', false)
     .gt('amount', 0)
     .in('student_id', studentIds));
   return (payments ?? []).reduce((s, p) => s + (p.amount ?? 0), 0);
@@ -3797,12 +3809,12 @@ export async function fetchGroupMonthlyPaidMap(groupId: string, monthKey?: strin
     .eq('status', 'active'));
   if (!students || students.length === 0) return new Map();
   const studentIds = students.map((s) => s.id);
+  // Include historical (late) payments so the paid map reflects reality
   const { data: payments } = await withTimeout(supabase
     .from('payments')
     .select('student_id, amount')
     .eq('month_key', mk)
     .eq('is_deleted', false)
-    .eq('is_historical_payment', false)
     .gt('amount', 0)
     .in('student_id', studentIds));
   const map = new Map<string, number>();
@@ -3816,12 +3828,12 @@ export async function fetchGroupMonthlyPaidMap(groupId: string, monthKey?: strin
 
 export async function fetchAllMonthlyPaidMap(monthKey?: string): Promise<Map<string, number>> {
   const mk = monthKey ?? currentMonthKey();
+  // Include historical (late) payments so the global paid map is accurate
   const { data: payments } = await supabase
     .from('payments')
     .select('student_id, amount')
     .eq('month_key', mk)
     .eq('is_deleted', false)
-    .eq('is_historical_payment', false)
     .gt('amount', 0);
   const map = new Map<string, number>();
   for (const p of payments ?? []) {
@@ -3862,12 +3874,12 @@ export async function resolvePaymentStatusFromDB(
   const nextMonth = new Date(y, m, 1);
   const start = `${y}-${String(m).padStart(2, '0')}-01`;
   const end = `${nextMonth.getFullYear()}-${String(nextMonth.getMonth() + 1).padStart(2, '0')}-01`;
+  // Include historical (late) payments so payment status reflects reality
   const { data: payments } = await supabase
     .from('payments')
     .select('amount, month_key, payment_date')
     .eq('student_id', studentId)
     .eq('is_deleted', false)
-    .eq('is_historical_payment', false)
     .gt('amount', 0);
   const paidAmount = (payments ?? []).reduce((sum, p) => {
     const row = p as { amount: number; month_key: string | null; payment_date: string | null };
@@ -3901,12 +3913,12 @@ export async function resolvePaymentStatus(
   const nm = new Date(y2, m2, 1);
   const dtStart = `${y2}-${String(m2).padStart(2, '0')}-01`;
   const dtEnd = `${nm.getFullYear()}-${String(nm.getMonth() + 1).padStart(2, '0')}-01`;
+  // Include historical (late) payments so payment status reflects reality
   const { data: payments } = await supabase
     .from('payments')
     .select('amount, month_key, payment_date')
     .eq('student_id', studentId)
     .eq('is_deleted', false)
-    .eq('is_historical_payment', false)
     .gt('amount', 0);
   const paidAmount = (payments ?? []).reduce((sum, p) => {
     const row = p as { amount: number; month_key: string | null; payment_date: string | null };
@@ -3935,13 +3947,13 @@ export async function resolvePaymentStatusBatch(
     const row = s as { student_id: string; amount_due: number; amount_paid: number; status: string };
     subsByStudent.set(row.student_id, { amount_due: row.amount_due, amount_paid: row.amount_paid, status: row.status });
   }
+  // Include historical (late) payments so batch status is accurate
   const { data: payments } = await supabase
     .from('payments')
     .select('student_id, amount')
     .in('student_id', studentIds)
     .eq('month_key', monthKey)
     .eq('is_deleted', false)
-    .eq('is_historical_payment', false)
     .gt('amount', 0);
   const paidByStudent = new Map<string, number>();
   for (const p of payments ?? []) {
@@ -3991,7 +4003,6 @@ export async function fetchCollectedBreakdown(groupId?: string, monthKey?: strin
     .select('student_id, amount, payment_date, month_key, note, recorded_by, students(name)')
     .eq('month_key', mk)
     .eq('is_deleted', false)
-    .eq('is_historical_payment', false)
     .gt('amount', 0)
     .order('payment_date', { ascending: false });
   if (studentIdFilter) query = query.in('student_id', studentIdFilter);
@@ -4298,7 +4309,6 @@ export async function createAccountingCycle(
     .from('payments')
     .select('id, amount')
     .eq('is_deleted', false)
-    .eq('is_historical_payment', false)
     .gt('amount', 0)
     .gte('payment_date', startDate)
     .lte('payment_date', endDate);
@@ -4349,7 +4359,6 @@ export async function fetchUnaccountedPayments(): Promise<{ payments: Payment[];
     .from('payments')
     .select('*')
     .eq('is_deleted', false)
-    .eq('is_historical_payment', false)
     .gt('amount', 0)
     .order('payment_date', { ascending: false });
 
@@ -4395,7 +4404,6 @@ export async function closeMonth(
     .select('id, student_id, amount, payment_date')
     .eq('month_key', monthKey)
     .eq('is_deleted', false)
-    .eq('is_historical_payment', false)
     .gt('amount', 0);
   if (paymentsErr) throw new Error(paymentsErr.message);
 
@@ -4755,7 +4763,7 @@ export async function runDataCheck(): Promise<DataCheckIssue[]> {
 export async function computeHealthScore(): Promise<HealthScore> {
   const [studentsRes, paymentsRes, attendanceRes, gradesRes, homeworkRes, cyclesRes, closuresRes] = await Promise.all([
     supabase.from('students').select('id, name, total_fees, paid_fees, is_exempt, status, group_id').eq('status', 'active'),
-    supabase.from('payments').select('id, student_id, amount, month_key, is_deleted').eq('is_deleted', false).eq('is_historical_payment', false).gt('amount', 0),
+    supabase.from('payments').select('id, student_id, amount, month_key, is_deleted').eq('is_deleted', false).gt('amount', 0),
     supabase.from('attendance').select('id, student_id, status, attendance_date'),
     supabase.from('center_grades').select('id, student_id, center_exam_id'),
     supabase.from('homework_status').select('id, student_id, status'),
@@ -5059,7 +5067,6 @@ export async function askPlatform(question: string): Promise<QueryResult> {
       .from('payments')
       .select('id, student_id, amount, payment_date, month_key')
       .eq('is_deleted', false)
-      .eq('is_historical_payment', false)
       .gt('amount', 0);
     if (monthKey) {
       payQuery = payQuery.eq('month_key', monthKey);
