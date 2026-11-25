@@ -113,7 +113,7 @@ export default function HomeDashboard({
   const [attentionOpen, setAttentionOpen] = useState(false);
   const [todayOpen, setTodayOpen] = useState(false);
   const [breakdownOpen, setBreakdownOpen] = useState(false);
-  const { monthLabel: activeMonthLabel } = useMonth();
+  const { monthLabel: activeMonthLabel, monthKey } = useMonth();
 
   return (
     <div className="space-y-6">

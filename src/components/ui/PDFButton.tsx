@@ -27,7 +27,8 @@ export function PDFButton({
     try {
       const ok = await onClick();
       setState(ok ? 'success' : 'error');
-    } catch {
+    } catch (err) {
+      console.error('[PDFButton] export failed:', err);
       setState('error');
     }
     if (timerRef.current) clearTimeout(timerRef.current);
