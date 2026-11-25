@@ -170,6 +170,7 @@ export default function HomeDashboard({
                 variant="secondary"
                 onClick={async () => exportMonthlyPaymentSummaryPDF(allStudents, monthlyPaidMap, monthExemptMap, {
                   monthLabel: activeMonthLabel,
+                  monthKey,
                   groupName,
                 })}
                 className="flex-shrink-0"

@@ -1421,7 +1421,7 @@ export default function FinancesModule({ focusStageId, focusGradeId, focusGroupI
               </div>
               <div className="flex gap-2 flex-wrap">
                 <PDFButton label="PDF احترافي" size="sm" disabled={fullyPaid === 0} onClick={async () => exportPaidStudentsPDF(students, monthlyPaidMap, monthExemptMap, { stageName: selectedStage?.name, gradeName: selectedGrade?.name, groupName: selectedGroup?.name, monthLabel: getMonthLabel(monthKey) })} />
-                <PDFButton label="سجل التحصيل الشهري PDF" size="sm" onClick={async () => exportMonthlyPaymentSummaryPDF(students, monthlyPaidMap, monthExemptMap, { stageName: selectedStage?.name, gradeName: selectedGrade?.name, groupName: selectedGroup?.name, monthLabel: getMonthLabel(monthKey) })} />
+                <PDFButton label="سجل التحصيل الشهري PDF" size="sm" onClick={async () => exportMonthlyPaymentSummaryPDF(students, monthlyPaidMap, monthExemptMap, { stageName: selectedStage?.name, gradeName: selectedGrade?.name, groupName: selectedGroup?.name, monthLabel: getMonthLabel(monthKey), monthKey })} />
                 <PDFButton label="كشف أسماء" size="sm" onClick={async () => exportStudentListPDF(students, { stageName: selectedStage?.name, gradeName: selectedGrade?.name, groupName: selectedGroup?.name, monthLabel: getMonthLabel(monthKey) })} />
               </div>
               <div className="space-y-3 max-h-96 overflow-y-auto">

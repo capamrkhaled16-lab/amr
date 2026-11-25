@@ -5,6 +5,7 @@
  */
 
 import { formatCurrency, formatArabicDate } from './format';
+import { supabase } from './supabase';
 import type { Student } from './types';
 
 export type PDFOrientation = 'portrait' | 'landscape';
@@ -17,6 +18,7 @@ export type PDFReportMeta = {
   gradeName?: string;
   groupName?: string;
   monthLabel?: string;
+  monthKey?: string;
   dateRange?: { from: string; to: string };
   generatedAt?: Date;
   orientation?: PDFOrientation;
@@ -585,9 +587,10 @@ export async function exportUnpaidStudentsPDF(
 }
 
 /**
- * Professional monthly collection register: sections per stage → grade → group,
- * per-student rows with empty collection-date and receiver-signature cells,
- * A4 RTL, repeated table headers across pages, students never split from their rows.
+ * Professional monthly collection register: sections per stage → grade → group.
+ * Due amount is auto-filled from the student's actual monthly subscription
+ * (respects discounts/exemptions); paid/remaining/date/day/signature are
+ * blank handwriting cells. A4 RTL, repeated table headers across pages.
  */
 export async function exportMonthlyPaymentSummaryPDF(
   students: EnrichedStudent[],
@@ -599,13 +602,36 @@ export async function exportMonthlyPaymentSummaryPDF(
   generating = true;
 
   try {
-    type RegisterStudent = EnrichedStudent & { remaining: number; isExempt: boolean };
+    type RegisterStudent = EnrichedStudent & { due: number; isExempt: boolean };
+
+    // Authoritative per-student due for the selected month comes from
+    // monthly_subscriptions.amount_due (already reflects discounts/exemptions).
+    // Falls back to the student's total_fees when no subscription row exists.
+    let monthDueMap: Map<string, number> | null = null;
+    if (meta.monthKey) {
+      try {
+        const { data: subs } = await supabase
+          .from('monthly_subscriptions')
+          .select('student_id, amount_due')
+          .eq('month_key', meta.monthKey)
+          .eq('is_archived', false);
+        if (subs) {
+          monthDueMap = new Map();
+          for (const row of subs as { student_id: string; amount_due: number }[]) {
+            monthDueMap.set(row.student_id, row.amount_due ?? 0);
+          }
+        }
+      } catch {
+        monthDueMap = null;
+      }
+    }
 
     const enriched: RegisterStudent[] = students.map((s) => {
       const isExempt = monthExemptMap.has(s.id);
-      const paid = safeNum(monthlyPaidMap.get(s.id));
       const fees = safeNum(s.total_fees);
-      return { ...s, remaining: isExempt ? 0 : Math.max(0, fees - paid), isExempt };
+      const monthDue = monthDueMap?.get(s.id) ?? 0;
+      const due = isExempt ? 0 : (monthDue > 0 ? monthDue : fees);
+      return { ...s, due, isExempt };
     });
 
     const STAGE_ORDER = ['الابتدائية', 'الإعدادية', 'الثانوية'];
@@ -647,7 +673,10 @@ export async function exportMonthlyPaymentSummaryPDF(
             <tr>
               <td style="text-align:center;">${i + 1}</td>
               <td>${escapeHtml(s.name)}</td>
-              <td style="text-align:center;">${s.isExempt ? 'معفى' : `${formatCurrency(s.remaining)} جنيه`}</td>
+              <td style="text-align:center;">${s.isExempt ? 'معفى' : `${formatCurrency(s.due)} جنيه`}</td>
+              <td class="fill-cell"></td>
+              <td class="fill-cell"></td>
+              <td class="fill-cell"></td>
               <td class="fill-cell"></td>
               <td class="fill-cell"></td>
             </tr>`).join('');
@@ -660,11 +689,14 @@ export async function exportMonthlyPaymentSummaryPDF(
             </div>
             <table>
               <thead><tr>
-                <th style="width:7%;">م</th>
-                <th style="width:38%;">اسم الطالب</th>
-                <th style="width:20%;">المبلغ المتبقي</th>
-                <th style="width:17%;">تاريخ التحصيل</th>
-                <th style="width:18%;">إمضاء المستلم</th>
+                <th style="width:5%;">م</th>
+                <th style="width:26%;">اسم الطالب</th>
+                <th style="width:12%;">المبلغ المستحق</th>
+                <th style="width:10%;">المدفوع</th>
+                <th style="width:10%;">المتبقي</th>
+                <th style="width:13%;">تاريخ التحصيل</th>
+                <th style="width:9%;">اليوم</th>
+                <th style="width:15%;">إمضاء المستلم</th>
               </tr></thead>
               <tbody>${rowsHtml}</tbody>
             </table>
