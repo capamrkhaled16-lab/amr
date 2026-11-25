@@ -22,12 +22,15 @@ export interface FinancialSummary {
  * they are exempt for THIS month only. The global `is_exempt` flag is only
  * used as a fallback when no monthExemptMap is provided (backward compat).
  *
- * - Month-exempt students → 'fullyPaid' (nothing owed this month).
+ * - Month-exempt students → 'exempt' (nothing owed this month).
  * - Students with total_fees <= 0 → 'fullyPaid' (nothing owed).
- * - Deferred-fee students who haven't paid → 'partial' (excluded from unpaid).
  * - paid >= baseFees → 'fullyPaid'.
  * - paid > 0 but < baseFees → 'partial'.
  * - paid === 0 → 'unpaid'.
+ *
+ * Status derives ONLY from actual month-scoped payments (monthlyPaidMap is
+ * filtered by month_key and positive amounts upstream) — never from stale
+ * records, zero-amount rows, or other-month payments.
  */
 export function classifyStudentPayment(
   s: Student,
@@ -40,7 +43,6 @@ export function classifyStudentPayment(
   const fees = s.total_fees ?? 0;
   const paid = monthlyPaidMap.get(s.id) ?? 0;
   const remaining = Math.max(0, fees - paid);
-  const feeMode = (s as Student & { fee_mode?: string }).fee_mode ?? 'full';
 
   let category: PaymentCategory;
 
@@ -50,8 +52,6 @@ export function classifyStudentPayment(
     category = 'fullyPaid';
   } else if (paid >= fees) {
     category = 'fullyPaid';
-  } else if (feeMode === 'deferred' && paid === 0) {
-    category = 'partial';
   } else if (paid > 0) {
     category = 'partial';
   } else {

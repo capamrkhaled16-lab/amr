@@ -364,6 +364,50 @@ ${summaryHtml}
 </html>`;
 }
 
+function printHtmlInIframe(html: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    try {
+      const iframe = document.createElement('iframe');
+      iframe.style.position = 'fixed';
+      iframe.style.left = '-9999px';
+      iframe.style.top = '0';
+      iframe.style.width = '0';
+      iframe.style.height = '0';
+      iframe.style.border = 'none';
+      document.body.appendChild(iframe);
+
+      const doc = iframe.contentDocument;
+      if (doc) {
+        doc.open();
+        doc.write(html);
+        doc.close();
+      }
+
+      setTimeout(() => {
+        const cleanup = () => {
+          setTimeout(() => {
+            if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+          }, 1000);
+        };
+        try {
+          const cw = iframe.contentWindow;
+          if (cw) {
+            cw.focus();
+            cw.onafterprint = cleanup;
+          }
+          setTimeout(cleanup, 8000);
+        } catch {
+          cleanup();
+        }
+        resolve(true);
+      }, 400);
+    } catch (err) {
+      console.error('[PDF Export] Error:', err);
+      resolve(false);
+    }
+  });
+}
+
 export async function generatePDF(
   meta: PDFReportMeta,
   columns: PDFColumn[],
@@ -376,50 +420,10 @@ export async function generatePDF(
 
   try {
     const html = buildReportHTML(meta, columns, rows, totalsRow, summaryCards);
-    const iframe = document.createElement('iframe');
-    iframe.style.position = 'fixed';
-    iframe.style.left = '-9999px';
-    iframe.style.top = '0';
-    iframe.style.width = '0';
-    iframe.style.height = '0';
-    iframe.style.border = 'none';
-    document.body.appendChild(iframe);
-
-    await new Promise<void>((resolve) => {
-      const doc = iframe.contentDocument;
-      if (doc) {
-        doc.open();
-        doc.write(html);
-        doc.close();
-        resolve();
-      } else {
-        resolve();
-      }
-    });
-
-    await new Promise<void>((resolve) => setTimeout(resolve, 300));
-
-    const cleanup = () => {
-      setTimeout(() => {
-        if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
-      }, 1000);
-    };
-
-    try {
-      const cw = iframe.contentWindow;
-      if (cw) {
-        cw.focus();
-        cw.onafterprint = cleanup;
-      }
-      setTimeout(cleanup, 5000);
-    } catch {
-      cleanup();
-    }
-
-    return true;
+    const ok = await printHtmlInIframe(html);
+    return ok;
   } catch (err) {
     console.error('[PDF Export] Error:', err);
-    generating = false;
     return false;
   } finally {
     setTimeout(() => { generating = false; }, 1500);
@@ -580,66 +584,219 @@ export async function exportUnpaidStudentsPDF(
   );
 }
 
+/**
+ * Professional monthly payments register: sections per stage → grade → group,
+ * manual-fill boxes (total remaining / date / receiver signature), A4 RTL,
+ * repeated table headers across pages, students never split from their rows.
+ */
 export async function exportMonthlyPaymentSummaryPDF(
   students: EnrichedStudent[],
   monthlyPaidMap: Map<string, number>,
   monthExemptMap: Map<string, true>,
   meta: PDFReportMeta
 ): Promise<boolean> {
-  const columns: PDFColumn[] = [
-    { key: 'idx', label: '#', width: '5%', align: 'center' },
-    { key: 'name', label: 'اسم الطالب', width: '20%' },
-    { key: 'group', label: 'المجموعة', width: '14%' },
-    { key: 'stage', label: 'المرحلة', width: '12%' },
-    { key: 'grade', label: 'الصف', width: '10%' },
-    { key: 'fees', label: 'المستحق', width: '10%', align: 'center' },
-    { key: 'paid', label: 'المدفوع', width: '10%', align: 'center' },
-    { key: 'remaining', label: 'المتبقي', width: '10%', align: 'center' },
-    { key: 'status', label: 'الحالة', width: '9%', align: 'center' },
-  ];
+  if (generating) return false;
+  generating = true;
 
-  const rows: PDFRow[] = students.map((s, i) => {
-    const isExempt = monthExemptMap.has(s.id);
-    const paid = safeNum(monthlyPaidMap.get(s.id));
-    const fees = safeNum(s.total_fees);
-    const remaining = Math.max(0, fees - paid);
-    let category = 'unpaid';
-    if (isExempt) category = 'exempt';
-    else if (fees <= 0 || paid >= fees) category = 'fullyPaid';
-    else if (paid > 0) category = 'partial';
+  try {
+    type RegisterStudent = EnrichedStudent & { remaining: number; isExempt: boolean };
 
-    return {
-      idx: i + 1, name: s.name,
-      group: s.group_name ?? '—', stage: s.stage_name ?? '—',
-      grade: s.grade_name ?? '—',
-      fees: isExempt ? 'معفى' : formatCurrency(fees),
-      paid: formatCurrency(paid),
-      remaining: isExempt ? '—' : formatCurrency(remaining),
-      status: getStatusLabel(category),
+    const enriched: RegisterStudent[] = students.map((s) => {
+      const isExempt = monthExemptMap.has(s.id);
+      const paid = safeNum(monthlyPaidMap.get(s.id));
+      const fees = safeNum(s.total_fees);
+      return { ...s, remaining: isExempt ? 0 : Math.max(0, fees - paid), isExempt };
+    });
+
+    const stageOrder = Array.from(new Set(enriched.map((s) => s.stage_name ?? '—')));
+    const gradeOrder = Array.from(new Set(enriched.map((s) => s.grade_name ?? '—')));
+    const groupOrder = Array.from(new Set(enriched.map((s) => s.group_name ?? '—')));
+    const byStage = stageOrder
+      .map((stage) => ({
+        stage,
+        grades: gradeOrder
+          .map((grade) => ({
+            grade,
+            groups: groupOrder
+              .map((group) => ({
+                group,
+                students: enriched
+                  .filter((s) => (s.stage_name ?? '—') === stage && (s.grade_name ?? '—') === grade && (s.group_name ?? '—') === group)
+                  .sort((a, b) => a.name.localeCompare(b.name, 'ar')),
+              }))
+              .filter((g) => g.students.length > 0),
+          }))
+          .filter((g) => g.groups.length > 0),
+      }))
+      .filter((s) => s.grades.length > 0);
+
+    const genDate = meta.generatedAt ?? new Date();
+    const monthTitle = meta.monthLabel ? `سجل المدفوعات الشهرية — ${meta.monthLabel}` : 'سجل المدفوعات الشهرية';
+
+    const sectionsHtml = byStage.map(({ stage, grades }) => `
+      <div class="stage-section">
+        <div class="stage-banner">${escapeHtml(stage)}</div>
+        ${grades.map(({ grade, groups }) => groups.map(({ group, students: list }) => {
+          const groupRemaining = list.reduce((sum, s) => sum + s.remaining, 0);
+          const rowsHtml = list.map((s, i) => `
+            <tr>
+              <td style="text-align:center;">${i + 1}</td>
+              <td>${escapeHtml(s.name)}</td>
+              <td style="text-align:center;">${s.isExempt ? 'معفى' : formatCurrency(s.remaining)}</td>
+            </tr>`).join('');
+          return `
+          <div class="group-section">
+            <div class="group-header">
+              <div class="group-title">
+                <span>${escapeHtml(grade)}</span>
+                <span class="group-name">المجموعة: ${escapeHtml(group)}</span>
+              </div>
+              <div class="manual-box">
+                <div class="manual-field"><span>إجمالي المبلغ المتبقي:</span><span class="fill-line"></span></div>
+                <div class="manual-field"><span>التاريخ:</span><span class="fill-line"></span></div>
+                <div class="manual-field"><span>إمضاء المستلم:</span><span class="fill-line"></span></div>
+              </div>
+            </div>
+            <table>
+              <thead><tr>
+                <th style="width:10%;">#</th>
+                <th style="width:55%;">اسم الطالب</th>
+                <th style="width:35%;">المبلغ المتبقي (ج.م)</th>
+              </tr></thead>
+              <tbody>
+                ${rowsHtml}
+                <tr class="group-total">
+                  <td></td>
+                  <td>الإجمالي (${list.length} طالب)</td>
+                  <td style="text-align:center;">${formatCurrency(groupRemaining)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>`;
+        }).join('')).join('')}
+      </div>`).join('');
+
+    const totalRemainingAll = enriched.reduce((sum, s) => sum + s.remaining, 0);
+    const groupsCount = byStage.reduce((n, s) => n + s.grades.reduce((m, g) => m + g.groups.length, 0), 0);
+
+    const html = `<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+<meta charset="utf-8">
+<title>${escapeHtml(meta.fileName ?? monthTitle)}</title>
+<style>
+  @page {
+    size: A4 portrait;
+    margin: 12mm 12mm 16mm 12mm;
+    @bottom-right {
+      content: "صفحة " counter(page) " من " counter(pages);
+      font-family: 'Cairo', 'Tajawal', Tahoma, Arial, sans-serif;
+      font-size: 9px;
+      color: ${TEXT_MUTED};
+    }
+    @bottom-left {
+      content: "${escapeHtml(PLATFORM_NAME)}";
+      font-family: 'Cairo', 'Tajawal', Tahoma, Arial, sans-serif;
+      font-size: 9px;
+      color: ${TEXT_MUTED};
+    }
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  html, body {
+    font-family: 'Cairo', 'Tajawal', 'Segoe UI', Tahoma, Arial, sans-serif;
+    color: ${TEXT_DARK}; background: #ffffff; line-height: 1.5; font-size: 12px;
+  }
+  .report-header { border-bottom: 3px solid ${GOLD}; padding-bottom: 10px; margin-bottom: 14px; }
+  .header-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px; }
+  .header-brand { font-size: 17px; font-weight: 800; color: ${NAVY}; }
+  .header-gen-date { font-size: 10px; color: ${TEXT_MUTED}; text-align: left; }
+  .report-title {
+    font-size: 16px; font-weight: 800; color: ${NAVY};
+    padding: 4px 14px; background: ${GOLD_LIGHT};
+    border-right: 4px solid ${GOLD}; border-radius: 4px; display: inline-block;
+  }
+  .report-sub { font-size: 10px; color: ${TEXT_MUTED}; margin-top: 6px; }
+  .stage-section { }
+  .stage-banner {
+    background: ${NAVY}; color: #ffffff; font-size: 14px; font-weight: 800;
+    padding: 7px 14px; border-radius: 6px; text-align: center;
+    page-break-inside: avoid; break-inside: avoid;
+  }
+  .stage-section + .stage-section { page-break-before: always; break-before: page; }
+  .group-section { margin-top: 12px; }
+  .group-header {
+    display: flex; justify-content: space-between; align-items: stretch; gap: 10px;
+    page-break-inside: avoid; break-inside: avoid; margin-bottom: 6px;
+  }
+  .group-title {
+    background: ${GOLD_LIGHT}; border: 1px solid ${GOLD}; border-right: 4px solid ${GOLD};
+    border-radius: 6px; padding: 7px 12px; display: flex; flex-direction: column; justify-content: center;
+    min-width: 40%;
+  }
+  .group-title span { font-weight: 800; color: ${NAVY}; font-size: 13px; }
+  .group-title .group-name { color: ${TEXT_DARK}; font-size: 12px; margin-top: 2px; }
+  .manual-box {
+    border: 1px dashed ${GOLD}; border-radius: 6px; padding: 6px 10px;
+    display: flex; flex-direction: column; gap: 7px; flex: 1; justify-content: center;
+    page-break-inside: avoid; break-inside: avoid;
+  }
+  .manual-field { display: flex; align-items: flex-end; gap: 6px; font-size: 10.5px; font-weight: 700; color: ${NAVY}; white-space: nowrap; }
+  .fill-line { display: inline-block; flex: 1; border-bottom: 1px dotted ${TEXT_MUTED}; min-width: 60px; height: 12px; }
+  table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  thead { display: table-header-group; }
+  thead th {
+    background: ${NAVY}; color: #ffffff; font-weight: 700; font-size: 11px;
+    padding: 6px 8px; border: 1px solid ${NAVY}; text-align: center;
+  }
+  tbody td {
+    padding: 7px 8px; font-size: 11.5px; border: 1px solid ${BORDER}; word-wrap: break-word;
+  }
+  tbody tr { page-break-inside: avoid; break-inside: avoid; }
+  tbody tr:nth-child(even) td { background: ${ZEBRA}; }
+  .group-total td {
+    background: ${GOLD_LIGHT}; font-weight: 800; color: ${NAVY};
+    border: 1px solid ${GOLD}; font-size: 11.5px;
+  }
+  .report-footer {
+    margin-top: 18px; border-top: 1px solid ${BORDER}; padding-top: 8px;
+    font-size: 9px; color: ${TEXT_MUTED}; text-align: center;
+  }
+</style>
+</head>
+<body>
+  <div class="report-header">
+    <div class="header-top">
+      <div>
+        <div class="header-brand">${PLATFORM_NAME}</div>
+        <div class="report-sub">تقرير إداري — مولّد آلياً</div>
+      </div>
+      <div class="header-gen-date">
+        تاريخ الإصدار: <strong>${escapeHtml(formatDate(genDate))}</strong><br>
+        الوقت: <strong>${escapeHtml(genDate.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }))}</strong>
+      </div>
+    </div>
+    <div class="report-title">${escapeHtml(monthTitle)}</div>
+    <div class="report-sub">عدد المجموعات: ${groupsCount} • عدد الطلاب: ${enriched.length} • إجمالي المتبقي: ${formatCurrency(totalRemainingAll)} ج.م</div>
+  </div>
+  ${sectionsHtml || `<div style="text-align:center;padding:40px 0;color:${TEXT_MUTED};">لا توجد بيانات لهذا الشهر</div>`}
+  <div class="report-footer">${PLATFORM_NAME} — تم إنشاء هذا التقرير آلياً — ${escapeHtml(formatDate(genDate))}</div>
+  <script>
+  (function() {
+    window.onload = function() {
+      setTimeout(function() { window.print(); }, 200);
     };
-  });
+  })();
+  </script>
+</body>
+</html>`;
 
-  const totalFees = students.reduce((sum, s) => sum + safeNum(s.total_fees), 0);
-  const totalPaid = students.reduce((sum, s) => sum + safeNum(monthlyPaidMap.get(s.id)), 0);
-  const totalRemaining = Math.max(0, totalFees - totalPaid);
-  const totalsRow: PDFRow = {
-    idx: '', name: `الإجمالي (${students.length} طالب)`,
-    group: '', stage: '', grade: '',
-    fees: formatCurrency(totalFees), paid: formatCurrency(totalPaid),
-    remaining: formatCurrency(totalRemaining), status: 'ج.م',
-  };
-
-  const summaryCards = [
-    { label: 'إجمالي الطلاب', value: String(students.length) },
-    { label: 'إجمالي المستحق', value: formatCurrency(totalFees) },
-    { label: 'إجمالي المحصل', value: formatCurrency(totalPaid) },
-    { label: 'إجمالي المتبقي', value: formatCurrency(totalRemaining) },
-  ];
-
-  return generatePDF(
-    { ...meta, title: 'ملخص المدفوعات الشهري', subtitle: `إجمالي الطلاب: ${students.length}` },
-    columns, rows, totalsRow, summaryCards
-  );
+    return await printHtmlInIframe(html);
+  } catch (err) {
+    console.error('[PDF Export] Error:', err);
+    return false;
+  } finally {
+    setTimeout(() => { generating = false; }, 1500);
+  }
 }
 
 export async function exportStudentListPDF(
