@@ -165,7 +165,7 @@ export default function HomeDashboard({
             )}
             {isMaster && (
               <PDFButton
-                label="ملخص المدفوعات PDF"
+                label="سجل التحصيل الشهري PDF"
                 size="sm"
                 variant="secondary"
                 onClick={async () => exportMonthlyPaymentSummaryPDF(allStudents, monthlyPaidMap, monthExemptMap, {

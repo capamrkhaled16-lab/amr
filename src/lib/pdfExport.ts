@@ -585,9 +585,9 @@ export async function exportUnpaidStudentsPDF(
 }
 
 /**
- * Professional monthly payments register: sections per stage → grade → group,
- * manual-fill boxes (total remaining / date / receiver signature), A4 RTL,
- * repeated table headers across pages, students never split from their rows.
+ * Professional monthly collection register: sections per stage → grade → group,
+ * per-student rows with empty collection-date and receiver-signature cells,
+ * A4 RTL, repeated table headers across pages, students never split from their rows.
  */
 export async function exportMonthlyPaymentSummaryPDF(
   students: EnrichedStudent[],
@@ -608,7 +608,13 @@ export async function exportMonthlyPaymentSummaryPDF(
       return { ...s, remaining: isExempt ? 0 : Math.max(0, fees - paid), isExempt };
     });
 
-    const stageOrder = Array.from(new Set(enriched.map((s) => s.stage_name ?? '—')));
+    const STAGE_ORDER = ['الابتدائية', 'الإعدادية', 'الثانوية'];
+    const stageOrder = Array.from(new Set(enriched.map((s) => s.stage_name ?? '—')))
+      .sort((a, b) => {
+        const ia = STAGE_ORDER.findIndex((n) => a.includes(n.replace('ال', '')) || a.includes(n));
+        const ib = STAGE_ORDER.findIndex((n) => b.includes(n.replace('ال', '')) || b.includes(n));
+        return (ia === -1 ? STAGE_ORDER.length : ia) - (ib === -1 ? STAGE_ORDER.length : ib) || a.localeCompare(b, 'ar');
+      });
     const gradeOrder = Array.from(new Set(enriched.map((s) => s.grade_name ?? '—')));
     const groupOrder = Array.from(new Set(enriched.map((s) => s.group_name ?? '—')));
     const byStage = stageOrder
@@ -631,53 +637,40 @@ export async function exportMonthlyPaymentSummaryPDF(
       .filter((s) => s.grades.length > 0);
 
     const genDate = meta.generatedAt ?? new Date();
-    const monthTitle = meta.monthLabel ? `سجل المدفوعات الشهرية — ${meta.monthLabel}` : 'سجل المدفوعات الشهرية';
+    const monthTitle = meta.monthLabel ? `سجل التحصيل الشهري — شهر ${meta.monthLabel}` : 'سجل التحصيل الشهري';
 
     const sectionsHtml = byStage.map(({ stage, grades }) => `
       <div class="stage-section">
         <div class="stage-banner">${escapeHtml(stage)}</div>
         ${grades.map(({ grade, groups }) => groups.map(({ group, students: list }) => {
-          const groupRemaining = list.reduce((sum, s) => sum + s.remaining, 0);
           const rowsHtml = list.map((s, i) => `
             <tr>
               <td style="text-align:center;">${i + 1}</td>
               <td>${escapeHtml(s.name)}</td>
-              <td style="text-align:center;">${s.isExempt ? 'معفى' : formatCurrency(s.remaining)}</td>
+              <td style="text-align:center;">${s.isExempt ? 'معفى' : `${formatCurrency(s.remaining)} جنيه`}</td>
+              <td class="fill-cell"></td>
+              <td class="fill-cell"></td>
             </tr>`).join('');
           return `
           <div class="group-section">
             <div class="group-header">
-              <div class="group-title">
-                <span>${escapeHtml(grade)}</span>
-                <span class="group-name">المجموعة: ${escapeHtml(group)}</span>
-              </div>
-              <div class="manual-box">
-                <div class="manual-field"><span>إجمالي المبلغ المتبقي:</span><span class="fill-line"></span></div>
-                <div class="manual-field"><span>التاريخ:</span><span class="fill-line"></span></div>
-                <div class="manual-field"><span>إمضاء المستلم:</span><span class="fill-line"></span></div>
-              </div>
+              <span>${escapeHtml(stage)}</span>
+              <span>${escapeHtml(grade)}</span>
+              <span>المجموعة: ${escapeHtml(group)}</span>
             </div>
             <table>
               <thead><tr>
-                <th style="width:10%;">#</th>
-                <th style="width:55%;">اسم الطالب</th>
-                <th style="width:35%;">المبلغ المتبقي (ج.م)</th>
+                <th style="width:7%;">م</th>
+                <th style="width:38%;">اسم الطالب</th>
+                <th style="width:20%;">المبلغ المتبقي</th>
+                <th style="width:17%;">تاريخ التحصيل</th>
+                <th style="width:18%;">إمضاء المستلم</th>
               </tr></thead>
-              <tbody>
-                ${rowsHtml}
-                <tr class="group-total">
-                  <td></td>
-                  <td>الإجمالي (${list.length} طالب)</td>
-                  <td style="text-align:center;">${formatCurrency(groupRemaining)}</td>
-                </tr>
-              </tbody>
+              <tbody>${rowsHtml}</tbody>
             </table>
           </div>`;
         }).join('')).join('')}
       </div>`).join('');
-
-    const totalRemainingAll = enriched.reduce((sum, s) => sum + s.remaining, 0);
-    const groupsCount = byStage.reduce((n, s) => n + s.grades.reduce((m, g) => m + g.groups.length, 0), 0);
 
     const html = `<!DOCTYPE html>
 <html dir="rtl" lang="ar">
@@ -723,25 +716,14 @@ export async function exportMonthlyPaymentSummaryPDF(
     page-break-inside: avoid; break-inside: avoid;
   }
   .stage-section + .stage-section { page-break-before: always; break-before: page; }
-  .group-section { margin-top: 12px; }
+  .group-section { margin-top: 14px; }
   .group-header {
-    display: flex; justify-content: space-between; align-items: stretch; gap: 10px;
-    page-break-inside: avoid; break-inside: avoid; margin-bottom: 6px;
-  }
-  .group-title {
     background: ${GOLD_LIGHT}; border: 1px solid ${GOLD}; border-right: 4px solid ${GOLD};
-    border-radius: 6px; padding: 7px 12px; display: flex; flex-direction: column; justify-content: center;
-    min-width: 40%;
+    border-radius: 6px; padding: 7px 12px; display: flex; gap: 14px; align-items: center;
+    font-weight: 800; color: ${NAVY}; font-size: 12.5px;
+    page-break-inside: avoid; break-inside: avoid; margin-bottom: 6px;
+    page-break-after: avoid;
   }
-  .group-title span { font-weight: 800; color: ${NAVY}; font-size: 13px; }
-  .group-title .group-name { color: ${TEXT_DARK}; font-size: 12px; margin-top: 2px; }
-  .manual-box {
-    border: 1px dashed ${GOLD}; border-radius: 6px; padding: 6px 10px;
-    display: flex; flex-direction: column; gap: 7px; flex: 1; justify-content: center;
-    page-break-inside: avoid; break-inside: avoid;
-  }
-  .manual-field { display: flex; align-items: flex-end; gap: 6px; font-size: 10.5px; font-weight: 700; color: ${NAVY}; white-space: nowrap; }
-  .fill-line { display: inline-block; flex: 1; border-bottom: 1px dotted ${TEXT_MUTED}; min-width: 60px; height: 12px; }
   table { width: 100%; border-collapse: collapse; table-layout: fixed; }
   thead { display: table-header-group; }
   thead th {
@@ -749,14 +731,12 @@ export async function exportMonthlyPaymentSummaryPDF(
     padding: 6px 8px; border: 1px solid ${NAVY}; text-align: center;
   }
   tbody td {
-    padding: 7px 8px; font-size: 11.5px; border: 1px solid ${BORDER}; word-wrap: break-word;
+    padding: 9px 8px; font-size: 11.5px; border: 1px solid ${BORDER}; word-wrap: break-word;
+    height: 26px;
   }
+  .fill-cell { background: #ffffff; }
   tbody tr { page-break-inside: avoid; break-inside: avoid; }
-  tbody tr:nth-child(even) td { background: ${ZEBRA}; }
-  .group-total td {
-    background: ${GOLD_LIGHT}; font-weight: 800; color: ${NAVY};
-    border: 1px solid ${GOLD}; font-size: 11.5px;
-  }
+  tbody tr:nth-child(even) td:not(.fill-cell) { background: ${ZEBRA}; }
   .report-footer {
     margin-top: 18px; border-top: 1px solid ${BORDER}; padding-top: 8px;
     font-size: 9px; color: ${TEXT_MUTED}; text-align: center;
@@ -776,7 +756,6 @@ export async function exportMonthlyPaymentSummaryPDF(
       </div>
     </div>
     <div class="report-title">${escapeHtml(monthTitle)}</div>
-    <div class="report-sub">عدد المجموعات: ${groupsCount} • عدد الطلاب: ${enriched.length} • إجمالي المتبقي: ${formatCurrency(totalRemainingAll)} ج.م</div>
   </div>
   ${sectionsHtml || `<div style="text-align:center;padding:40px 0;color:${TEXT_MUTED};">لا توجد بيانات لهذا الشهر</div>`}
   <div class="report-footer">${PLATFORM_NAME} — تم إنشاء هذا التقرير آلياً — ${escapeHtml(formatDate(genDate))}</div>
